@@ -4,7 +4,7 @@ import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { age, sortPrs, useScrolledPrTitle, type SortKey } from "../../lib/ui";
-import { Badge, EmptyState, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
+import { Badge, EmptyState, LoadingField, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
@@ -175,11 +175,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
       )}
 
       <Section label="Diff">
-      {!files && !error && (
-        <p className="subtle">
-          <Spinner /> loading diff…
-        </p>
-      )}
+      {!files && !error && <LoadingField label="loading diff…" />}
       {files && (
         <DiffViewer
           files={files}

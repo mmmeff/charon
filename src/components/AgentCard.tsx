@@ -3,7 +3,7 @@ import { killAgent } from "../lib/agents";
 import { useGlobalConfig } from "../lib/store";
 import type { AgentLine, AgentRun } from "../types";
 import { timeAgo, useNow } from "../lib/ui";
-import { Badge, Spinner } from "./common";
+import { Badge, LoadingField, Spinner } from "./common";
 import { Markdown } from "./Markdown";
 
 /** One typed stream entry: assistant prose as markdown, the rest as chrome. */
@@ -91,7 +91,12 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
           </div>
           {showPrompt && <div className="prompt-box">{run.prompt}</div>}
           <div className="agent-log" ref={logRef}>
-            {run.lines.length === 0 && <span className="subtle">waiting for output…</span>}
+            {run.lines.length === 0 &&
+              (active ? (
+                <LoadingField label="waiting for output…" height={44} />
+              ) : (
+                <span className="subtle">no output</span>
+              ))}
             {run.lines.map((l, i) => (
               <StreamLine key={i} line={l} />
             ))}

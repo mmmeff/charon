@@ -467,6 +467,11 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .ws-section-label::before { content: "▚"; color: var(--orange); opacity: 0.7; font-size: 8px; }
 .ws-section-label::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
 
+/* slim animated ASCII strip on loading/waiting states */
+.loading-field { text-align: center; padding: 4px 0 10px; }
+.loading-field canvas { margin-bottom: 4px; }
+.loading-field .subtle { font-size: 11px; }
+
 /* topstrip back/forward */
 .navbtn { width: 24px; height: 24px; font-size: 13px; }
 .navbtn:disabled { opacity: 0.3; }

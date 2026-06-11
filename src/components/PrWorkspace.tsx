@@ -7,7 +7,7 @@ import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
 import { timeAgo, useScrolledPrTitle } from "../lib/ui";
-import { Badge, CiBadge, MergeBadge, Section, Spinner } from "./common";
+import { Badge, CiBadge, LoadingField, MergeBadge, Section, Spinner } from "./common";
 import { ChecksPanel } from "./ChecksPanel";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
@@ -222,11 +222,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
       <Section label="Diff">
       {diffErr && <p style={{ color: "var(--red)" }}>{diffErr}</p>}
-      {!files && !diffErr && (
-        <p className="subtle">
-          <Spinner /> loading diff…
-        </p>
-      )}
+      {!files && !diffErr && <LoadingField label="loading diff…" />}
       {files && (
         <DiffViewer
           files={files}

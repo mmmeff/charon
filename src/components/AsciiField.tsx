@@ -5,17 +5,21 @@ const CHARS = [" ", " ", ".", ":", "-", "=", "+", "*", "#"];
 /**
  * Minimal ASCII flow-field shader: a character grid whose density follows
  * layered sine waves drifting slowly. Canvas-rendered at ~12fps, trivially
- * cheap, acid-green on transparent. Used for hero/empty-state texture.
- * Respects prefers-reduced-motion (renders a single static frame).
+ * cheap, acid-green on transparent. Used as ambient texture on empty,
+ * loading and waiting states. Always animates — it IS the point (the OS
+ * reduced-motion setting only disables decorative CSS loops elsewhere).
  */
 export function AsciiField({
   height = 120,
   color = "207, 242, 77",
   opacity = 0.5,
+  speed = 1,
 }: {
   height?: number;
   color?: string;
   opacity?: number;
+  /** drift multiplier — <1 for quiet background use */
+  speed?: number;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -24,7 +28,6 @@ export function AsciiField({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const cell = 14;
     let raf = 0;
     let last = 0;
@@ -43,7 +46,7 @@ export function AsciiField({
       raf = requestAnimationFrame(frame);
       if (now - last < 83) return; // ~12fps
       last = now;
-      t += 0.045;
+      t += 0.045 * speed;
       const cols = Math.ceil(canvas.offsetWidth / cell);
       const rows = Math.ceil(height / cell);
       ctx.clearRect(0, 0, canvas.offsetWidth, height);
@@ -64,17 +67,12 @@ export function AsciiField({
 
     resize();
     window.addEventListener("resize", resize);
-    if (reduced) {
-      frame(1000); // single static frame
-      cancelAnimationFrame(raf);
-    } else {
-      raf = requestAnimationFrame(frame);
-    }
+    raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };
-  }, [height, color, opacity]);
+  }, [height, color, opacity, speed]);
 
   return <canvas ref={ref} style={{ width: "100%", height, display: "block" }} aria-hidden />;
 }

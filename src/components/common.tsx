@@ -53,6 +53,26 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
   );
 }
 
+/** Slim animated ASCII strip for loading/waiting states. */
+export function LoadingField({
+  label,
+  height = 56,
+  color,
+}: {
+  label: string;
+  height?: number;
+  color?: string;
+}) {
+  return (
+    <div className="loading-field">
+      <AsciiField height={height} opacity={0.35} speed={1.6} color={color} />
+      <span className="subtle">
+        <Spinner /> {label}
+      </span>
+    </div>
+  );
+}
+
 export function Badge({
   color,
   children,

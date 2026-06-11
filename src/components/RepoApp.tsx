@@ -20,6 +20,7 @@ import {
   IconSettings,
   IconSidePanel,
 } from "./icons";
+import { AsciiField } from "./AsciiField";
 import { ActivityView } from "./views/ActivityView";
 import { BabysitView } from "./views/BabysitView";
 import { DraftsView } from "./views/DraftsView";
@@ -160,7 +161,8 @@ export function RepoApp({ repo }: { repo: string }) {
   }
   if (!repoStore.loaded || !ctxRef.current) {
     return (
-      <div className="empty" style={{ paddingTop: 120 }}>
+      <div className="empty" style={{ paddingTop: 90 }}>
+        <AsciiField height={150} color="255, 79, 0" opacity={0.35} />
         <span className="spin" /> Loading {repo}…
       </div>
     );
