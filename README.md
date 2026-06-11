@@ -88,6 +88,14 @@ entries — the engine never changes.
 
 <img src="docs/settings-events.png" alt="Settings: the event catalog — every behavior is a toggle plus an editable prompt" width="100%"/>
 
+> [!NOTE]
+> **Cursor is the only supported agent harness today.** Every agent run shells out to the
+> [Cursor CLI](https://cursor.com/cli) (`cursor-agent`), so that's the one dependency you need
+> wired up right now. The harness is the one piece that's pluggable by design — adapters for
+> Claude Code, Codex, or any other CLI that streams output would slot in behind the same
+> `event -> { enabled, prompt }` interface. **Contributions for other harnesses are very welcome** —
+> open an issue or PR.
+
 ## How it works
 
 - **Stack:** Tauri 2 shell (Rust backend for HTTP, git, process spawning) + React/TypeScript front
