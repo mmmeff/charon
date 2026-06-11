@@ -20,6 +20,8 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
   const [open, setOpen] = useState(false);
   const [cands, setCands] = useState<Candidates | null>(null);
   const [query, setQuery] = useState("");
+  const [remote, setRemote] = useState<string[]>([]);
+  const [searching, setSearching] = useState(false);
   const [users, setUsers] = useState<string[]>([]);
   const [teams, setTeams] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -33,6 +35,26 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
     ]).then(([u, t]) => setCands({ users: u.filter((x) => x !== ctx.gh.login), teams: t }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // people autocomplete: debounced org-wide search instead of paginating
+  // the full collaborator list up front
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setRemote([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      setSearching(true);
+      ctx.gh
+        .searchUsers(ctx.repo, q)
+        .then(setRemote)
+        .catch(() => setRemote([]))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   const submit = async () => {
     setBusy(true);
@@ -53,8 +75,12 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
   };
 
   const q = query.trim().toLowerCase();
-  const matchUsers = (cands?.users ?? [])
-    .filter((u) => !users.includes(u) && (!q || u.toLowerCase().includes(q)))
+  // local first-page matches, then org-wide search results
+  const userPool = [...(cands?.users ?? []), ...remote.filter((r) => !cands?.users.includes(r))];
+  const matchUsers = userPool
+    .filter(
+      (u) => u !== ctx.gh.login && !users.includes(u) && (!q || u.toLowerCase().includes(q))
+    )
     .slice(0, 8);
   const matchTeams = (cands?.teams ?? [])
     .filter(
@@ -109,6 +135,7 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
         )}
 
         <input
+          type="text"
           autoFocus
           placeholder="Search reviewers — people and teams…"
           value={query}
@@ -141,7 +168,15 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
               </button>
             ))}
             {matchUsers.length === 0 && matchTeams.length === 0 && (
-              <span className="subtle">no matches{q ? ` for “${query}”` : ""}</span>
+              <span className="subtle">
+                {searching ? (
+                  <>
+                    <Spinner /> searching…
+                  </>
+                ) : (
+                  <>no matches{q ? ` for “${query}”` : ""}</>
+                )}
+              </span>
             )}
           </div>
         )}

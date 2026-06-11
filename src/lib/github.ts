@@ -528,10 +528,21 @@ export class GitHubClient {
     return res.map((p) => String(p.title));
   }
 
-  /** Repo collaborators — the reviewer candidate pool. Fully paginated. */
+  /** First page of repo collaborators — initial reviewer suggestions. */
   async listCollaborators(repo: string): Promise<string[]> {
-    const res = await this.paged<any>(`/repos/${repo}/collaborators`, undefined, 30);
+    const res = await this.json<any[]>("GET", `/repos/${repo}/collaborators?per_page=100`);
     return res.map((u) => String(u.login));
+  }
+
+  /**
+   * Reviewer autocomplete: org-scoped login/name search via the search API —
+   * covers the whole org without paginating the collaborator list.
+   */
+  async searchUsers(repo: string, q: string): Promise<string[]> {
+    const org = repo.split("/")[0];
+    const query = encodeURIComponent(`${q} in:login type:user org:${org}`);
+    const res = await this.json<{ items: any[] }>("GET", `/search/users?q=${query}&per_page=10`);
+    return (res.items ?? []).map((u) => String(u.login));
   }
 
   /** Org teams (team review requests); empty for user-owned repos / no scope. */

@@ -154,6 +154,7 @@ export function PrTitle({ pr }: { pr: PrSummary }) {
   return (
     <div className="card" style={{ padding: 10, marginBottom: 10 }}>
       <input
+        type="text"
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}

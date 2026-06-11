@@ -120,7 +120,7 @@ button.link {
 button.link:hover { text-decoration: underline; background: none; }
 button.small { font-size: 10.5px; padding: 3px 9px; }
 
-input[type="text"], input[type="password"], input[type="number"], textarea, select {
+input:not([type]), input[type="text"], input[type="password"], input[type="number"], textarea, select {
   background: var(--bg-inset);
   color: var(--fg);
   border: 1px solid var(--border);
