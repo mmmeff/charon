@@ -41,7 +41,9 @@ const duration = (c: CheckInfo): string => {
  */
 export function ChecksPanel({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
-  const checks = usePrData((s) => s.checks[pr.number] ?? []);
+  const allChecks = usePrData((s) => s.checks[pr.number] ?? []);
+  // skipped jobs are noise (path filters, matrix exclusions) — hide them
+  const checks = allChecks.filter((c) => c.conclusion !== "skipped");
   const failing = checks.filter((c) => c.conclusion === "failure" || c.conclusion === "error");
   const [openOverride, setOpenOverride] = useState<boolean | null>(null);
   const [logs, setLogs] = useState<Record<string, { loading: boolean; text: string; open: boolean }>>({});
