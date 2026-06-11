@@ -178,6 +178,12 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
             ref={inputRef}
             autoFocus
             className="picker-input"
+            // suppress macOS/WebKit autofill, autocorrect and QuickType here —
+            // logins and team slugs are not prose
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
             placeholder={sel.length ? "Add another…" : "Type to search people and teams…"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
