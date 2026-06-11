@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    pr_copilot_lib::run()
+    switchyard_lib::run()
 }
