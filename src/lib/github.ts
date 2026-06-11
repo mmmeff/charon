@@ -9,6 +9,8 @@ import type {
   TimelineEventInfo,
 } from "../types";
 
+export type MergeMethod = "squash" | "merge" | "rebase";
+
 export interface ReviewThreadInfo {
   /** GraphQL node id — needed for resolve/unresolve mutations */
   id: string;
@@ -603,36 +605,37 @@ export class GitHubClient {
     await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { state: "closed" });
   }
 
-  /** Merge the PR immediately. Method follows repo settings (squash > merge > rebase). */
-  async mergePull(repo: string, number: number): Promise<void> {
-    const repoInfo = await this.json<any>("GET", `/repos/${repo}`);
-    const method = repoInfo.allow_squash_merge
-      ? "squash"
-      : repoInfo.allow_merge_commit
-        ? "merge"
-        : "rebase";
-    await this.json("PUT", `/repos/${repo}/pulls/${number}/merge`, { merge_method: method });
+  private mergeMethodsCache: MergeMethod[] | null = null;
+
+  /** Merge methods this repo allows, preferred order: squash > merge > rebase. */
+  async repoMergeMethods(repo: string): Promise<MergeMethod[]> {
+    if (this.mergeMethodsCache) return this.mergeMethodsCache;
+    const r = await this.json<any>("GET", `/repos/${repo}`);
+    const out: MergeMethod[] = [];
+    if (r.allow_squash_merge) out.push("squash");
+    if (r.allow_merge_commit) out.push("merge");
+    if (r.allow_rebase_merge) out.push("rebase");
+    this.mergeMethodsCache = out.length ? out : ["merge"];
+    return this.mergeMethodsCache;
   }
 
-  /**
-   * Arm GitHub auto-merge (GraphQL-only). Merge method follows what the repo
-   * allows, preferring squash > merge commit > rebase.
-   */
-  async enableAutoMerge(repo: string, number: number): Promise<void> {
-    const [pull, repoInfo] = await Promise.all([
+  /** Merge the PR immediately. Method defaults to the repo's preferred one. */
+  async mergePull(repo: string, number: number, method?: MergeMethod): Promise<void> {
+    const m = method ?? (await this.repoMergeMethods(repo))[0];
+    await this.json("PUT", `/repos/${repo}/pulls/${number}/merge`, { merge_method: m });
+  }
+
+  /** Arm GitHub auto-merge (GraphQL-only). Method defaults like mergePull. */
+  async enableAutoMerge(repo: string, number: number, method?: MergeMethod): Promise<void> {
+    const [pull, m] = await Promise.all([
       this.json<{ node_id: string }>("GET", `/repos/${repo}/pulls/${number}`),
-      this.json<any>("GET", `/repos/${repo}`),
+      method ? Promise.resolve(method) : this.repoMergeMethods(repo).then((ms) => ms[0]),
     ]);
-    const method = repoInfo.allow_squash_merge
-      ? "SQUASH"
-      : repoInfo.allow_merge_commit
-        ? "MERGE"
-        : "REBASE";
     await this.graphql(
       `mutation($id:ID!,$m:PullRequestMergeMethod!){
         enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:$m}){ pullRequest{ number } }
       }`,
-      { id: pull.node_id, m: method }
+      { id: pull.node_id, m: m.toUpperCase() }
     );
   }
 

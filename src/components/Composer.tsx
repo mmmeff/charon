@@ -6,6 +6,7 @@ import { interpolate, prVars } from "../lib/template";
 import { useAgentStore } from "../lib/store";
 import type { LineSelection, PrSummary } from "../types";
 import { timeAgo } from "../lib/ui";
+import { AgentCard } from "./AgentCard";
 import { Badge, Spinner } from "./common";
 import { Markdown } from "./Markdown";
 import { ModelPicker } from "./ModelPicker";
@@ -91,15 +92,16 @@ export function Composer({
   const runs = useAgentStore((s) => s.runs);
   const order = useAgentStore((s) => s.order);
 
-  const reviewing = order
+  const activeReview = order
     .map((id) => runs[id])
-    .some(
+    .find(
       (r) =>
         r &&
         r.prNumber === pr.number &&
         r.kind === "review" &&
         (r.status === "running" || r.status === "starting")
     );
+  const reviewing = !!activeReview;
 
   const meta = MODE_META[mode];
   const canSubmit = mode === "review" ? !reviewing : text.trim().length > 0;
@@ -166,32 +168,39 @@ export function Composer({
           {meta.hint(reviewKind === "self", !!selection)}
         </span>
       </div>
-      <PromptInput
-        autoFocus={compact}
-        rows={compact ? 2 : 3}
-        placeholder={meta.placeholder}
-        value={text}
-        onChange={setText}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit && !busy) void submit();
-          if (e.key === "Escape" && onClose) onClose();
-        }}
-      />
-      <div className="row" style={{ marginTop: 8 }}>
-        <button className="primary" disabled={busy || !canSubmit} onClick={() => void submit()}>
-          {busy || (mode === "review" && reviewing) ? <Spinner /> : null}{" "}
-          {mode === "review" && reviewing ? "reviewing…" : meta.submit}
-        </button>
-        {mode !== "comment" && (
-          <ModelPicker
-            value={model}
-            onChange={setModel}
-            flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+      {mode === "review" && activeReview ? (
+        // a review is underway — the input collapses and the live run takes
+        // its place; switching mode tabs still works above
+        <AgentCard run={activeReview} defaultOpen embedded />
+      ) : (
+        <>
+          <PromptInput
+            autoFocus={compact}
+            rows={compact ? 2 : 3}
+            placeholder={meta.placeholder}
+            value={text}
+            onChange={setText}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit && !busy) void submit();
+              if (e.key === "Escape" && onClose) onClose();
+            }}
           />
-        )}
-        {onClose && <button onClick={onClose}>Cancel</button>}
-        {error && <span style={{ color: "var(--red)" }}>{error}</span>}
-      </div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="primary" disabled={busy || !canSubmit} onClick={() => void submit()}>
+              {busy ? <Spinner /> : null} {meta.submit}
+            </button>
+            {mode !== "comment" && (
+              <ModelPicker
+                value={model}
+                onChange={setModel}
+                flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+              />
+            )}
+            {onClose && <button onClick={onClose}>Cancel</button>}
+            {error && <span style={{ color: "var(--red)" }}>{error}</span>}
+          </div>
+        </>
+      )}
     </div>
   );
 }

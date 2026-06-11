@@ -65,6 +65,13 @@ export function RepoApp({ repo }: { repo: string }) {
     ui.navPush(tab, ui.focusedPr[tab] ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // tab switches requested elsewhere (e.g. agent-card PR links)
+  const requestedTab = useUiStore((s) => s.requestedTab);
+  useEffect(() => {
+    if (requestedTab && TABS.includes(requestedTab.tab as Tab)) setTab(requestedTab.tab as Tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTab?.nonce]);
   const prData = usePrData();
   const agentOrder = useAgentStore((s) => s.order);
   const runs = useAgentStore((s) => s.runs);

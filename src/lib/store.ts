@@ -311,6 +311,9 @@ interface UiState {
   /** right-hand GitHub activity panel visibility (persisted; topstrip toggle) */
   activityPanelOpen: boolean;
   setActivityPanelOpen(v: boolean): void;
+  /** cross-component tab switch request (RepoApp applies it) */
+  requestedTab: { tab: string; nonce: number } | null;
+  requestTab(tab: string): void;
   /** browser-style location history: (tab, focused PR) pairs */
   navHistory: { tab: string; pr: number | null }[];
   navIndex: number;
@@ -341,6 +344,10 @@ export const useUiStore = create<UiState>((set, get) => ({
     localStorage.setItem("prc-activity-open", v ? "on" : "off");
     set({ activityPanelOpen: v });
   },
+  requestedTab: null,
+  requestTab(tab) {
+    set({ requestedTab: { tab, nonce: Date.now() } });
+  },
   navHistory: [],
   navIndex: -1,
   navApplying: false,
@@ -362,6 +369,28 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   navApplied() {
     set({ navApplying: false });
+  },
+}));
+
+// ---------------------------------------------------------------------------
+// CI failure auto-analysis: one-line summaries keyed by pr:check:headSha.
+// Session-scoped; a new head invalidates naturally via the key.
+// ---------------------------------------------------------------------------
+
+export interface CiAnalysis {
+  status: "running" | "done" | "error";
+  text: string;
+}
+
+interface CiAnalysisState {
+  map: Record<string, CiAnalysis>;
+  set(key: string, v: CiAnalysis): void;
+}
+
+export const useCiAnalysis = create<CiAnalysisState>((set) => ({
+  map: {},
+  set(key, v) {
+    set((s) => ({ map: { ...s.map, [key]: v } }));
   },
 }));
 

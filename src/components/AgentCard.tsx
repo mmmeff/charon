@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { killAgent } from "../lib/agents";
-import { useGlobalConfig } from "../lib/store";
+import { usePrData } from "../lib/events";
+import { useGlobalConfig, useUiStore } from "../lib/store";
 import type { AgentLine, AgentRun } from "../types";
 import { timeAgo, useNow } from "../lib/ui";
 import { Badge, LoadingField, Spinner } from "./common";
@@ -36,7 +37,16 @@ const statusColor = (s: AgentRun["status"]) =>
   s === "running" || s === "starting" ? "blue" : s === "done" ? "green" : s === "killed" ? "gray" : "red";
 
 /** One agent run in the Activity Feed: relation, prompt, and live work view. */
-export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; defaultOpen?: boolean }) {
+export function AgentCard({
+  run,
+  defaultOpen = false,
+  embedded = false,
+}: {
+  run: AgentRun;
+  defaultOpen?: boolean;
+  /** rendered inside another card (e.g. the composer) — no outer chrome */
+  embedded?: boolean;
+}) {
   const [open, setOpen] = useState(defaultOpen);
   const [showPrompt, setShowPrompt] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -44,6 +54,17 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
   const prUrl = `${githubUrl}/${run.repo}/pull/${run.prNumber}`;
   const active = run.status === "running" || run.status === "starting";
   useNow(active ? 1000 : 0); // tick the elapsed counter while running
+
+  // jump to this PR inside the app (the ↗ stays for web)
+  const openInApp = () => {
+    const d = usePrData.getState();
+    const has = (l: { number: number }[]) => l.some((p) => p.number === run.prNumber);
+    const tab = has(d.myDrafts) ? "drafts" : has(d.myOpen) ? "open" : has(d.reviewQueue) ? "review" : null;
+    if (!tab) return; // PR left the lists (closed/merged) — only the web link remains
+    const ui = useUiStore.getState();
+    ui.setFocusedPr(tab, run.prNumber);
+    ui.requestTab(tab);
+  };
 
   // follow the live stream (depends on the array identity, not its length —
   // chunk merges grow the last entry without adding lines)
@@ -56,14 +77,17 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
   const elapsed = Math.round(((run.endedAt ?? Date.now()) - run.startedAt) / 1000);
 
   return (
-    <div className={`card ${active ? "agent-running" : ""}`}>
+    <div className={embedded ? "agent-embedded" : `card ${active ? "agent-running" : ""}`}>
       <div className="row between">
         <div className="row">
           {active && <Spinner />}
           <Badge color={statusColor(run.status)}>{run.status}</Badge>
           <strong>{run.relation}</strong>
-          <a href={prUrl} target="_blank" rel="noreferrer" title={prUrl}>
+          <button className="link agent-pr-link" title="Open in this app" onClick={openInApp}>
             PR #{run.prNumber} — {run.prTitle}
+          </button>
+          <a href={prUrl} target="_blank" rel="noreferrer" className="subtle" title="Open on GitHub">
+            ↗
           </a>
         </div>
         <div className="row">

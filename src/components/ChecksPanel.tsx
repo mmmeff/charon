@@ -1,12 +1,55 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveHandler, usePrData } from "../lib/events";
-import { runFixFlow } from "../lib/flows";
+import { runCheckAnalysis, runFixFlow } from "../lib/flows";
 import { GitHubClient } from "../lib/github";
+import { useCiAnalysis } from "../lib/store";
 import { interpolate, prVars } from "../lib/template";
 import type { CheckInfo, PrSummary } from "../types";
 import { AgentLaunchForm } from "./AgentLaunchForm";
 import { Badge, Spinner } from "./common";
 import { useFlow } from "./flow";
+
+const ERR_RE = /\berror(s)?\b|\bfail(?:ed|ure|ing)?\b|fatal|exception|traceback|panic|✗|✘|×/i;
+const WARN_RE = /\bwarn(?:ing)?s?\b|deprecat/i;
+
+/**
+ * One check's log: error/warning lines color-coded, auto-scrolled to the
+ * first error (or the tail when nothing matches — failures usually die at
+ * the end of the log).
+ */
+function CheckLog({ loading, text }: { loading: boolean; text: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const lines = useMemo(() => text.split("\n"), [text]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (loading || !el) return;
+    const first = el.querySelector<HTMLElement>(".log-err");
+    if (first) el.scrollTop = Math.max(0, first.offsetTop - 60);
+    else el.scrollTop = el.scrollHeight;
+  }, [loading, text]);
+
+  return (
+    <div className="check-log" ref={ref}>
+      {loading ? (
+        <span className="subtle">
+          <Spinner /> fetching log…
+        </span>
+      ) : (
+        <pre>
+          {lines.map((l, i) => (
+            <div
+              key={i}
+              className={`log-line ${ERR_RE.test(l) ? "log-err" : WARN_RE.test(l) ? "log-warn" : ""}`}
+            >
+              {l || " "}
+            </div>
+          ))}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 const UI_LOG_TAIL = 40_000;
 const AGENT_LOG_TAIL = 16_000;
@@ -97,6 +140,27 @@ ${log.slice(-AGENT_LOG_TAIL)}
     await runFixFlow(ctx, pr, task, `CI fix (${c.name})`, "ci_fix", model);
   };
 
+  // auto-triage: every failed check gets a one-liner analysis (default model
+  // Composer 2.5 Fast), keyed by head sha so new pushes re-analyze
+  const analyses = useCiAnalysis((s) => s.map);
+  const analysisKey = (c: CheckInfo) => `${pr.number}:${c.name}:${pr.headSha}`;
+  useEffect(() => {
+    for (const c of failing) {
+      const key = analysisKey(c);
+      if (useCiAnalysis.getState().map[key]) continue;
+      useCiAnalysis.getState().set(key, { status: "running", text: "" });
+      runCheckAnalysis(ctx, pr, c)
+        .then((text) => useCiAnalysis.getState().set(key, { status: "done", text }))
+        .catch((e) =>
+          useCiAnalysis.getState().set(key, {
+            status: "error",
+            text: e instanceof Error ? e.message : String(e),
+          })
+        );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pr.number, pr.headSha, failing.map((c) => c.name).join("|")]);
+
   const retry = async (c: CheckInfo) => {
     setRetrying((r) => ({ ...r, [c.name]: "busy" }));
     try {
@@ -182,6 +246,24 @@ ${log.slice(-AGENT_LOG_TAIL)}
                   retry failed: {retryState}
                 </div>
               )}
+              {failed &&
+                (() => {
+                  const a = analyses[analysisKey(c)];
+                  if (!a) return null;
+                  return (
+                    <div className="check-analysis">
+                      {a.status === "running" ? (
+                        <span className="subtle">
+                          <Spinner /> analyzing…
+                        </span>
+                      ) : a.status === "done" ? (
+                        a.text
+                      ) : (
+                        <span className="subtle">analysis unavailable — {a.text}</span>
+                      )}
+                    </div>
+                  );
+                })()}
               {failed && mine && fixOpen[c.name] && (
                 <AgentLaunchForm
                   label={`Fix ${c.name}`}
@@ -191,17 +273,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
                   onClose={() => setFixOpen((f) => ({ ...f, [c.name]: false }))}
                 />
               )}
-              {log?.open && (
-                <div className="check-log">
-                  {log.loading ? (
-                    <span className="subtle">
-                      <Spinner /> fetching log…
-                    </span>
-                  ) : (
-                    <pre>{log.text}</pre>
-                  )}
-                </div>
-              )}
+              {log?.open && <CheckLog loading={log.loading} text={log.text} />}
             </div>
           );
         })}

@@ -11,6 +11,7 @@ import type {
   Skill,
 } from "../types";
 import { cleanResultText, extractProposalJson, startAgent } from "./agents";
+import { DEFAULT_MODEL_ID } from "./defaults";
 import { lineInDiff, lineTextAt, nearestDiffLine, parseUnifiedDiff } from "./diff";
 import type { GitHubClient } from "./github";
 import { applySkills } from "./skills";
@@ -688,6 +689,53 @@ After the work, draft a response to the thread${
   return runFixFlow(ctx, pr, task, `address comment by ${root.author}`, "feedback_fix", model, {
     // inline review comments get a threaded reply, never a root PR comment
     replyToCommentId: isInline ? root.id : undefined,
+  });
+}
+
+/**
+ * Auto CI triage: a fast read-only agent boils a failing check's log down to
+ * one or two sentences for the checks panel. Default model is the install
+ * default (Composer 2.5 Fast); falls back to normal resolution if the CLI
+ * doesn't list it. Resolves with the summary text.
+ */
+export async function runCheckAnalysis(
+  ctx: FlowContext,
+  pr: PrSummary,
+  check: { name: string; url: string; id?: number; outputTitle?: string; outputSummary?: string }
+): Promise<string> {
+  const log = (await ctx.gh.getCheckLog(ctx.repo, check).catch(() => "")) || "(no log available)";
+  const model = ctx.global.models.includes(DEFAULT_MODEL_ID)
+    ? DEFAULT_MODEL_ID
+    : resolveModel(ctx, undefined, "event");
+  return new Promise((resolve, reject) => {
+    const prompt = `You are a CI triage bot. A check failed on PR #${pr.number} in ${ctx.repo}.
+Summarize WHY it failed in ONE or TWO short sentences — absolute maximum. Plain text only: no markdown,
+no preamble, no advice. Name the failing test/step/file when identifiable.
+
+CHECK: ${check.name}${check.outputTitle ? ` — ${check.outputTitle}` : ""}
+LOG TAIL:
+\`\`\`
+${log.slice(-16_000)}
+\`\`\``;
+    startAgent({
+      kind: "event",
+      relation: `CI analysis (${check.name})`,
+      repo: ctx.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prompt,
+      model,
+      binary: ctx.global.cursorBinary,
+      mode: "ask",
+      onDone: (run) => {
+        const text = cleanResultText(run.resultText)
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!text) return reject(new Error("no analysis produced"));
+        // enforce the two-sentence cap even if the model rambles
+        resolve(text.split(/(?<=[.!?])\s+/).slice(0, 2).join(" "));
+      },
+    }).catch(reject);
   });
 }
 

@@ -13,6 +13,7 @@ import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
 import { groupCommentThreads } from "../lib/threads";
+import { MergeControl } from "./MergeControl";
 import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels, PrTitle } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
 import { PrOverflowMenu } from "./PrOverflowMenu";
@@ -196,6 +197,12 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
               >
                 {updatingBranch ? <Spinner /> : "⇡"} Update from {pr.baseRef}
               </button>
+            )}
+            {variant === "babysit" && !pr.draft && (
+              <>
+                <span style={{ flex: 1 }} />
+                <MergeControl pr={pr} />
+              </>
             )}
             {activeRuns.length > 0 && (
               <span className="subtle">

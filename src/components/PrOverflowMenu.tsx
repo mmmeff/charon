@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { usePrData } from "../lib/events";
 import { notify } from "../lib/notify";
 import type { PrSummary } from "../types";
 import { Spinner } from "./common";
@@ -8,7 +7,8 @@ import { useFlow } from "./flow";
 /**
  * Tertiary actions for the user's own PRs (draft or open) behind a ⋯ menu.
  * Destructive items use an in-menu confirm step. All entries are direct
- * user-authored GitHub actions — no approval gate.
+ * user-authored GitHub actions — no approval gate. (Merge + automerge live
+ * in the Status strip's MergeControl, not here.)
  */
 export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
@@ -57,22 +57,6 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
     }
   };
 
-  const mergeNow = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      await ctx.gh.mergePull(ctx.repo, pr.number);
-      void notify("PR merged", `#${pr.number} ${pr.title}`);
-      poller.refresh();
-      dismiss();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setConfirming(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const convertToDraft = async () => {
     setBusy(true);
     setError("");
@@ -80,26 +64,6 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
       await ctx.gh.convertToDraft(ctx.repo, pr.number);
       void notify("Converted to draft", `#${pr.number} ${pr.title}`);
       poller.refresh(); // re-buckets the PR from Open into Drafts
-      dismiss();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const toggleAutoMerge = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      if (pr.autoMerge) await ctx.gh.disableAutoMerge(ctx.repo, pr.number);
-      else await ctx.gh.enableAutoMerge(ctx.repo, pr.number);
-      // optimistic flag flip; the next poll reconciles
-      const d = usePrData.getState();
-      const fix = (l: PrSummary[]) =>
-        l.map((p) => (p.number === pr.number ? { ...p, autoMerge: !pr.autoMerge } : p));
-      d.patch({ myDrafts: fix(d.myDrafts), myOpen: fix(d.myOpen), reviewQueue: fix(d.reviewQueue) });
-      poller.refresh();
       dismiss();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -120,19 +84,6 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
       {open && (
         <div className="overflow-pop">
           {error && <div className="overflow-error">{error}</div>}
-          <button
-            className="overflow-item"
-            disabled={busy}
-            title={
-              pr.autoMerge
-                ? "Disarm auto-merge"
-                : "Merge automatically once requirements are met (method follows repo settings)"
-            }
-            onClick={() => void toggleAutoMerge()}
-          >
-            {busy && confirming === null ? <Spinner /> : null}{" "}
-            {pr.autoMerge ? "Disable automerge" : "Enable automerge"}
-          </button>
           {!pr.draft && (
             <button
               className="overflow-item"
@@ -141,24 +92,6 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
               onClick={() => void convertToDraft()}
             >
               Convert to draft
-            </button>
-          )}
-          {confirming === "merge" ? (
-            <div className="row" style={{ padding: "2px 4px", gap: 4 }}>
-              <button className="small primary" disabled={busy} onClick={() => void mergeNow()}>
-                {busy ? <Spinner /> : null} Confirm merge
-              </button>
-              <button className="small" onClick={() => setConfirming(null)}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              className="overflow-item"
-              title="Merge immediately (squash/merge/rebase per repo settings)"
-              onClick={() => setConfirming("merge")}
-            >
-              Merge now
             </button>
           )}
           {confirming === "close" ? (
