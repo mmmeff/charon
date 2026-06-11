@@ -26,13 +26,22 @@ import { ReviewView } from "./views/ReviewView";
 import { SettingsView } from "./views/SettingsView";
 
 type Tab = "drafts" | "open" | "review" | "activity" | "settings";
+const TABS: Tab[] = ["drafts", "open", "review", "activity", "settings"];
 
 /** One repo, one window: tabbed shell that owns the poller and flow context. */
 export function RepoApp({ repo }: { repo: string }) {
   const global = useGlobalConfig((s) => s.config);
   const repoStore = useRepoStore();
   const skills = useSkillStore((s) => s.skills);
-  const [tab, setTab] = useState<Tab>("open");
+  // remember the last tab per repo across launches
+  const [tab, setTabState] = useState<Tab>(() => {
+    const saved = localStorage.getItem(`prc-tab-${repo}`) as Tab | null;
+    return saved && TABS.includes(saved) ? saved : "open";
+  });
+  const setTab = (t: Tab) => {
+    localStorage.setItem(`prc-tab-${repo}`, t);
+    setTabState(t);
+  };
   const prData = usePrData();
   const agentOrder = useAgentStore((s) => s.order);
   const runs = useAgentStore((s) => s.runs);
@@ -107,13 +116,12 @@ export function RepoApp({ repo }: { repo: string }) {
   // ⌘1–⌘5 (ctrl on other platforms) jumps between tabs.
   // Must live above the loading early-returns: hooks can't come after them.
   useEffect(() => {
-    const ids: Tab[] = ["drafts", "open", "review", "activity", "settings"];
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
       const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= ids.length) {
+      if (n >= 1 && n <= TABS.length) {
         e.preventDefault();
-        setTab(ids[n - 1]);
+        setTab(TABS[n - 1]);
       }
     };
     document.addEventListener("keydown", onKey);
