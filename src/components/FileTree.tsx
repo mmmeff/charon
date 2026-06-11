@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { FileDiff } from "../types";
+import { useResizablePanel } from "./Panels";
 
 interface TreeNode {
   name: string;
@@ -63,6 +64,7 @@ export function FileTree({
   onSelect: (path: string) => void;
 }) {
   const tree = useMemo(() => buildTree(files), [files]);
+  const { width, handle } = useResizablePanel("prc-w-filetree", 248, 170, 520, "right");
 
   const renderNode = (node: TreeNode, depth: number) => {
     if (node.file) {
@@ -101,14 +103,17 @@ export function FileTree({
   };
 
   return (
-    <div className="filetree">
-      <div className="row between" style={{ marginBottom: 6, paddingLeft: 10 }}>
-        <strong style={{ fontSize: 12.5 }}>{files.length} files changed</strong>
-        <button className="link small" onClick={onClose}>
-          ✕
-        </button>
+    <div className="filetree" style={{ width }}>
+      {handle}
+      <div className="filetree-inner">
+        <div className="row between" style={{ marginBottom: 6, paddingLeft: 10 }}>
+          <strong style={{ fontSize: 12.5 }}>{files.length} files changed</strong>
+          <button className="link small" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        {tree.map((n) => renderNode(n, 0))}
       </div>
-      {tree.map((n) => renderNode(n, 0))}
     </div>
   );
 }
