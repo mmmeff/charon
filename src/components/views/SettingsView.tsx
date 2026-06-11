@@ -208,8 +208,9 @@ export function SettingsView() {
       <div className="settings-section" id="s-events">
         <h3>Events</h3>
         <p className="subtle">
-          Every event is a toggle plus a prompt template. When an event fires and is enabled, the prompt runs
-          against a Cursor agent — the behavior is whatever the prompt instructs. Variables:{" "}
+          Every event is a toggle plus a prompt template. <strong>All automation ships OFF</strong> — opt in
+          per event when you're ready for the app to react on its own. When an event fires and is enabled,
+          the prompt runs against a Cursor agent — the behavior is whatever the prompt instructs. Variables:{" "}
           <code>{"{pr-number}"}</code> <code>{"{pr-title}"}</code> <code>{"{branch}"}</code>{" "}
           <code>{"{base-branch}"}</code> <code>{"{comment-body}"}</code> <code>{"{author}"}</code>{" "}
           <code>{"{model}"}</code> <code>{"{filter-criteria}"}</code> <code>{"{check-name}"}</code>{" "}

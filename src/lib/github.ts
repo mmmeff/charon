@@ -258,6 +258,11 @@ export class GitHubClient {
           status: c.status,
           conclusion: c.conclusion,
           url: c.html_url ?? "",
+          id: c.id,
+          startedAt: c.started_at ?? undefined,
+          completedAt: c.completed_at ?? undefined,
+          outputTitle: c.output?.title ?? undefined,
+          outputSummary: c.output?.summary ?? undefined,
         });
       }
     } catch {
@@ -283,21 +288,42 @@ export class GitHubClient {
     return out;
   }
 
-  async getCheckLogExcerpt(repo: string, checkUrl: string): Promise<string> {
-    // Check-run annotation text is the most portable "what failed" signal.
-    try {
-      const m = /check-runs\/(\d+)/.exec(checkUrl);
-      if (!m) return "";
-      const anns = await this.json<any[]>(
-        "GET",
-        `/repos/${repo}/check-runs/${m[1]}/annotations?per_page=50`
-      );
-      return anns
-        .map((a) => `${a.path}:${a.start_line} [${a.annotation_level}] ${a.message}`)
-        .join("\n");
-    } catch {
-      return "";
+  /**
+   * Best-effort full log for a check. GitHub Actions jobs expose raw logs
+   * (job id parsed from the check's html_url); other CI providers fall back
+   * to the check-run output summary plus annotations.
+   */
+  async getCheckLog(
+    repo: string,
+    check: { name: string; url: string; id?: number; outputTitle?: string; outputSummary?: string }
+  ): Promise<string> {
+    // GitHub Actions: html_url is …/actions/runs/<run>/job/<job-id>
+    const m = /\/actions\/runs\/\d+\/job\/(\d+)/.exec(check.url ?? "");
+    if (m) {
+      try {
+        const resp = await this.raw("GET", `/repos/${repo}/actions/jobs/${m[1]}/logs`);
+        if (resp.body.trim()) return resp.body;
+      } catch {
+        /* fall through to output/annotations */
+      }
     }
+    const parts = [check.outputTitle, check.outputSummary].filter(Boolean) as string[];
+    if (check.id) {
+      try {
+        const anns = await this.json<any[]>(
+          "GET",
+          `/repos/${repo}/check-runs/${check.id}/annotations?per_page=50`
+        );
+        if (anns.length) {
+          parts.push(
+            anns.map((a) => `${a.path}:${a.start_line} [${a.annotation_level}] ${a.message}`).join("\n")
+          );
+        }
+      } catch {
+        /* annotations are optional */
+      }
+    }
+    return parts.join("\n\n");
   }
 
   // -- Comments & reviews ----------------------------------------------------

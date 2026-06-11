@@ -140,6 +140,12 @@ export interface CheckInfo {
   status: string; // queued | in_progress | completed
   conclusion: string | null; // success | failure | cancelled | timed_out | ...
   url: string;
+  /** check-run id (annotations lookup) */
+  id?: number;
+  startedAt?: string;
+  completedAt?: string;
+  outputTitle?: string;
+  outputSummary?: string;
 }
 
 export interface CommentInfo {

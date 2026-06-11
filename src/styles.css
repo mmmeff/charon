@@ -424,6 +424,27 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .seg button { border-radius: 0; }
 .seg button + button { border-left: none; }
 
+/* ---- CI checks panel ---- */
+.checks-panel { padding: 10px 14px; }
+.checks-title {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.check-row { border-top: 1px solid var(--border-subtle); padding: 6px 0; }
+.check-row:first-of-type { margin-top: 8px; }
+.check-glyph { font-size: 13px; width: 14px; text-align: center; flex-shrink: 0; }
+.check-name { font-size: 12.5px; font-weight: 600; }
+.check-output { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30%; }
+.check-log {
+  margin: 6px 0 4px 22px;
+  background: var(--bg-inset); border: 1px solid var(--border-subtle);
+  max-height: 320px; overflow: auto; padding: 8px 10px;
+}
+.check-log pre {
+  margin: 0; font-family: var(--mono); font-size: 10.5px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word; color: var(--fg-muted);
+}
+
 /* ---- floating comment prev/next ---- */
 .comment-nav-wrap {
   position: sticky; top: 8px; z-index: 26; height: 0;

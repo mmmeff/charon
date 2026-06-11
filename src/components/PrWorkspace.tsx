@@ -7,6 +7,7 @@ import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
 import { Badge, CiBadge, MergeBadge, Spinner, timeAgo, useScrolledPrTitle } from "./common";
+import { ChecksPanel } from "./ChecksPanel";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
@@ -144,21 +145,15 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
       <PrDescription pr={pr} />
 
-      {variant === "babysit" && (failing.length > 0 || pr.mergeableState === "dirty" || activeRuns.length > 0) && (
+      <ChecksPanel pr={pr} />
+
+      {(pr.mergeableState === "dirty" || activeRuns.length > 0) && (
         <div className="card" style={{ padding: "8px 14px" }}>
           <div className="row">
-            {failing.length > 0 && (
-              <button className="small" onClick={() => void manualFix("ci_failed", "ci_fix")}>
-                Fix CI now
-              </button>
-            )}
             {pr.mergeableState === "dirty" && (
               <button className="small" onClick={() => void manualFix("merge_conflict_detected", "conflict_fix")}>
                 Resolve conflicts now
               </button>
-            )}
-            {failing.length > 0 && (
-              <span className="subtle">failing: {failing.map((c) => c.name).join(", ")}</span>
             )}
             {activeRuns.length > 0 && (
               <span className="subtle">

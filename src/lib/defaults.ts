@@ -15,7 +15,7 @@ export const EVENT_CATALOG: EventDef[] = [
     description: "A required check failed on one of your PRs.",
     group: "My PRs — CI & Checks",
     appliesTo: "mine",
-    defaultEnabled: true,
+    defaultEnabled: false,
     defaultPrompt: "investigate and fix the failing CI for PR {pr-number}",
   },
   {
@@ -56,7 +56,7 @@ export const EVENT_CATALOG: EventDef[] = [
     description: "Branch no longer merges cleanly into its base.",
     group: "My PRs — Merge & Branch State",
     appliesTo: "mine",
-    defaultEnabled: true,
+    defaultEnabled: false,
     defaultPrompt: "run /fix-merge-conflicts for PR {pr-number}",
   },
   {
@@ -88,7 +88,7 @@ export const EVENT_CATALOG: EventDef[] = [
     description: "An automated bug/security bot left a finding.",
     group: "My PRs — Incoming Feedback",
     appliesTo: "mine",
-    defaultEnabled: true,
+    defaultEnabled: false,
     defaultPrompt:
       "evaluate this bug-bot finding on PR {pr-number} and either propose a fix via worktree or propose a response: {comment-body}",
   },
@@ -98,7 +98,7 @@ export const EVENT_CATALOG: EventDef[] = [
     description: "A non-human code-review tool posted a review.",
     group: "My PRs — Incoming Feedback",
     appliesTo: "mine",
-    defaultEnabled: true,
+    defaultEnabled: false,
     defaultPrompt:
       "triage this automated review on PR {pr-number} and propose responses or fixes: {comment-body}",
   },
@@ -108,7 +108,7 @@ export const EVENT_CATALOG: EventDef[] = [
     description: "A human submitted a review (changes requested / approved / commented).",
     group: "My PRs — Incoming Feedback",
     appliesTo: "mine",
-    defaultEnabled: true,
+    defaultEnabled: false,
     defaultPrompt:
       "address the review feedback on PR {pr-number} and propose responses or fixes: {comment-body}",
   },
@@ -118,7 +118,7 @@ export const EVENT_CATALOG: EventDef[] = [
     description: "A standalone human comment or reply on your PR.",
     group: "My PRs — Incoming Feedback",
     appliesTo: "mine",
-    defaultEnabled: true,
+    defaultEnabled: false,
     defaultPrompt:
       "assess whether this comment on PR {pr-number} needs a response or code change and propose one: {comment-body}",
   },
@@ -172,7 +172,7 @@ export const EVENT_CATALOG: EventDef[] = [
       "You were requested as a reviewer — directly or via a team you're on (treated identically).",
     group: "Teammate PRs — Review Triggers",
     appliesTo: "teammate",
-    defaultEnabled: true,
+    defaultEnabled: false,
     defaultPrompt:
       "run the thermonuclear code quality review on PR {pr-number} and propose inline comments with severity and confidence",
   },
@@ -215,7 +215,7 @@ export const EVENT_CATALOG: EventDef[] = [
     description: "Draft flipped to ready-for-review. Default ON for teammate PRs (triggers review), OFF for yours.",
     group: "Cross-Cutting",
     appliesTo: "teammate",
-    defaultEnabled: true,
+    defaultEnabled: false,
     defaultPrompt:
       "PR {pr-number} just became ready for review; run the thermonuclear code quality review and propose inline comments with severity and confidence",
   },

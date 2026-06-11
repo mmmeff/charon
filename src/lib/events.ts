@@ -152,7 +152,7 @@ export function diffSnapshots(
     const was = prev.checks[c.name];
     const now = c.conclusion;
     if (!now || was === now) continue;
-    const vars = { "check-name": c.name, "check-url": c.url };
+    const vars = { "check-name": c.name, "check-url": c.url, "check-id": String(c.id ?? "") };
     if (now === "failure" || now === "error") fire("ci_failed", vars);
     else if (now === "timed_out") fire("check_timed_out", vars);
     else if (now === "cancelled") fire("check_cancelled", vars);
@@ -279,17 +279,27 @@ export async function dispatchEvent(ctx: FlowContext, ev: FiredEvent, pr: PrSumm
   const label = def?.label ?? ev.id;
   const handler = resolveHandler(ctx.config.events, ev.id);
 
-  // every occurrence is logged and surfaced natively, handled or not
+  // every occurrence is logged; only enabled handlers notify (quiet by default)
   await useRepoStore.getState().logEvent(ev);
-  void notify(
-    `${label} — ${ctx.repo}`,
-    `PR #${pr.number} ${pr.title}${handler.enabled ? "" : " (handler off)"}`
-  );
-
   if (!handler.enabled || !handler.prompt.trim()) return;
+  void notify(`${label} — ${ctx.repo}`, `PR #${pr.number} ${pr.title}`);
 
   const vars = eventVars(ctx, pr, ev.vars);
-  const prompt = interpolate(handler.prompt, vars);
+  let prompt = interpolate(handler.prompt, vars);
+
+  // ci_failed pipeline: attach the failing check's log tail as agent context
+  if (ev.id === "ci_failed" && ev.vars["check-url"]) {
+    const log = await ctx.gh
+      .getCheckLog(ctx.repo, {
+        name: ev.vars["check-name"] ?? "",
+        url: ev.vars["check-url"],
+        id: Number(ev.vars["check-id"]) || undefined,
+      })
+      .catch(() => "");
+    if (log.trim()) {
+      prompt += `\n\nFAILING CHECK: ${ev.vars["check-name"]}\nLOG TAIL:\n\`\`\`\n${log.slice(-16_000)}\n\`\`\``;
+    }
+  }
 
   try {
     if (REVIEW_EVENTS.has(ev.id)) {

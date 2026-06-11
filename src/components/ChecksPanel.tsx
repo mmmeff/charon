@@ -1,0 +1,161 @@
+import { useState } from "react";
+import { resolveHandler, usePrData } from "../lib/events";
+import { runFixFlow } from "../lib/flows";
+import { interpolate, prVars } from "../lib/template";
+import type { CheckInfo, PrSummary } from "../types";
+import { Badge, Spinner } from "./common";
+import { useFlow } from "./RepoApp";
+
+const UI_LOG_TAIL = 40_000;
+const AGENT_LOG_TAIL = 16_000;
+
+const glyphFor = (c: CheckInfo): { glyph: string; color: string } => {
+  if (!c.conclusion) return { glyph: "●", color: "var(--amber)" };
+  switch (c.conclusion) {
+    case "success":
+      return { glyph: "✓", color: "var(--acid)" };
+    case "failure":
+    case "error":
+      return { glyph: "✗", color: "var(--red)" };
+    case "cancelled":
+    case "timed_out":
+      return { glyph: "⊘", color: "var(--amber)" };
+    default:
+      return { glyph: "—", color: "var(--fg-subtle)" }; // skipped | neutral
+  }
+};
+
+const duration = (c: CheckInfo): string => {
+  if (!c.startedAt) return "";
+  const end = c.completedAt ? Date.parse(c.completedAt) : Date.now();
+  const sec = Math.max(0, Math.round((end - Date.parse(c.startedAt)) / 1000));
+  return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60 ? ` ${sec % 60}s` : ""}`;
+};
+
+/**
+ * CI panel for own PRs: per-check summary, drill-in log viewer, and the
+ * fix pipeline — "Fix with agent" feeds the failing check's log tail into a
+ * fix-flow agent as additional context.
+ */
+export function ChecksPanel({ pr }: { pr: PrSummary }) {
+  const { ctx } = useFlow();
+  const checks = usePrData((s) => s.checks[pr.number] ?? []);
+  const failing = checks.filter((c) => c.conclusion === "failure" || c.conclusion === "error");
+  const [openOverride, setOpenOverride] = useState<boolean | null>(null);
+  const [logs, setLogs] = useState<Record<string, { loading: boolean; text: string; open: boolean }>>({});
+  const [fixing, setFixing] = useState<Record<string, boolean>>({});
+  const [error, setError] = useState("");
+
+  if (checks.length === 0) return null;
+  const expanded = openOverride ?? failing.length > 0;
+  const running = checks.filter((c) => !c.conclusion).length;
+  const passed = checks.filter((c) => c.conclusion === "success").length;
+
+  const fetchLog = async (c: CheckInfo): Promise<string> => {
+    const cached = logs[c.name];
+    if (cached?.text) return cached.text;
+    setLogs((l) => ({ ...l, [c.name]: { loading: true, text: "", open: true } }));
+    const text = (await ctx.gh.getCheckLog(ctx.repo, c).catch(() => "")) || "(no log available)";
+    const tail = text.slice(-UI_LOG_TAIL);
+    setLogs((l) => ({ ...l, [c.name]: { loading: false, text: tail, open: l[c.name]?.open ?? true } }));
+    return tail;
+  };
+
+  const toggleLog = (c: CheckInfo) => {
+    const cur = logs[c.name];
+    if (cur?.text || cur?.loading) {
+      setLogs((l) => ({ ...l, [c.name]: { ...l[c.name], open: !l[c.name].open } }));
+    } else {
+      void fetchLog(c);
+    }
+  };
+
+  const fix = async (c: CheckInfo) => {
+    setFixing((f) => ({ ...f, [c.name]: true }));
+    setError("");
+    try {
+      const handler = resolveHandler(ctx.config.events, "ci_failed");
+      let task = interpolate(handler.prompt, {
+        ...prVars(pr),
+        repo: ctx.repo,
+        "check-name": c.name,
+        "check-url": c.url,
+      });
+      const log = await fetchLog(c);
+      task += `\n\nFAILING CHECK: ${c.name}${c.outputTitle ? ` — ${c.outputTitle}` : ""}
+LOG TAIL:
+\`\`\`
+${log.slice(-AGENT_LOG_TAIL)}
+\`\`\``;
+      await runFixFlow(ctx, pr, task, `CI fix (${c.name})`, "ci_fix");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFixing((f) => ({ ...f, [c.name]: false }));
+    }
+  };
+
+  return (
+    <div className="card checks-panel">
+      <div className="row">
+        <button className="link small" onClick={() => setOpenOverride(!expanded)}>
+          {expanded ? "▾" : "▸"}
+        </button>
+        <span className="checks-title">Checks</span>
+        <Badge color={failing.length ? "red" : running ? "yellow" : "green"}>
+          {failing.length
+            ? `${failing.length} failing`
+            : running
+              ? `${running} running`
+              : "all passing"}
+        </Badge>
+        <span className="subtle">
+          {passed}/{checks.length} passed
+        </span>
+        {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
+      </div>
+
+      {expanded &&
+        checks.map((c) => {
+          const g = glyphFor(c);
+          const log = logs[c.name];
+          const failed = c.conclusion === "failure" || c.conclusion === "error";
+          return (
+            <div key={c.name} className="check-row">
+              <div className="row">
+                <span className="check-glyph" style={{ color: g.color }}>
+                  {g.glyph}
+                </span>
+                <span className="check-name">{c.name}</span>
+                {c.outputTitle && <span className="subtle check-output">{c.outputTitle}</span>}
+                <span style={{ flex: 1 }} />
+                <span className="subtle">{duration(c)}</span>
+                <button className="link small" onClick={() => toggleLog(c)}>
+                  {log?.open ? "hide logs" : "logs"}
+                </button>
+                {failed && (
+                  <button className="small" disabled={!!fixing[c.name]} onClick={() => void fix(c)}>
+                    {fixing[c.name] ? <Spinner /> : null} Fix with agent
+                  </button>
+                )}
+                <a href={c.url} target="_blank" rel="noreferrer" className="subtle">
+                  ↗
+                </a>
+              </div>
+              {log?.open && (
+                <div className="check-log">
+                  {log.loading ? (
+                    <span className="subtle">
+                      <Spinner /> fetching log…
+                    </span>
+                  ) : (
+                    <pre>{log.text}</pre>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+    </div>
+  );
+}
