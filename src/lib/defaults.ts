@@ -297,12 +297,21 @@ export const DEFAULT_REVIEW_FILTERS: ClassFilters = {
 export const DEFAULT_REVIEW_PROMPT =
   "Run the thermonuclear code quality review on PR {pr-number} and propose inline comments with severity and confidence.";
 
+export const DEFAULT_FIX_POLICY = `- Do NOT install dependencies (npm/pnpm/yarn install, pip, cargo fetch, bundle install, …) and do NOT run
+  full builds or test suites. This may be a large monorepo; installs are slow, expensive, and waste disk.
+- Validate by reading the code carefully. You may run fast static checks that need no installation
+  (parsing a file, a single-file typecheck if the toolchain already works) — nothing that downloads anything.
+- CI on the pushed branch is the validation backstop. In your proposal, note what CI should confirm.
+- If you are genuinely unable to make the change safely without running something heavyweight, make the
+  smallest correct change you can and say exactly what you could not verify.`;
+
 export function defaultRepoConfig(): RepoConfig {
   return {
     localClonePath: "",
     pollIntervalSec: 60,
     model: "",
     reviewPrompt: DEFAULT_REVIEW_PROMPT,
+    fixPolicy: DEFAULT_FIX_POLICY,
     babysitFilters: { ...DEFAULT_BABYSIT_FILTERS },
     reviewFilters: { ...DEFAULT_REVIEW_FILTERS },
     events: {},

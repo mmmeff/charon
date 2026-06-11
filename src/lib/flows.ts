@@ -15,7 +15,7 @@ import type { GitHubClient } from "./github";
 import { applySkills } from "./skills";
 import { interpolate, prVars, truncate, uid } from "./template";
 import { useRepoStore } from "./store";
-import { createWorktree, removeWorktree, type Worktree } from "./worktree";
+import { createWorktree, releaseWorktree, type Worktree } from "./worktree";
 
 export interface FlowContext {
   gh: GitHubClient;
@@ -83,11 +83,13 @@ ${task}
 
 WORKFLOW:
 1. Investigate and implement the fix in this worktree.
-2. Run whatever builds/tests are cheap enough to validate the change.
-3. Commit with a clear message and push to the PR branch with:
+2. Commit with a clear message and push to the PR branch with:
    git push origin HEAD:${pr.headRef}
    (Pushing to this branch is explicitly authorized — it is the user's own PR branch.)
-4. If you determine no code change is needed, do not commit or push; explain why in the proposal.
+3. If you determine no code change is needed, do not commit or push; explain why in the proposal.
+
+DEPENDENCY & VALIDATION POLICY:
+${ctx.config.fixPolicy}
 ${HITL_CONTRACT}
 ${PROPOSAL_CONTRACT}`;
 }
@@ -284,7 +286,7 @@ export async function runFixFlow(
       try {
         await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, relation);
       } finally {
-        await removeWorktree(wt);
+        await releaseWorktree(wt);
       }
     },
   });
@@ -517,7 +519,7 @@ ${findings.map(findingInstruction).join("\n\n")}`;
           for (const f of findings) await s.updateFinding(f.key, { status: "applied" });
           await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "applied self-review findings");
         } finally {
-          await removeWorktree(wt);
+          await releaseWorktree(wt);
         }
       },
     });
@@ -620,7 +622,7 @@ ${PROPOSAL_CONTRACT}`;
       try {
         await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "draft edit summary");
       } finally {
-        await removeWorktree(wt);
+        await releaseWorktree(wt);
       }
     },
   });

@@ -15,6 +15,7 @@ import type { ReviewThreadInfo } from "./github";
 import { notify } from "./notify";
 import { interpolate, truncate } from "./template";
 import { useRepoStore } from "./store";
+import { pruneBranchWorktree } from "./worktree";
 
 // ---------------------------------------------------------------------------
 // Live PR data for the UI (refreshed by the poller)
@@ -451,6 +452,10 @@ export class RepoPoller {
       for (const snap of vanished) {
         try {
           const detail = await gh.getPull(repo, snap.pr.number);
+          if (detail.state === "closed") {
+            // reclaim the branch's persistent worktree (deps and all)
+            void pruneBranchWorktree(repo, snap.pr.headRef);
+          }
           if (detail.state === "closed" && !isFirstRun && snap.pr.author === me) {
             fired.push({
               ev: {

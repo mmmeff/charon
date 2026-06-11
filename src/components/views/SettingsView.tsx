@@ -133,6 +133,18 @@ export function SettingsView() {
           </small>
         </label>
         <label className="field">
+          <span>Fix-flow dependency &amp; validation policy</span>
+          <PromptInput
+            rows={5}
+            value={config.fixPolicy}
+            onChange={(fixPolicy) => update({ fixPolicy })}
+          />
+          <small>
+            Injected into every fix/apply agent prompt. The default forbids dependency installs and full
+            builds (slow and disk-hungry in monorepos) — loosen it for repos where agents should run tests.
+          </small>
+        </label>
+        <label className="field">
           <span>Poll interval (seconds)</span>
           <input
             type="number"
