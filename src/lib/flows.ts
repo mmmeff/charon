@@ -742,6 +742,56 @@ Answer directly and concretely; reference files and line numbers from the diff w
 }
 
 /**
+ * Draft a new PR description with an agent (read-only; it sees the current
+ * description and the diff). Resolves with the proposed markdown — the caller
+ * drops it into the description editor so the user reviews before saving;
+ * nothing reaches GitHub until they do.
+ */
+export async function runDescriptionDraft(
+  ctx: FlowContext,
+  pr: PrSummary,
+  instruction: string,
+  model?: string
+): Promise<string> {
+  const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
+  return new Promise((resolve, reject) => {
+    const base = `You are PR Copilot's writing agent. Draft an updated description for the user's own
+PR #${pr.number} ("${pr.title}") in ${ctx.repo} (branch ${pr.headRef} → ${pr.baseRef}).
+
+INSTRUCTION: ${instruction.trim() || "Rewrite the description so it accurately and clearly explains the change: what, why, and anything reviewers should know."}
+
+CURRENT DESCRIPTION:
+<<<
+${truncate(pr.body || "(empty)", 8000)}
+>>>
+
+THE DIFF (ground truth — the description must match what actually changed):
+\`\`\`diff
+${truncate(diffText, MAX_DIFF_CHARS)}
+\`\`\`
+
+Respond with ONLY the new PR description markdown — no preamble, no commentary, no outer code fence.`;
+    const prompt = applySkills(base, ctx.skills, ctx.config.skills.rewrite);
+    startAgent({
+      kind: "rewrite",
+      relation: "description draft",
+      repo: ctx.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prompt,
+      model: resolveModel(ctx, model),
+      binary: ctx.global.cursorBinary,
+      mode: "ask",
+      onDone: (run) => {
+        const text = cleanResultText(run.resultText);
+        if (text) resolve(text);
+        else reject(new Error("the agent produced no description text"));
+      },
+    }).catch(reject);
+  });
+}
+
+/**
  * Regenerate a piece of proposal text — either by custom instruction or via
  * the humanize skill. Resolves with the rewritten text.
  */

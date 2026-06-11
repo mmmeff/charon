@@ -17,6 +17,7 @@ import {
   IconRepos,
   IconReview,
   IconSettings,
+  IconSidePanel,
 } from "./icons";
 import { ActivityView } from "./views/ActivityView";
 import { BabysitView } from "./views/BabysitView";
@@ -36,6 +37,8 @@ export function RepoApp({ repo }: { repo: string }) {
   const agentOrder = useAgentStore((s) => s.order);
   const runs = useAgentStore((s) => s.runs);
   const scrolledPr = useUiStore((s) => s.scrolledPrTitle);
+  const activityPanelOpen = useUiStore((s) => s.activityPanelOpen);
+  const setActivityPanelOpen = useUiStore((s) => s.setActivityPanelOpen);
   // keep the breadcrumb mounted briefly on hide so it can animate out
   const [crumb, setCrumb] = useState(scrolledPr);
   const [crumbLeaving, setCrumbLeaving] = useState(false);
@@ -212,6 +215,16 @@ export function RepoApp({ repo }: { repo: string }) {
                 <span className="cursor-blink">starting</span>
               )}
             </span>
+            {(tab === "drafts" || tab === "open" || tab === "review") && (
+              <button
+                className={`rail-btn ${activityPanelOpen ? "active" : ""}`}
+                style={{ width: 26, height: 26 }}
+                onClick={() => setActivityPanelOpen(!activityPanelOpen)}
+                title={activityPanelOpen ? "Hide activity panel" : "Show activity panel"}
+              >
+                <IconSidePanel />
+              </button>
+            )}
             <button
               className="rail-btn"
               style={{ width: 26, height: 26 }}

@@ -66,3 +66,10 @@ export const IconRefresh = () => (
     <path d="M13.5 1.5v3h-3" />
   </svg>
 );
+
+export const IconSidePanel = () => (
+  <svg {...base}>
+    <rect x="1.5" y="2.5" width="13" height="11" />
+    <path d="M10.5 2.5v11" />
+  </svg>
+);

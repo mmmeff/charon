@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { usePrData } from "../lib/events";
-import { runAddressComment } from "../lib/flows";
+import { runAddressComment, runDescriptionDraft } from "../lib/flows";
 import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
@@ -120,6 +120,7 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
     null
   );
   const [editing, setEditing] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -147,10 +148,11 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rect !== null]);
 
-  const startEdit = () => {
+  const startEdit = (withAi = false) => {
     setDraft(pr.body ?? "");
     setError("");
     setRect(null);
+    setAiOpen(withAi);
     setEditing(true);
   };
 
@@ -194,9 +196,25 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
           <button className="small" onClick={() => setEditing(false)}>
             Cancel
           </button>
+          {!aiOpen && (
+            <button className="link small" onClick={() => setAiOpen(true)}>
+              ✦ draft with AI
+            </button>
+          )}
           <span className="subtle">⌘⏎ to save — updates GitHub directly, as you</span>
           {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
         </div>
+        {aiOpen && (
+          <AgentLaunchForm
+            label="Generate draft"
+            placeholder="How should the description change? e.g. reflect the latest commits, add a test plan  ( / for skills )"
+            onRun={async (model, instruction) => {
+              // result lands in the editor — the user reviews, then saves
+              setDraft(await runDescriptionDraft(ctx, pr, instruction, model));
+            }}
+            onClose={() => setAiOpen(false)}
+          />
+        )}
       </div>
     );
   }
@@ -204,9 +222,12 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
   if (!pr.body?.trim()) {
     if (!mine) return null;
     return (
-      <div style={{ marginBottom: 10 }}>
-        <button className="link small" onClick={startEdit}>
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button className="link small" onClick={() => startEdit()}>
           + add description
+        </button>
+        <button className="link small" onClick={() => startEdit(true)}>
+          ✦ draft with AI
         </button>
       </div>
     );
@@ -215,9 +236,18 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
   return (
     <div className="pr-description-wrap" ref={wrapRef}>
       {mine && (
-        <button className="desc-expand desc-edit" data-tip="Edit description" onClick={startEdit}>
-          <IconDrafts />
-        </button>
+        <>
+          <button
+            className="desc-expand desc-ai"
+            data-tip="Draft description with AI"
+            onClick={() => startEdit(true)}
+          >
+            ✦
+          </button>
+          <button className="desc-expand desc-edit" data-tip="Edit description" onClick={() => startEdit()}>
+            <IconDrafts />
+          </button>
+        </>
       )}
       <button
         className="desc-expand"
@@ -264,6 +294,7 @@ type ActivityEntry =
  * and post PR comments directly (user-authored — no approval gate needed).
  */
 export function PrActivityPanel({ pr }: { pr: PrSummary }) {
+  const open = useUiStore((s) => s.activityPanelOpen);
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
   const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
   const timeline = usePrData((s) => s.timeline[pr.number] ?? []);
@@ -298,6 +329,8 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
     (n, e) => n + (e.kind === "thread" ? 1 + e.replies.length : 1),
     0
   );
+
+  if (!open) return null; // hidden via the topstrip toggle — ws-main reclaims the width
 
   return (
     <div className="ws-activity" style={{ width }}>

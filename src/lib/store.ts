@@ -279,6 +279,9 @@ interface UiState {
   /** PR whose title scrolled out of view — shown as a topstrip breadcrumb */
   scrolledPrTitle: { number: number; title: string } | null;
   setScrolledPrTitle(v: { number: number; title: string } | null): void;
+  /** right-hand GitHub activity panel visibility (persisted; topstrip toggle) */
+  activityPanelOpen: boolean;
+  setActivityPanelOpen(v: boolean): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -297,6 +300,11 @@ export const useUiStore = create<UiState>((set) => ({
   scrolledPrTitle: null,
   setScrolledPrTitle(v) {
     set({ scrolledPrTitle: v });
+  },
+  activityPanelOpen: localStorage.getItem("prc-activity-open") !== "off",
+  setActivityPanelOpen(v) {
+    localStorage.setItem("prc-activity-open", v ? "on" : "off");
+    set({ activityPanelOpen: v });
   },
 }));
 
