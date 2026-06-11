@@ -3,7 +3,7 @@ import { eventDef } from "../../lib/defaults";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import { age, sortPrs, timeAgo, type SortKey } from "../../lib/ui";
-import { Badge, CiBadge, EmptyState, MergeBadge, RunningAgentsChip, SortPicker } from "../common";
+import { ApprovalsBadge, Badge, CiBadge, EmptyState, MergeBadge, RunningAgentsChip, SortPicker } from "../common";
 import { Sidebar } from "../Panels";
 import { PrWorkspace } from "../PrWorkspace";
 
@@ -61,6 +61,7 @@ export function BabysitView() {
                 <RunningAgentsChip prNumber={p.number} />
                 <CiBadge checks={checks[p.number] ?? []} />
                 <MergeBadge state={p.mergeableState} />
+                <ApprovalsBadge prNumber={p.number} />
                 <span>
                   +{p.additions} −{p.deletions}
                 </span>

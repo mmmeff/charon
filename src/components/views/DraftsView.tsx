@@ -2,7 +2,7 @@ import { useState } from "react";
 import { usePrData } from "../../lib/events";
 import { useUiStore } from "../../lib/store";
 import { age, sortPrs, type SortKey } from "../../lib/ui";
-import { Badge, CiBadge, EmptyState, RunningAgentsChip, SortPicker } from "../common";
+import { ApprovalsBadge, Badge, CiBadge, EmptyState, RunningAgentsChip, SortPicker } from "../common";
 import { Sidebar } from "../Panels";
 import { PrWorkspace } from "../PrWorkspace";
 
@@ -50,6 +50,7 @@ export function DraftsView() {
               <RunningAgentsChip prNumber={p.number} />
               <Badge color="gray">draft</Badge>
               <CiBadge checks={checks[p.number] ?? []} />
+              <ApprovalsBadge prNumber={p.number} />
               <span>{p.headRef}</span>
               <span>
                 +{p.additions} −{p.deletions}

@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
+import { usePrData } from "../lib/events";
 import { useAgentStore } from "../lib/store";
+import { useFlow } from "./flow";
 import type { SortKey } from "../lib/ui";
 import type { Severity } from "../types";
 import { AsciiField } from "./AsciiField";
@@ -68,6 +70,19 @@ export function BranchBadge({ head, base }: { head: string; base: string }) {
         {copied === base ? "✓ copied" : base}
       </button>
     </span>
+  );
+}
+
+/** "n/m approvals" badge for PR list cards — green once requirements met. */
+export function ApprovalsBadge({ prNumber }: { prNumber: number }) {
+  const { ctx } = useFlow();
+  const reviews = usePrData((s) => s.reviews[prNumber] ?? []);
+  const n = new Set(reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)).size;
+  const req = ctx.config.requiredApprovals;
+  return (
+    <Badge color={n >= req ? "green" : "gray"} title={`${n} of ${req} required approvals`}>
+      {n}/{req} approvals
+    </Badge>
   );
 }
 
