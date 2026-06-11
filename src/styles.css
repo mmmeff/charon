@@ -618,6 +618,7 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
   margin: 6px 0; padding: 0 10px; border-left: 3px solid var(--border); color: var(--fg-muted);
 }
 .md img { max-width: 100%; }
+.md video { max-width: 100%; display: block; margin: 8px 0; border: 1px solid var(--border); }
 .md table { border-collapse: collapse; margin: 8px 0; }
 .md th, .md td { border: 1px solid var(--border); padding: 4px 8px; font-size: 12px; }
 .md hr { margin: 10px 0; }

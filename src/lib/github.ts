@@ -77,11 +77,11 @@ export class GitHubClient {
   }
 
   /** GET with Link-header pagination (max ~500 items). */
-  private async paged<T>(path: string): Promise<T[]> {
+  private async paged<T>(path: string, accept?: string): Promise<T[]> {
     const out: T[] = [];
     let url: string | null = path + (path.includes("?") ? "&" : "?") + "per_page=100";
     for (let i = 0; i < 5 && url; i++) {
-      const resp = await this.raw("GET", url);
+      const resp = await this.raw("GET", url, { accept });
       out.push(...(JSON.parse(resp.body) as T[]));
       const link = resp.headers.find(([k]) => k.toLowerCase() === "link")?.[1] ?? "";
       const next = /<([^>]+)>;\s*rel="next"/.exec(link);
@@ -89,6 +89,11 @@ export class GitHubClient {
     }
     return out;
   }
+
+  /** Server-rendered bodies: includes body_html with signed asset URLs and
+   *  <video> elements for uploaded attachments — required for media to load
+   *  outside a github.com browser session. */
+  private static FULL = "application/vnd.github.full+json";
 
   async connect(): Promise<string> {
     const user = await this.json<{ login: string }>("GET", "/user");
@@ -173,6 +178,7 @@ export class GitHubClient {
       number: p.number,
       title: p.title ?? "",
       body: p.body ?? "",
+      bodyHtml: p.body_html || undefined,
       author: p.user?.login ?? "",
       authorIsBot: (p.user?.type ?? "") === "Bot" || /\[bot\]$/.test(p.user?.login ?? ""),
       draft: !!p.draft,
@@ -222,7 +228,10 @@ export class GitHubClient {
 
   /** Detail fetch — includes mergeable_state (GitHub computes it lazily). */
   async getPull(repo: string, number: number): Promise<PrSummary> {
-    const p = await this.json<any>("GET", `/repos/${repo}/pulls/${number}`);
+    const resp = await this.raw("GET", `/repos/${repo}/pulls/${number}`, {
+      accept: GitHubClient.FULL,
+    });
+    const p = JSON.parse(resp.body);
     return this.mapPull(p, this.isRequestedFromMe(p));
   }
 
@@ -299,6 +308,7 @@ export class GitHubClient {
       author: c.user?.login ?? "",
       authorIsBot: (c.user?.type ?? "") === "Bot" || /\[bot\]$/.test(c.user?.login ?? ""),
       body: c.body ?? "",
+      bodyHtml: c.body_html || undefined,
       createdAt: c.created_at ?? "",
       url: c.html_url ?? "",
       path: c.path,
@@ -310,8 +320,8 @@ export class GitHubClient {
 
   async listComments(repo: string, number: number): Promise<CommentInfo[]> {
     const [issue, review] = await Promise.all([
-      this.paged<any>(`/repos/${repo}/issues/${number}/comments`),
-      this.paged<any>(`/repos/${repo}/pulls/${number}/comments`),
+      this.paged<any>(`/repos/${repo}/issues/${number}/comments`, GitHubClient.FULL),
+      this.paged<any>(`/repos/${repo}/pulls/${number}/comments`, GitHubClient.FULL),
     ]);
     return [
       ...issue.map((c) => this.mapComment(c, "issue" as const)),
@@ -320,13 +330,14 @@ export class GitHubClient {
   }
 
   async listReviews(repo: string, number: number): Promise<ReviewInfo[]> {
-    const reviews = await this.paged<any>(`/repos/${repo}/pulls/${number}/reviews`);
+    const reviews = await this.paged<any>(`/repos/${repo}/pulls/${number}/reviews`, GitHubClient.FULL);
     return reviews.map((r) => ({
       id: r.id,
       author: r.user?.login ?? "",
       authorIsBot: (r.user?.type ?? "") === "Bot" || /\[bot\]$/.test(r.user?.login ?? ""),
       state: r.state ?? "",
       body: r.body ?? "",
+      bodyHtml: r.body_html || undefined,
       submittedAt: r.submitted_at ?? "",
     }));
   }

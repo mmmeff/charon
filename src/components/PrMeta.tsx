@@ -70,7 +70,7 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
   if (!pr.body?.trim()) return null;
   return (
     <div className="card pr-description">
-      <Markdown text={pr.body} />
+      <Markdown text={pr.body} html={pr.bodyHtml} />
     </div>
   );
 }
@@ -146,7 +146,7 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
                   {reviewLabel(r.state)}
                 </Badge>
               </ActHeader>
-              {r.body?.trim() && <Markdown text={r.body} className="compact" />}
+              {r.body?.trim() && <Markdown text={r.body} html={r.bodyHtml} className="compact" />}
             </div>
           );
         }
@@ -191,7 +191,8 @@ export function CommentBody({ pr, comment }: { pr: PrSummary; comment: CommentIn
         [pr.number]:
           body === null
             ? list.filter((c) => c.id !== comment.id)
-            : list.map((c) => (c.id === comment.id ? { ...c, body } : c)),
+            : // bodyHtml is now stale — drop it so the edited text shows until re-poll
+              list.map((c) => (c.id === comment.id ? { ...c, body, bodyHtml: undefined } : c)),
       },
     });
   };
@@ -248,7 +249,9 @@ export function CommentBody({ pr, comment }: { pr: PrSummary; comment: CommentIn
 
   return (
     <div className="comment-body">
-      {comment.body?.trim() && <Markdown text={comment.body} className="compact" />}
+      {comment.body?.trim() && (
+        <Markdown text={comment.body} html={comment.bodyHtml} className="compact" />
+      )}
       {mine && (
         <div className="row comment-controls">
           <button className="link small" onClick={() => setEditing(true)}>

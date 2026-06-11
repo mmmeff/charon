@@ -109,6 +109,8 @@ export interface PrSummary {
   number: number;
   title: string;
   body: string;
+  /** GitHub-rendered HTML (signed asset URLs, <video> tags) — preferred for display */
+  bodyHtml?: string;
   author: string;
   authorIsBot: boolean;
   draft: boolean;
@@ -142,6 +144,8 @@ export interface CommentInfo {
   author: string;
   authorIsBot: boolean;
   body: string;
+  /** GitHub-rendered HTML (signed asset URLs, <video> tags) */
+  bodyHtml?: string;
   createdAt: string;
   url: string;
   path?: string;
@@ -156,6 +160,7 @@ export interface ReviewInfo {
   authorIsBot: boolean;
   state: string; // APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED
   body: string;
+  bodyHtml?: string;
   submittedAt: string;
 }
 
