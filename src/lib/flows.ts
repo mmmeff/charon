@@ -5,6 +5,7 @@ import type {
   ProposedInlineComment,
   PrSummary,
   RepoConfig,
+  ReviewFinding,
   Severity,
   Skill,
 } from "../types";
@@ -61,11 +62,13 @@ Output your review as EXACTLY ONE proposal block at the very end:
      "side": "RIGHT", "start_line": <optional first line of a multi-line range>,
      "body": "<the comment, markdown>",
      "severity": "blocker" | "major" | "minor" | "nit",
-     "confidence": <integer 0-100>}
+     "confidence": <integer 0-100>,
+     "suggestion": "<optional: concrete replacement code for the commented lines, when you can write it>"}
   ]
 }</proposal>
 - "line"/"start_line" MUST be line numbers that appear in the provided diff (use LEFT side + old line numbers
   only for deleted lines).
+- Include "suggestion" only when you are confident in the exact replacement code; omit it for directional feedback.
 - An empty "comments" array with a short summary is a valid review of a clean diff.
 The block must be valid JSON on its own.`;
 
@@ -141,20 +144,26 @@ async function createProposalFromFixOutput(
 
 const SEVERITIES: Severity[] = ["blocker", "major", "minor", "nit"];
 
-async function createReviewProposal(
-  ctx: FlowContext,
-  pr: PrSummary,
-  runId: string,
+interface ParsedReviewComment {
+  path: string;
+  line: number;
+  startLine?: number;
+  side: "LEFT" | "RIGHT";
+  body: string;
+  severity: Severity;
+  confidence: number;
+  suggestion?: string;
+}
+
+/** Parse + diff-validate a review agent's output (shared by teammate review proposals and own-PR self-reviews). */
+function parseReviewOutput(
   resultText: string,
-  diffText: string,
-  context: string
-): Promise<void> {
-  const store = useRepoStore.getState();
+  diffText: string
+): { summary: string; verdict: string; comments: ParsedReviewComment[]; dropped: string[] } {
   const obj = extractProposalJson(resultText);
   const files = parseUnifiedDiff(diffText);
-
   const rawComments: any[] = Array.isArray(obj?.comments) ? obj.comments : [];
-  const comments: ProposedInlineComment[] = [];
+  const comments: ParsedReviewComment[] = [];
   const dropped: string[] = [];
   for (const c of rawComments) {
     if (!c?.path || !c?.body) continue;
@@ -171,7 +180,6 @@ async function createReviewProposal(
       }
     }
     comments.push({
-      key: uid("ic-"),
       path: String(c.path),
       line,
       startLine: c.start_line ? Number(c.start_line) : undefined,
@@ -179,12 +187,41 @@ async function createReviewProposal(
       body: String(c.body),
       severity: SEVERITIES.includes(c.severity) ? c.severity : "minor",
       confidence: Math.max(0, Math.min(100, Number(c.confidence) || 50)),
-      included: true,
+      suggestion: typeof c.suggestion === "string" && c.suggestion.trim() ? c.suggestion : undefined,
     });
   }
-
   const summary =
     String(obj?.summary ?? obj?.body ?? "").trim() || cleanResultText(resultText) || "Automated review.";
+  const verdict =
+    obj?.verdict === "APPROVE" || obj?.verdict === "REQUEST_CHANGES" ? obj.verdict : "COMMENT";
+  return { summary, verdict, comments, dropped };
+}
+
+async function createReviewProposal(
+  ctx: FlowContext,
+  pr: PrSummary,
+  runId: string,
+  resultText: string,
+  diffText: string,
+  context: string
+): Promise<void> {
+  const store = useRepoStore.getState();
+  const parsed = parseReviewOutput(resultText, diffText);
+  // suggestions fold into the comment body for GitHub submission
+  const comments: ProposedInlineComment[] = parsed.comments.map((c) => ({
+    key: uid("ic-"),
+    path: c.path,
+    line: c.line,
+    startLine: c.startLine,
+    side: c.side,
+    body: c.suggestion ? `${c.body}\n\n**Suggested change:**\n\`\`\`\n${c.suggestion}\n\`\`\`` : c.body,
+    severity: c.severity,
+    confidence: c.confidence,
+    included: true,
+  }));
+
+  const summary = parsed.summary;
+  const dropped = parsed.dropped;
   const note = dropped.length
     ? `\n\n_(${dropped.length} proposed comment(s) could not be anchored to the diff and were dropped: ${dropped.join(", ")})_`
     : "";
@@ -196,7 +233,7 @@ async function createReviewProposal(
     prNumber: pr.number,
     prTitle: pr.title,
     body: summary + note,
-    verdict: obj?.verdict === "APPROVE" || obj?.verdict === "REQUEST_CHANGES" ? obj.verdict : "COMMENT",
+    verdict: parsed.verdict as "COMMENT" | "APPROVE" | "REQUEST_CHANGES",
     comments,
     context,
     createdAt: Date.now(),
@@ -284,6 +321,121 @@ ${REVIEW_CONTRACT}`;
     onDone: (run) =>
       createReviewProposal(ctx, pr, run.id, run.resultText, diffText, "automated self-review"),
   });
+}
+
+/**
+ * Self-review flow (own PRs): same review agent and contract as the teammate
+ * flow, but the output becomes LOCAL findings — inline feedback that never
+ * syncs to GitHub. Each finding can then be applied via a fix agent.
+ */
+export async function runSelfReviewFlow(ctx: FlowContext, pr: PrSummary, model?: string): Promise<string> {
+  const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
+  const diff = truncate(diffText, MAX_DIFF_CHARS, "\n…[diff truncated — review what is shown]");
+  const base = `You are PR Copilot's review agent. The user wants a critical self-review of THEIR OWN PR #${pr.number}
+("${pr.title}") in ${ctx.repo} before others see it. Find real problems they should fix.
+
+Reviewer guidance configured for this repo:
+${ctx.config.reviewFilters.criteria}
+
+PR description:
+${truncate(pr.body || "(none)", 4000)}
+
+THE DIFF TO REVIEW (unified format, new-file line numbers derive from @@ hunk headers):
+\`\`\`diff
+${diff}
+\`\`\`
+${HITL_CONTRACT}
+${REVIEW_CONTRACT}`;
+  const prompt = applySkills(base, ctx.skills, ctx.config.skills.review);
+  return startAgent({
+    kind: "review",
+    relation: "self-review",
+    repo: ctx.repo,
+    prNumber: pr.number,
+    prTitle: pr.title,
+    prompt,
+    model: resolveModel(ctx, model),
+    binary: ctx.global.cursorBinary,
+    mode: "ask",
+    onDone: async (run) => {
+      const parsed = parseReviewOutput(run.resultText, diffText);
+      const findings: ReviewFinding[] = parsed.comments.map((c) => ({
+        key: uid("find-"),
+        prNumber: pr.number,
+        headSha: pr.headSha,
+        path: c.path,
+        line: c.line,
+        startLine: c.startLine,
+        side: c.side,
+        severity: c.severity,
+        confidence: c.confidence,
+        body: c.body,
+        suggestion: c.suggestion,
+        status: "open",
+        createdAt: Date.now(),
+      }));
+      const note = parsed.dropped.length
+        ? ` (${parsed.dropped.length} unanchorable finding(s) dropped: ${parsed.dropped.join(", ")})`
+        : "";
+      await useRepoStore.getState().setFindings(pr.number, findings, parsed.summary + note);
+    },
+  });
+}
+
+const findingInstruction = (f: ReviewFinding) =>
+  `- ${f.path}:${f.startLine ? `${f.startLine}–` : ""}${f.line} [${f.severity}] ${f.body}` +
+  (f.suggestion ? `\n  Suggested replacement code:\n${indent(f.suggestion, "    ")}` : "");
+
+const indent = (s: string, pad: string) => s.split("\n").map((l) => pad + l).join("\n");
+
+/**
+ * Apply one or more local findings: a single fix agent implements them in a
+ * worktree and pushes to the user's own branch (one run, one push — parallel
+ * applies on the same PR would race each other on the remote branch).
+ */
+export async function applyFindings(
+  ctx: FlowContext,
+  pr: PrSummary,
+  findings: ReviewFinding[],
+  model?: string
+): Promise<string> {
+  const store = useRepoStore.getState();
+  for (const f of findings) await store.updateFinding(f.key, { status: "applying" });
+
+  const task = `Address the following self-review finding${findings.length > 1 ? "s" : ""} from an automated code review
+of this PR. Treat each as a strong recommendation: verify it is correct in context, then implement the fix.
+If a finding is wrong, skip it and say why in the proposal.
+
+${findings.map(findingInstruction).join("\n\n")}`;
+
+  try {
+    const wt = await createWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);
+    const prompt = applySkills(fixFlowWrapper(ctx, pr, wt, task), ctx.skills, ctx.config.skills.fix);
+    return await startAgent({
+      kind: "feedback_fix",
+      relation: findings.length > 1 ? `apply ${findings.length} findings` : "apply finding",
+      repo: ctx.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prompt,
+      model: resolveModel(ctx, model),
+      binary: ctx.global.cursorBinary,
+      cwd: wt.path,
+      onDone: async (run) => {
+        try {
+          const s = useRepoStore.getState();
+          for (const f of findings) await s.updateFinding(f.key, { status: "applied" });
+          await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "applied self-review findings");
+        } finally {
+          await removeWorktree(wt);
+        }
+      },
+    });
+  } catch (e) {
+    // worktree/spawn failure: findings go back to open so the user can retry
+    for (const f of findings) await store.updateFinding(f.key, { status: "open" });
+    throw e;
+  }
 }
 
 /**

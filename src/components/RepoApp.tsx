@@ -13,7 +13,7 @@ import { DraftsView } from "./views/DraftsView";
 import { ReviewView } from "./views/ReviewView";
 import { SettingsView } from "./views/SettingsView";
 
-type Tab = "drafts" | "review" | "babysit" | "activity" | "settings";
+type Tab = "drafts" | "open" | "review" | "activity" | "settings";
 
 const FlowCtx = createContext<{ ctx: FlowContext; poller: RepoPoller } | null>(null);
 
@@ -28,7 +28,7 @@ export function RepoApp({ repo }: { repo: string }) {
   const global = useGlobalConfig((s) => s.config);
   const repoStore = useRepoStore();
   const skills = useSkillStore((s) => s.skills);
-  const [tab, setTab] = useState<Tab>("babysit");
+  const [tab, setTab] = useState<Tab>("open");
   const prData = usePrData();
   const agentOrder = useAgentStore((s) => s.order);
   const runs = useAgentStore((s) => s.runs);
@@ -94,8 +94,8 @@ export function RepoApp({ repo }: { repo: string }) {
 
   const tabs: { id: Tab; label: string; count?: number; hot?: boolean }[] = [
     { id: "drafts", label: "Drafts", count: prData.myDrafts.length },
+    { id: "open", label: "Open", count: prData.myOpen.length },
     { id: "review", label: "Review", count: prData.reviewQueue.length },
-    { id: "babysit", label: "Babysit", count: prData.myOpen.length },
     { id: "activity", label: "Activity Feed", count: activeAgents, hot: activeAgents > 0 },
     { id: "settings", label: "Settings" },
   ];
@@ -159,8 +159,8 @@ export function RepoApp({ repo }: { repo: string }) {
         </div>
 
         {tab === "drafts" && <DraftsView />}
+        {tab === "open" && <BabysitView />}
         {tab === "review" && <ReviewView />}
-        {tab === "babysit" && <BabysitView />}
         {tab === "activity" && <ActivityView />}
         {tab === "settings" && <SettingsView />}
       </div>

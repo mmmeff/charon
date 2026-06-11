@@ -17,8 +17,8 @@ export function BabysitView() {
   const checks = usePrData((s) => s.checks);
   const proposals = useRepoStore((s) => s.proposals);
   const eventLog = useRepoStore((s) => s.eventLog);
-  const selected = useUiStore((s) => s.focusedPr["babysit"] ?? null);
-  const setSelected = (n: number) => useUiStore.getState().setFocusedPr("babysit", n);
+  const selected = useUiStore((s) => s.focusedPr["open"] ?? null);
+  const setSelected = (n: number) => useUiStore.getState().setFocusedPr("open", n);
   const [sort, setSort] = useState<SortKey>("updated");
   const sorted = sortPrs(myOpen, sort);
   const pr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;

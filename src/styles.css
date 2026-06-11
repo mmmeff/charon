@@ -271,6 +271,13 @@ tr.commentable .diff-num { position: relative; }
 .act-item { border-bottom: 1px solid var(--border-subtle); padding: 8px 0; font-size: 13px; }
 .act-item:last-child { border-bottom: none; }
 
+.suggestion-block {
+  background: var(--diff-add-bg); border: 1px solid rgba(46, 160, 67, 0.4); border-radius: 6px;
+  padding: 8px 10px; margin: 6px 0; overflow-x: auto;
+  font-family: var(--mono); font-size: 12px; line-height: 1.5;
+}
+.suggestion-block code { background: none; padding: 0; }
+
 /* ---- rendered markdown ---- */
 .md { line-height: 1.55; word-break: break-word; }
 .md > :first-child { margin-top: 0; }

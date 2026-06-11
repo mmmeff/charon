@@ -9,6 +9,7 @@ import { useAgentStore, useRepoStore } from "../lib/store";
 import type { CommentInfo, FileDiff, LineSelection, PrSummary } from "../types";
 import { Badge, CiBadge, MergeBadge, Spinner, age, timeAgo } from "./common";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
+import { FindingCard, SelfReviewBar } from "./Findings";
 import { Markdown } from "./Markdown";
 import { ModelPicker } from "./ModelPicker";
 import { PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
@@ -95,12 +96,24 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
   // review comments (bug-bots and humans) anchored onto the diff
   const inlineComments = comments.filter((c) => c.kind === "review_comment" && c.path && c.line);
-  const anchors: DiffAnchor[] = inlineComments.map((c) => ({
-    path: c.path!,
-    line: c.line!,
-    side: c.side ?? "RIGHT",
-    node: <ExistingComment comment={c} />,
-  }));
+  const findings = useRepoStore((s) => s.findings).filter(
+    (f) => f.prNumber === pr.number && f.status !== "dismissed"
+  );
+  const anchors: DiffAnchor[] = [
+    ...inlineComments.map((c) => ({
+      path: c.path!,
+      line: c.line!,
+      side: c.side ?? ("RIGHT" as const),
+      node: <ExistingComment comment={c} />,
+    })),
+    // local-only self-review findings, inline next to the code they're about
+    ...findings.map((f) => ({
+      path: f.path,
+      line: f.line,
+      side: f.side,
+      node: <FindingCard finding={f} pr={pr} />,
+    })),
+  ];
 
   return (
     <div className="workspace">
@@ -132,6 +145,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
       </div>
 
       <PrDescription pr={pr} />
+
+      <SelfReviewBar pr={pr} />
 
       {variant === "babysit" && (failing.length > 0 || pr.mergeableState === "dirty" || activeRuns.length > 0) && (
         <div className="card">

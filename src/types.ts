@@ -279,6 +279,30 @@ export type Proposal =
     };
 
 // ---------------------------------------------------------------------------
+// Local review findings (own PRs): agent-generated inline feedback that lives
+// only in the app — never synced to GitHub. "Applying" a finding spawns a fix
+// agent that implements it and pushes to the user's own branch.
+// ---------------------------------------------------------------------------
+
+export interface ReviewFinding {
+  key: string;
+  prNumber: number;
+  /** head sha the review ran against — mismatch with current head = stale */
+  headSha: string;
+  path: string;
+  line: number;
+  startLine?: number;
+  side: "LEFT" | "RIGHT";
+  severity: Severity;
+  confidence: number;
+  body: string;
+  /** concrete replacement code, when the reviewer could produce one */
+  suggestion?: string;
+  status: "open" | "applying" | "applied" | "dismissed";
+  createdAt: number;
+}
+
+// ---------------------------------------------------------------------------
 // Diff model
 // ---------------------------------------------------------------------------
 

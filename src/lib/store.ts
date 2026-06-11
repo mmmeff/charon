@@ -7,6 +7,7 @@ import type {
   Proposal,
   PrSnapshot,
   RepoConfig,
+  ReviewFinding,
   Skill,
 } from "../types";
 import { defaultGlobalConfig, defaultRepoConfig } from "./defaults";
@@ -61,6 +62,9 @@ interface RepoState {
   snapshots: Record<number, PrSnapshot>;
   proposals: Proposal[];
   eventLog: FiredEvent[];
+  findings: ReviewFinding[];
+  /** summary text of the last self-review per PR */
+  reviewSummaries: Record<number, { text: string; at: number }>;
 
   init(repo: string): Promise<void>;
   saveConfig(cfg: RepoConfig): Promise<void>;
@@ -68,6 +72,10 @@ interface RepoState {
   upsertProposal(p: Proposal): Promise<void>;
   removeProposal(id: string): Promise<void>;
   logEvent(e: FiredEvent): Promise<void>;
+  /** replace all findings for a PR with a fresh review's output */
+  setFindings(prNumber: number, list: ReviewFinding[], summary: string): Promise<void>;
+  updateFinding(key: string, patch: Partial<ReviewFinding>): Promise<void>;
+  clearFindings(prNumber: number): Promise<void>;
 }
 
 export const useRepoStore = create<RepoState>((set, get) => ({
@@ -78,20 +86,30 @@ export const useRepoStore = create<RepoState>((set, get) => ({
   proposals: [],
   eventLog: [],
 
+  findings: [],
+  reviewSummaries: {},
+
   async init(repo) {
     const k = repoKey(repo);
-    const [cfgRaw, snapRaw, propRaw, logRaw] = await Promise.all([
+    const [cfgRaw, snapRaw, propRaw, logRaw, findRaw] = await Promise.all([
       native.loadBlob(`repos/${k}/config.json`),
       native.loadBlob(`repos/${k}/snapshots.json`),
       native.loadBlob(`repos/${k}/proposals.json`),
       native.loadBlob(`repos/${k}/events.json`),
+      native.loadBlob(`repos/${k}/findings.json`),
     ]);
+    const findData = findRaw ? JSON.parse(findRaw) : { findings: [], summaries: {} };
     set({
       repo,
       config: cfgRaw ? { ...defaultRepoConfig(), ...JSON.parse(cfgRaw) } : defaultRepoConfig(),
       snapshots: snapRaw ? JSON.parse(snapRaw) : {},
       proposals: propRaw ? JSON.parse(propRaw) : [],
       eventLog: logRaw ? JSON.parse(logRaw) : [],
+      findings: (findData.findings ?? []).map((f: ReviewFinding) =>
+        // an in-flight apply can't survive a restart
+        f.status === "applying" ? { ...f, status: "open" } : f
+      ),
+      reviewSummaries: findData.summaries ?? {},
       loaded: true,
     });
   },
@@ -130,7 +148,42 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     set({ eventLog: next });
     await native.saveBlob(`repos/${repoKey(repo)}/events.json`, JSON.stringify(next));
   },
+
+  async setFindings(prNumber, list, summary) {
+    const { repo, findings, reviewSummaries } = get();
+    const next = [...findings.filter((f) => f.prNumber !== prNumber), ...list];
+    const summaries = { ...reviewSummaries, [prNumber]: { text: summary, at: Date.now() } };
+    set({ findings: next, reviewSummaries: summaries });
+    await persistFindings(repo, next, summaries);
+  },
+
+  async updateFinding(key, patch) {
+    const { repo, findings, reviewSummaries } = get();
+    const next = findings.map((f) => (f.key === key ? { ...f, ...patch } : f));
+    set({ findings: next });
+    await persistFindings(repo, next, reviewSummaries);
+  },
+
+  async clearFindings(prNumber) {
+    const { repo, findings, reviewSummaries } = get();
+    const next = findings.filter((f) => f.prNumber !== prNumber);
+    const summaries = { ...reviewSummaries };
+    delete summaries[prNumber];
+    set({ findings: next, reviewSummaries: summaries });
+    await persistFindings(repo, next, summaries);
+  },
 }));
+
+function persistFindings(
+  repo: string,
+  findings: ReviewFinding[],
+  summaries: Record<number, { text: string; at: number }>
+) {
+  return native.saveBlob(
+    `repos/${repoKey(repo)}/findings.json`,
+    JSON.stringify({ findings, summaries }, null, 2)
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Agent runs (in-memory; the Activity Feed renders this)
