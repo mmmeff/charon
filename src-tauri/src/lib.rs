@@ -485,8 +485,75 @@ fn open_url(url: String) -> Result<(), String> {
 
 // ---------------------------------------------------------------------------
 
+/// macOS/Linux apps launched from Finder/Dock (or `open`) inherit only
+/// launchd's minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`), so user-installed
+/// tools like `cursor-agent` (~/.local/bin, Homebrew, …) can't be found and
+/// spawning them fails with ENOENT. `tauri dev` doesn't hit this because it
+/// inherits the terminal's PATH. Resolve the *login shell's* PATH once at
+/// startup and merge it — plus common bin dirs — into this process's env so
+/// every child command inherits a real PATH.
+#[cfg(unix)]
+fn fixup_path() {
+    use std::collections::HashSet;
+
+    fn add(raw: &str, ordered: &mut Vec<String>, seen: &mut HashSet<String>) {
+        for d in raw.split(':') {
+            let d = d.trim();
+            if !d.is_empty() && seen.insert(d.to_string()) {
+                ordered.push(d.to_string());
+            }
+        }
+    }
+
+    let mut ordered: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    // 1. The login shell's PATH (sources .zprofile/.zshrc/.bash_profile/…).
+    //    Wrap the value in delimiters so noisy rc output (p10k, motd, etc.)
+    //    can't corrupt what we parse.
+    if let Ok(shell) = std::env::var("SHELL") {
+        let marker = "__CHARON_PATH__";
+        let script = format!("printf '%s%s%s' '{marker}' \"$PATH\" '{marker}'");
+        if let Ok(out) = Command::new(&shell)
+            .args(["-ilc", &script])
+            .stdin(Stdio::null())
+            .output()
+        {
+            let s = String::from_utf8_lossy(&out.stdout);
+            if let (Some(start), Some(end)) = (s.find(marker), s.rfind(marker)) {
+                if end > start {
+                    add(&s[start + marker.len()..end], &mut ordered, &mut seen);
+                }
+            }
+        }
+    }
+
+    // 2. Whatever PATH this process already has.
+    if let Ok(p) = std::env::var("PATH") {
+        add(&p, &mut ordered, &mut seen);
+    }
+
+    // 3. Common install locations as a backstop.
+    if let Ok(home) = std::env::var("HOME") {
+        for sub in [".local/bin", ".cargo/bin", ".bun/bin", ".deno/bin", ".volta/bin"] {
+            add(&format!("{home}/{sub}"), &mut ordered, &mut seen);
+        }
+    }
+    add(
+        "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        &mut ordered,
+        &mut seen,
+    );
+
+    std::env::set_var("PATH", ordered.join(":"));
+}
+
+#[cfg(not(unix))]
+fn fixup_path() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    fixup_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .on_window_event(|window, event| {
