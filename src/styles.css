@@ -382,4 +382,8 @@ tr.flash > td { animation: line-flash 1.8s ease; }
 .md.compact pre { font-size: 11.5px; }
 hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 h2.viewtitle { margin: 4px 0 14px; font-size: 17px; }
+h2.viewtitle a { color: inherit; }
+h2.viewtitle a:hover { color: var(--accent); text-decoration: none; }
+h2.viewtitle .ext { color: var(--fg-subtle); font-size: 13px; vertical-align: 2px; }
+h2.viewtitle a:hover .ext { color: var(--accent); }
 .subtle { color: var(--fg-muted); font-size: 12.5px; }

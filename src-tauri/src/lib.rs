@@ -440,6 +440,21 @@ fn close_window(window: tauri::WebviewWindow) -> Result<(), String> {
     window.close().map_err(|e| e.to_string())
 }
 
+/// Open a URL in the system default browser.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("only http(s) urls can be opened".into());
+    }
+    #[cfg(target_os = "macos")]
+    let result = Command::new("open").arg(&url).spawn();
+    #[cfg(target_os = "linux")]
+    let result = Command::new("xdg-open").arg(&url).spawn();
+    #[cfg(target_os = "windows")]
+    let result = Command::new("cmd").args(["/C", "start", "", &url]).spawn();
+    result.map(|_| ()).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -459,7 +474,8 @@ pub fn run() {
             list_cursor_skills,
             open_repo_window,
             open_launcher_window,
-            close_window
+            close_window,
+            open_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

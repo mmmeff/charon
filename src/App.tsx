@@ -18,6 +18,22 @@ export default function App() {
   const { loaded, load } = useGlobalConfig();
   const [autoOpening, setAutoOpening] = useState(!repo && !explicitPicker);
 
+  // Route every external link through the OS browser — the webview must
+  // never navigate away, and target=_blank is unreliable inside Tauri.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement).closest?.("a");
+      if (!a) return;
+      const href = a.getAttribute("href") ?? "";
+      if (/^https?:\/\//.test(href)) {
+        e.preventDefault();
+        void native.openUrl(href);
+      }
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
   useEffect(() => {
     void load().then(async (cfg) => {
       if (repo || explicitPicker) return;

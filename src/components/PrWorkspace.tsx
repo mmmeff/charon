@@ -116,9 +116,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     <div className="workspace">
       <div className="ws-main">
       <h2 className="viewtitle">
-        #{pr.number} {pr.title}{" "}
-        <a href={pr.url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>
-          open on GitHub ↗
+        <a href={pr.url} title="Open on GitHub">
+          #{pr.number} {pr.title} <span className="ext">↗</span>
         </a>
       </h2>
       <div className="row" style={{ marginBottom: 12 }}>

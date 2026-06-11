@@ -94,6 +94,10 @@ export const native = {
     return invoke("close_window");
   },
 
+  openUrl(url: string): Promise<void> {
+    return invoke("open_url", { url });
+  },
+
   onAgentStream(cb: (ev: AgentStreamEvent) => void): Promise<UnlistenFn> {
     return listen<AgentStreamEvent>("agent-stream", (e) => cb(e.payload));
   },
