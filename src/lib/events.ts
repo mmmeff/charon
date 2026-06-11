@@ -145,33 +145,34 @@ export function diffSnapshots(
   }
   const old = prev.pr;
 
-  // --- checks ---
-  const next: Record<string, string> = {};
-  for (const c of data.checks) next[c.name] = c.conclusion ?? c.status;
-  for (const c of data.checks) {
-    const was = prev.checks[c.name];
-    const now = c.conclusion;
-    if (!now || was === now) continue;
-    const vars = { "check-name": c.name, "check-url": c.url, "check-id": String(c.id ?? "") };
-    if (now === "failure" || now === "error") fire("ci_failed", vars);
-    else if (now === "timed_out") fire("check_timed_out", vars);
-    else if (now === "cancelled") fire("check_cancelled", vars);
-  }
-  const allDone = data.checks.length > 0 && data.checks.every((c) => c.conclusion === "success");
-  const wasAllDone =
-    Object.keys(prev.checks).length > 0 &&
-    Object.values(prev.checks).every((s) => s === "success");
-  if (allDone && !wasAllDone) fire("ci_succeeded");
+  // --- checks + branch state: my PRs only ---
+  // these events trigger FIX flows (agents that push); checks are fetched
+  // for teammate PRs too (display), but must never fire fixes there
+  if (ctx.prClass === "mine") {
+    for (const c of data.checks) {
+      const was = prev.checks[c.name];
+      const now = c.conclusion;
+      if (!now || was === now) continue;
+      const vars = { "check-name": c.name, "check-url": c.url, "check-id": String(c.id ?? "") };
+      if (now === "failure" || now === "error") fire("ci_failed", vars);
+      else if (now === "timed_out") fire("check_timed_out", vars);
+      else if (now === "cancelled") fire("check_cancelled", vars);
+    }
+    const allDone = data.checks.length > 0 && data.checks.every((c) => c.conclusion === "success");
+    const wasAllDone =
+      Object.keys(prev.checks).length > 0 &&
+      Object.values(prev.checks).every((s) => s === "success");
+    if (allDone && !wasAllDone) fire("ci_succeeded");
 
-  // --- merge / branch state ---
-  if (pr.mergeableState === "dirty" && old.mergeableState !== "dirty") {
-    fire("merge_conflict_detected");
-  }
-  if (pr.mergeableState === "behind" && old.mergeableState !== "behind") {
-    fire("branch_out_of_date");
-  }
-  if (pr.baseSha && old.baseSha && pr.baseSha !== old.baseSha) {
-    fire("base_branch_updated");
+    if (pr.mergeableState === "dirty" && old.mergeableState !== "dirty") {
+      fire("merge_conflict_detected");
+    }
+    if (pr.mergeableState === "behind" && old.mergeableState !== "behind") {
+      fire("branch_out_of_date");
+    }
+    if (pr.baseSha && old.baseSha && pr.baseSha !== old.baseSha) {
+      fire("base_branch_updated");
+    }
   }
 
   // --- comments ---
@@ -430,7 +431,7 @@ export class RepoPoller {
         detail.requestedFromMe = shallow.requestedFromMe || requested.has(shallow.number);
         detailed[detail.number] = detail;
         const [ch, cm, rv, th, tl] = await Promise.all([
-          prClass === "mine" ? gh.listChecks(repo, detail.headSha) : Promise.resolve([]),
+          gh.listChecks(repo, detail.headSha), // teammate checks: display-only (events stay mine-only)
           gh.listComments(repo, shallow.number),
           gh.listReviews(repo, shallow.number),
           // GraphQL-only; tolerate failure on older GHE

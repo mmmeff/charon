@@ -41,6 +41,9 @@ const duration = (c: CheckInfo): string => {
  */
 export function ChecksPanel({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
+  // fix agents push to the PR branch — own PRs only; teammates get a
+  // read-only panel (logs + retry, both plain GitHub actions)
+  const mine = pr.author === ctx.gh.login;
   const allChecks = usePrData((s) => s.checks[pr.number] ?? []);
   // skipped jobs are noise (path filters, matrix exclusions) — hide them
   const checks = allChecks.filter((c) => c.conclusion !== "skipped");
@@ -162,7 +165,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
                       {retryState === "busy" ? <Spinner /> : "↻"} Retry
                     </button>
                   ))}
-                {failed && (
+                {failed && mine && (
                   <button
                     className={`small ${fixOpen[c.name] ? "" : "primary"}`}
                     onClick={() => setFixOpen((f) => ({ ...f, [c.name]: !f[c.name] }))}

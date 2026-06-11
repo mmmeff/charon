@@ -514,10 +514,10 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
     <div className="ws-activity" style={{ width }}>
       {handle}
       <div className="ws-activity-inner">
+      <ApprovePrControl pr={pr} />
       <div className="subtle" style={{ marginBottom: 8, fontWeight: 600 }}>
         Activity ({count})
       </div>
-      <ApprovePrControl pr={pr} />
       <SendBox
         pr={pr}
         placeholder="Comment on this PR…"
