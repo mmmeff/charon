@@ -57,6 +57,22 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
     }
   };
 
+  const mergeNow = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await ctx.gh.mergePull(ctx.repo, pr.number);
+      void notify("PR merged", `#${pr.number} ${pr.title}`);
+      poller.refresh();
+      dismiss();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setConfirming(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleAutoMerge = async () => {
     setBusy(true);
     setError("");
@@ -102,6 +118,24 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
             {busy && confirming === null ? <Spinner /> : null}{" "}
             {pr.autoMerge ? "Disable automerge" : "Enable automerge"}
           </button>
+          {confirming === "merge" ? (
+            <div className="row" style={{ padding: "2px 4px", gap: 4 }}>
+              <button className="small primary" disabled={busy} onClick={() => void mergeNow()}>
+                {busy ? <Spinner /> : null} Confirm merge
+              </button>
+              <button className="small" onClick={() => setConfirming(null)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              className="overflow-item"
+              title="Merge immediately (squash/merge/rebase per repo settings)"
+              onClick={() => setConfirming("merge")}
+            >
+              Merge now
+            </button>
+          )}
           {confirming === "close" ? (
             <div className="row" style={{ padding: "2px 4px", gap: 4 }}>
               <button className="small danger" disabled={busy} onClick={() => void closePr()}>

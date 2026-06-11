@@ -603,6 +603,17 @@ export class GitHubClient {
     await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { state: "closed" });
   }
 
+  /** Merge the PR immediately. Method follows repo settings (squash > merge > rebase). */
+  async mergePull(repo: string, number: number): Promise<void> {
+    const repoInfo = await this.json<any>("GET", `/repos/${repo}`);
+    const method = repoInfo.allow_squash_merge
+      ? "squash"
+      : repoInfo.allow_merge_commit
+        ? "merge"
+        : "rebase";
+    await this.json("PUT", `/repos/${repo}/pulls/${number}/merge`, { merge_method: method });
+  }
+
   /**
    * Arm GitHub auto-merge (GraphQL-only). Merge method follows what the repo
    * allows, preferring squash > merge commit > rebase.
