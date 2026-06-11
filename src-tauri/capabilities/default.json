@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for all PR Copilot windows",
+  "windows": ["*"],
+  "permissions": ["core:default"]
+}
