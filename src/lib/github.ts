@@ -631,18 +631,28 @@ export class GitHubClient {
     await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { state: "closed" });
   }
 
-  private mergeMethodsCache: MergeMethod[] | null = null;
+  private repoInfoCache: any | null = null;
+
+  /** Cached GET /repos/{repo} — merge settings + the viewer's permissions. */
+  private async repoInfo(repo: string): Promise<any> {
+    if (!this.repoInfoCache) this.repoInfoCache = await this.json<any>("GET", `/repos/${repo}`);
+    return this.repoInfoCache;
+  }
 
   /** Merge methods this repo allows, preferred order: squash > merge > rebase. */
   async repoMergeMethods(repo: string): Promise<MergeMethod[]> {
-    if (this.mergeMethodsCache) return this.mergeMethodsCache;
-    const r = await this.json<any>("GET", `/repos/${repo}`);
+    const r = await this.repoInfo(repo);
     const out: MergeMethod[] = [];
     if (r.allow_squash_merge) out.push("squash");
     if (r.allow_merge_commit) out.push("merge");
     if (r.allow_rebase_merge) out.push("rebase");
-    this.mergeMethodsCache = out.length ? out : ["merge"];
-    return this.mergeMethodsCache;
+    return out.length ? out : ["merge"];
+  }
+
+  /** Can the user merge past branch protection? (repo admin) */
+  async canAdminOverride(repo: string): Promise<boolean> {
+    const r = await this.repoInfo(repo);
+    return !!r.permissions?.admin;
   }
 
   /** Merge the PR immediately. Method defaults to the repo's preferred one. */

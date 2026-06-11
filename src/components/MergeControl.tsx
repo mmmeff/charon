@@ -19,8 +19,10 @@ const METHOD_LABELS: Record<MergeMethod, string> = {
  */
 export function MergeControl({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
+  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
   const [methods, setMethods] = useState<MergeMethod[] | null>(null);
   const [method, setMethod] = useState<MergeMethod>("squash");
+  const [canOverride, setCanOverride] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -33,10 +35,28 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
         setMethod(ms[0]);
       })
       .catch(() => setMethods(["merge"]));
+    void ctx.gh
+      .canAdminOverride(ctx.repo)
+      .then(setCanOverride)
+      .catch(() => setCanOverride(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const mergeable = pr.mergeableState !== "dirty";
+  // blocked/behind = branch protection requirements unmet (approvals,
+  // required checks, up-to-date rule) — merging means overriding, which only
+  // repo admins can do. Non-admins get no merge button there (automerge is
+  // their path); admins get an explicitly-labeled override.
+  const state = pr.mergeableState;
+  const blocked = state === "blocked" || state === "behind";
+  const conflicted = state === "dirty";
+  const approvals = new Set(
+    reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)
+  ).size;
+  const blockReason =
+    approvals < ctx.config.requiredApprovals
+      ? `${approvals}/${ctx.config.requiredApprovals} approvals — requirements not met`
+      : "branch protection requirements not met";
+  const showMerge = !blocked || canOverride;
 
   const merge = async () => {
     setBusy(true);
@@ -87,24 +107,44 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
           ))}
         </select>
       )}
-      {confirming ? (
-        <>
-          <button className="small primary" disabled={busy} onClick={() => void merge()}>
-            {busy ? <Spinner /> : null} Confirm {METHOD_LABELS[method].toLowerCase()}
+      {showMerge &&
+        (confirming ? (
+          <>
+            <button
+              className={`small ${blocked ? "danger" : "primary"}`}
+              disabled={busy}
+              onClick={() => void merge()}
+            >
+              {busy ? <Spinner /> : null} Confirm {blocked ? "override " : ""}
+              {METHOD_LABELS[method].toLowerCase()}
+            </button>
+            <button className="small" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </>
+        ) : blocked ? (
+          <button
+            className="small danger"
+            disabled={busy || !methods}
+            title={`${blockReason} — merging overrides branch protection (admin)`}
+            onClick={() => setConfirming(true)}
+          >
+            ⚠ Override merge…
           </button>
-          <button className="small" onClick={() => setConfirming(false)}>
-            Cancel
+        ) : (
+          <button
+            className="small primary"
+            disabled={conflicted || !methods || busy}
+            title={conflicted ? "Resolve conflicts first" : METHOD_LABELS[method]}
+            onClick={() => setConfirming(true)}
+          >
+            Merge…
           </button>
-        </>
-      ) : (
-        <button
-          className="small primary"
-          disabled={!mergeable || !methods || busy}
-          title={mergeable ? METHOD_LABELS[method] : "Resolve conflicts first"}
-          onClick={() => setConfirming(true)}
-        >
-          Merge…
-        </button>
+        ))}
+      {!showMerge && (
+        <span className="subtle" style={{ fontSize: 11 }} title={blockReason}>
+          merge blocked — {blockReason}
+        </span>
       )}
       <button
         className="small"
