@@ -95,14 +95,21 @@ entries — the engine never changes.
 
 ## Getting started
 
-Prerequisites: **Node 18+**, **Rust (stable)**, and the [Cursor CLI](https://cursor.com/cli)
-(`cursor-agent login`).
+**Download:** grab the latest macOS DMG (universal — Apple Silicon + Intel) from
+[Releases](../../releases/latest). The app isn't code-signed yet; on first launch right-click →
+Open, or clear the quarantine flag with `xattr -cr /Applications/Charon.app`. You'll still need the
+[Cursor CLI](https://cursor.com/cli) (`cursor-agent login`) for agent runs.
+
+**Or build from source** — prerequisites: **Node 18+**, **Rust (stable)**, and the Cursor CLI:
 
 ```sh
 npm install
 npm run tauri dev      # development
 npm run tauri build    # packaged app
 ```
+
+Releases are cut by the [release workflow](.github/workflows/release.yml): push a `v*` tag (or run
+it manually from the Actions tab) and it builds the universal DMG and publishes it.
 
 <p align="center">
   <img src="docs/onboarding.png" alt="Onboarding: GitHub instance, PAT, cursor-agent binary" width="85%"/>

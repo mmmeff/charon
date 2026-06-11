@@ -1,0 +1,58 @@
+# Release workflow: builds the macOS DMG and publishes it as a GitHub Release.
+#
+# Triggers:
+#   - pushing a tag like v0.1.0 (the usual path: bump version, tag, push)
+#   - manual run from the Actions tab (workflow_dispatch)
+#
+# The release is keyed to the app version in src-tauri/tauri.conf.json via
+# tauri-action's v__VERSION__ template, so both triggers converge on the same
+# release. The bundle is a universal binary (Apple Silicon + Intel) and is
+# unsigned — see the release notes line about first launch.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos-dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "Charon v__VERSION__"
+          releaseBody: |
+            macOS build (universal: Apple Silicon + Intel).
+
+            The app is not code-signed. On first launch either right-click the
+            app → Open, or clear the quarantine flag:
+            `xattr -cr /Applications/Charon.app`
+          releaseDraft: false
+          args: --target universal-apple-darwin
