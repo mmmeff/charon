@@ -768,6 +768,8 @@ a.act-event-detail:hover { color: var(--orange); }
 }
 .pr-description-wrap:hover .desc-expand { opacity: 1; }
 .desc-expand:hover { color: var(--orange); }
+/* edit (own PRs) sits to the left of expand */
+.desc-edit { right: 38px; }
 /* expand tooltip opens leftward (button hugs the right edge) */
 .desc-expand::before { left: auto; right: calc(100% + 5px); transform: translateY(-50%) translateX(6px) rotate(45deg); }
 .desc-expand::after { left: auto; right: calc(100% + 10px); transform: translateY(-50%) translateX(8px); border-left: 1px solid var(--border); border-right: 2px solid var(--orange); }

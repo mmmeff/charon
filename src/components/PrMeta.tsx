@@ -7,7 +7,7 @@ import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../t
 import { AgentLaunchForm } from "./AgentLaunchForm";
 import { age } from "../lib/ui";
 import { Badge, Spinner } from "./common";
-import { IconExpand } from "./icons";
+import { IconDrafts, IconExpand } from "./icons";
 import { Markdown } from "./Markdown";
 import { useResizablePanel } from "./useResizablePanel";
 import { useFlow } from "./flow";
@@ -109,12 +109,20 @@ export function PrLabels({ pr }: { pr: PrSummary }) {
 /**
  * PR description: capped height with inner scroll, plus an expand control
  * that floats it over the full main column (between the side panels).
+ * On the user's own PRs (draft or open) it toggles into an edit mode that
+ * writes straight to GitHub — the user's own words, no approval gate.
  */
 export function PrDescription({ pr }: { pr: PrSummary }) {
+  const { ctx } = useFlow();
+  const mine = pr.author === ctx.gh.login;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(
     null
   );
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const measure = () => {
     const main = wrapRef.current?.closest(".ws-main");
@@ -139,10 +147,78 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rect !== null]);
 
-  if (!pr.body?.trim()) return null;
+  const startEdit = () => {
+    setDraft(pr.body ?? "");
+    setError("");
+    setRect(null);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await ctx.gh.updatePullBody(ctx.repo, pr.number, draft);
+      // optimistic: patch the PR everywhere it appears; the next poll brings
+      // back the GitHub-rendered bodyHtml (local markdown renders meanwhile)
+      const d = usePrData.getState();
+      const fix = (l: PrSummary[]) =>
+        l.map((p) => (p.number === pr.number ? { ...p, body: draft, bodyHtml: undefined } : p));
+      d.patch({ myDrafts: fix(d.myDrafts), myOpen: fix(d.myOpen), reviewQueue: fix(d.reviewQueue) });
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="card" style={{ padding: 10 }}>
+        <textarea
+          rows={12}
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !busy) void save();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          placeholder="PR description (markdown)"
+        />
+        <div className="row" style={{ marginTop: 6 }}>
+          <button className="small primary" disabled={busy} onClick={() => void save()}>
+            {busy ? <Spinner /> : null} Save description
+          </button>
+          <button className="small" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+          <span className="subtle">⌘⏎ to save — updates GitHub directly, as you</span>
+          {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
+        </div>
+      </div>
+    );
+  }
+
+  if (!pr.body?.trim()) {
+    if (!mine) return null;
+    return (
+      <div style={{ marginBottom: 10 }}>
+        <button className="link small" onClick={startEdit}>
+          + add description
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="pr-description-wrap" ref={wrapRef}>
+      {mine && (
+        <button className="desc-expand desc-edit" data-tip="Edit description" onClick={startEdit}>
+          <IconDrafts />
+        </button>
+      )}
       <button
         className="desc-expand"
         data-tip="Expand description"

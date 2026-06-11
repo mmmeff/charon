@@ -508,6 +508,11 @@ export class GitHubClient {
     return res.html_url ?? "";
   }
 
+  /** Edit the description of the user's own PR (direct user-authored write). */
+  async updatePullBody(repo: string, number: number, body: string): Promise<void> {
+    await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { body });
+  }
+
   /** Edit/delete the user's own comments. `kind` matches CommentInfo.kind. */
   async updateComment(
     repo: string,
