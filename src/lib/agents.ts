@@ -209,6 +209,64 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
   return id;
 }
 
+// ---------------------------------------------------------------------------
+// Persistence: the Activity Feed survives app restarts. Stream pipes can't be
+// re-attached after a restart, so runs that were mid-flight are restored as
+// "killed — interrupted by app restart" with their full prompt/log intact.
+// ---------------------------------------------------------------------------
+
+const MAX_PERSISTED_RUNS = 120;
+const MAX_PERSISTED_LINES = 250;
+
+const agentHistoryPath = (repo: string) =>
+  `repos/${repo.replace(/[^a-zA-Z0-9_.-]/g, "__")}/agents.json`;
+
+/**
+ * Hydrate persisted agent history for this repo and keep persisting changes
+ * (debounced). Returns a cleanup function.
+ */
+export async function initAgentPersistence(repo: string): Promise<() => void> {
+  try {
+    const raw = await native.loadBlob(agentHistoryPath(repo));
+    if (raw) {
+      const history: AgentRun[] = JSON.parse(raw).map((r: AgentRun) =>
+        r.status === "running" || r.status === "starting"
+          ? {
+              ...r,
+              status: "killed" as const,
+              error: "interrupted by app restart",
+              endedAt: r.endedAt ?? Date.now(),
+            }
+          : r
+      );
+      useAgentStore.getState().hydrate(history);
+    }
+  } catch (e) {
+    console.error("agent history load failed", e);
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const save = () => {
+    const s = useAgentStore.getState();
+    const runs = s.order
+      .map((id) => s.runs[id])
+      .filter((r) => r && r.repo === repo)
+      .slice(0, MAX_PERSISTED_RUNS)
+      .map((r) => ({ ...r, lines: r.lines.slice(-MAX_PERSISTED_LINES) }));
+    void native
+      .saveBlob(agentHistoryPath(repo), JSON.stringify(runs))
+      .catch((e) => console.error("agent history save failed", e));
+  };
+  const unsubscribe = useAgentStore.subscribe(() => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(save, 800);
+  });
+  return () => {
+    if (timer) clearTimeout(timer);
+    unsubscribe();
+  };
+}
+
 export async function killAgent(id: string): Promise<void> {
   await native.killAgent(id);
   useAgentStore.getState().update(id, { status: "killed", endedAt: Date.now() });

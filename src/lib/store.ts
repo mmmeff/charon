@@ -207,6 +207,8 @@ interface AgentState {
   update(id: string, patch: Partial<AgentRun>): void;
   appendLine(id: string, line: AgentLine): void;
   appendResultText(id: string, text: string): void;
+  /** restore persisted history (app start) — keeps newest-first order */
+  hydrate(history: AgentRun[]): void;
 }
 
 export const useAgentStore = create<AgentState>((set) => ({
@@ -239,6 +241,16 @@ export const useAgentStore = create<AgentState>((set) => ({
       const run = s.runs[id];
       if (!run) return s;
       return { runs: { ...s.runs, [id]: { ...run, resultText: run.resultText + text } } };
+    });
+  },
+  hydrate(history) {
+    set((s) => {
+      const restored = history.filter((r) => !s.runs[r.id]);
+      if (restored.length === 0) return s;
+      return {
+        runs: { ...s.runs, ...Object.fromEntries(restored.map((r) => [r.id, r])) },
+        order: [...s.order, ...restored.map((r) => r.id)],
+      };
     });
   },
 }));

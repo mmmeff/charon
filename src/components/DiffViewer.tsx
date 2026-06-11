@@ -107,6 +107,36 @@ export function DiffViewer({
     );
   };
 
+  // ---- prev/next comment navigation (floats top-right once scrolled) ----
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [navVisible, setNavVisible] = useState(false);
+  useEffect(() => {
+    if (anchors.length === 0) return;
+    const scroller = rootRef.current?.closest(".ws-main");
+    if (!scroller) return;
+    const onScroll = () => setNavVisible(scroller.scrollTop > 180);
+    onScroll();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [anchors.length]);
+
+  const navToComment = (dir: 1 | -1) => {
+    const root = rootRef.current;
+    const scroller = root?.closest(".ws-main");
+    if (!root || !scroller) return;
+    const rows = Array.from(root.querySelectorAll("tr.comment-anchor-row")) as HTMLElement[];
+    if (rows.length === 0) return;
+    const top = scroller.getBoundingClientRect().top;
+    const target =
+      dir === 1
+        ? rows.find((r) => r.getBoundingClientRect().top > top + 120)
+        : [...rows].reverse().find((r) => r.getBoundingClientRect().top < top + 40);
+    const el = target ?? (dir === 1 ? rows[rows.length - 1] : rows[0]);
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("flash");
+    setTimeout(() => el.classList.remove("flash"), 1800);
+  };
+
   // Escape cancels an in-progress drag or open selection/composer.
   useEffect(() => {
     if (!sel && !drag) return;
@@ -214,7 +244,20 @@ export function DiffViewer({
   };
 
   return (
-    <div onMouseLeave={() => drag && setDrag(null)}>
+    <div onMouseLeave={() => drag && setDrag(null)} ref={rootRef}>
+      {anchors.length > 0 && (
+        <div className={`comment-nav-wrap ${navVisible ? "show" : ""}`}>
+          <div className="comment-nav">
+            <span className="comment-nav-count">{anchors.length} comments</span>
+            <button data-tip="Previous comment" className="tip-left" onClick={() => navToComment(-1)}>
+              ↑
+            </button>
+            <button data-tip="Next comment" className="tip-left" onClick={() => navToComment(1)}>
+              ↓
+            </button>
+          </div>
+        </div>
+      )}
       {rawFiles.length > 0 && (
         <div className="row" style={{ marginBottom: 8 }}>
           <button className={`small ${treeOpen ? "primary" : ""}`} onClick={() => setTreeOpen(!treeOpen)}>

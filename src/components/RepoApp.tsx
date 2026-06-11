@@ -4,6 +4,7 @@ import { GitHubClient } from "../lib/github";
 import { RepoPoller, usePrData } from "../lib/events";
 import type { FlowContext } from "../lib/flows";
 import { loadSkills } from "../lib/skills";
+import { initAgentPersistence } from "../lib/agents";
 import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore, useUiStore } from "../lib/store";
 import { native } from "../lib/tauri";
 import { timeAgo, useNow } from "./common";
@@ -65,6 +66,10 @@ export function RepoApp({ repo }: { repo: string }) {
     void repoStore.init(repo);
     // remember this repo so the next app boot reopens it directly
     void useGlobalConfig.getState().setLastRepo(repo);
+    // restore agent history and keep persisting it across restarts
+    let cleanup: (() => void) | undefined;
+    void initAgentPersistence(repo).then((c) => (cleanup = c));
+    return () => cleanup?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo]);
 
