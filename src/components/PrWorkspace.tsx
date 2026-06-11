@@ -6,14 +6,16 @@ import { runFixFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
-import { Badge, CiBadge, MergeBadge, Spinner, timeAgo, useScrolledPrTitle } from "./common";
+import { timeAgo, useScrolledPrTitle } from "../lib/ui";
+import { Badge, CiBadge, MergeBadge, Spinner } from "./common";
 import { ChecksPanel } from "./ChecksPanel";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
-import { DiffCommentThread, groupCommentThreads, PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
+import { groupCommentThreads } from "../lib/threads";
+import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
-import { useFlow } from "./RepoApp";
+import { useFlow } from "./flow";
 
 /**
  * Shared PR workspace for the user's own PRs (Drafts and Open). All agent

@@ -2,9 +2,10 @@ import { useState } from "react";
 import { runRewrite, sendProposal } from "../lib/flows";
 import { useRepoStore } from "../lib/store";
 import type { Proposal, ProposedInlineComment, Severity } from "../types";
-import { Badge, ConfidenceBadge, SeverityBadge, Spinner, timeAgo } from "./common";
+import { timeAgo } from "../lib/ui";
+import { Badge, ConfidenceBadge, SeverityBadge, Spinner } from "./common";
 import { PromptInput } from "./PromptInput";
-import { useFlow } from "./RepoApp";
+import { useFlow } from "./flow";
 
 const SEVERITIES: Severity[] = ["blocker", "major", "minor", "nit"];
 

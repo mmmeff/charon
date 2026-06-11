@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { FileDiff } from "../types";
-import { useResizablePanel } from "./Panels";
+import { useResizablePanel } from "./useResizablePanel";
 
 interface TreeNode {
   name: string;

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { usePrData } from "../../lib/events";
 import { useUiStore } from "../../lib/store";
-import { Badge, EmptyState, RunningAgentsChip, SortPicker, age, sortPrs, type SortKey } from "../common";
+import { age, sortPrs, type SortKey } from "../../lib/ui";
+import { Badge, EmptyState, RunningAgentsChip, SortPicker } from "../common";
 import { Sidebar } from "../Panels";
 import { PrWorkspace } from "../PrWorkspace";
 

@@ -4,7 +4,7 @@ import { runFixFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
 import type { CheckInfo, PrSummary } from "../types";
 import { Badge, Spinner } from "./common";
-import { useFlow } from "./RepoApp";
+import { useFlow } from "./flow";
 
 const UI_LOG_TAIL = 40_000;
 const AGENT_LOG_TAIL = 16_000;

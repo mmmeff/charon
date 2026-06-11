@@ -3,9 +3,10 @@ import { applyFindings } from "../lib/flows";
 import { useRepoStore } from "../lib/store";
 import type { PrSummary, ReviewFinding } from "../types";
 import { AgentLaunchForm } from "./AgentLaunchForm";
-import { Badge, ConfidenceBadge, SeverityBadge, Spinner, timeAgo } from "./common";
+import { timeAgo } from "../lib/ui";
+import { Badge, ConfidenceBadge, SeverityBadge, Spinner } from "./common";
 import { Markdown } from "./Markdown";
-import { useFlow } from "./RepoApp";
+import { useFlow } from "./flow";
 
 /** Launch form for applying findings (guidance + model). */
 function ApplyForm({

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { killAgent } from "../lib/agents";
 import { useGlobalConfig } from "../lib/store";
 import type { AgentRun } from "../types";
-import { Badge, Spinner, timeAgo, useNow } from "./common";
+import { timeAgo, useNow } from "../lib/ui";
+import { Badge, Spinner } from "./common";
 
 const statusColor = (s: AgentRun["status"]) =>
   s === "running" || s === "starting" ? "blue" : s === "done" ? "green" : s === "killed" ? "gray" : "red";

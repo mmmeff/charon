@@ -8,7 +8,7 @@ import { FileTree } from "./FileTree";
 
 const slug = (p: string) => encodeURIComponent(p);
 /** DOM id of a diff line's number cell — the target for scroll-to-line. */
-export const lineDomId = (path: string, side: "LEFT" | "RIGHT", num: number) =>
+const lineDomId = (path: string, side: "LEFT" | "RIGHT", num: number) =>
   `dl-${slug(path)}-${side}-${num}`;
 const fileDomId = (path: string) => `df-${slug(path)}`;
 

@@ -5,11 +5,12 @@ import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
 import { AgentLaunchForm } from "./AgentLaunchForm";
-import { Badge, Spinner, age } from "./common";
+import { age } from "../lib/ui";
+import { Badge, Spinner } from "./common";
 import { IconExpand } from "./icons";
 import { Markdown } from "./Markdown";
-import { useResizablePanel } from "./Panels";
-import { useFlow } from "./RepoApp";
+import { useResizablePanel } from "./useResizablePanel";
+import { useFlow } from "./flow";
 
 /**
  * "Address with agent" on a GitHub comment thread — own PRs only (agents push
@@ -491,22 +492,6 @@ const firstLine = (s: string) => {
   const l = (s ?? "").split("\n").find((x) => x.trim()) ?? "";
   return l.length > 72 ? l.slice(0, 72) + "…" : l;
 };
-
-/** Group inline review comments into (root, replies) threads. */
-export function groupCommentThreads(
-  comments: CommentInfo[]
-): { root: CommentInfo; replies: CommentInfo[] }[] {
-  const inline = comments.filter((c) => c.kind === "review_comment" && c.path && c.line);
-  const ids = new Set(inline.map((c) => c.id));
-  return inline
-    .filter((c) => !c.inReplyTo || !ids.has(c.inReplyTo))
-    .map((root) => ({
-      root,
-      replies: inline
-        .filter((c) => c.inReplyTo === root.id)
-        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
-    }));
-}
 
 /** Two-line activity header: type + age on top, author beneath. */
 function ActHeader({

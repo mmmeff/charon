@@ -330,6 +330,7 @@ export class RepoPoller {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
   private ticking = false;
+  private tickStartedAt = 0;
 
   constructor(private getCtx: () => FlowContext) {}
 
@@ -343,9 +344,19 @@ export class RepoPoller {
     if (this.timer) clearTimeout(this.timer);
   }
 
-  /** Force an immediate re-poll (e.g. after the user sends a proposal). */
+  /**
+   * Force an immediate re-poll (Sync now button, after sending a proposal).
+   * Self-healing: if a previous tick has been "in flight" implausibly long,
+   * its promise died without the finally running (dev HMR module swap,
+   * webview hiccup) — clear the stuck flags so syncing works again.
+   */
   refresh() {
     if (this.timer) clearTimeout(this.timer);
+    this.stopped = false;
+    if (this.ticking && Date.now() - this.tickStartedAt > 30_000) {
+      this.ticking = false;
+      usePrData.getState().patch({ polling: false });
+    }
     void this.tick();
   }
 
@@ -359,6 +370,7 @@ export class RepoPoller {
   async tick(): Promise<void> {
     if (this.ticking) return;
     this.ticking = true;
+    this.tickStartedAt = Date.now();
     const ctx = this.getCtx();
     const data = usePrData.getState();
     data.patch({ polling: true });

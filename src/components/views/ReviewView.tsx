@@ -3,13 +3,15 @@ import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
-import { Badge, EmptyState, RunningAgentsChip, SortPicker, Spinner, age, sortPrs, useScrolledPrTitle, type SortKey } from "../common";
+import { age, sortPrs, useScrolledPrTitle, type SortKey } from "../../lib/ui";
+import { Badge, EmptyState, RunningAgentsChip, SortPicker, Spinner } from "../common";
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
-import { DiffCommentThread, groupCommentThreads, PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
+import { groupCommentThreads } from "../../lib/threads";
+import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
 import { InlineCommentEditor, ProposalCard } from "../ProposalCard";
-import { useFlow } from "../RepoApp";
+import { useFlow } from "../flow";
 
 /**
  * Review: teammate PRs needing my attention. Runs the automated self-review

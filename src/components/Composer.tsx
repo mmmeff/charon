@@ -5,11 +5,12 @@ import { runDraftEdit, runDraftQuestion, runReviewFlow, runSelfReviewFlow } from
 import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useUiStore } from "../lib/store";
 import type { LineSelection, PrSummary } from "../types";
-import { Badge, Spinner, timeAgo } from "./common";
+import { timeAgo } from "../lib/ui";
+import { Badge, Spinner } from "./common";
 import { Markdown } from "./Markdown";
 import { ModelPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
-import { useFlow } from "./RepoApp";
+import { useFlow } from "./flow";
 
 export type ComposerMode = "ask" | "edit" | "comment" | "review";
 

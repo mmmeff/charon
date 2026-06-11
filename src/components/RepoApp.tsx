@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { refreshModels } from "../lib/agents";
 import { GitHubClient } from "../lib/github";
 import { RepoPoller, usePrData } from "../lib/events";
@@ -7,7 +7,8 @@ import { loadSkills } from "../lib/skills";
 import { initAgentPersistence } from "../lib/agents";
 import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore, useUiStore } from "../lib/store";
 import { native } from "../lib/tauri";
-import { timeAgo, useNow } from "./common";
+import { timeAgo, useNow } from "../lib/ui";
+import { FlowCtx } from "./flow";
 import {
   IconActivity,
   IconDrafts,
@@ -24,14 +25,6 @@ import { ReviewView } from "./views/ReviewView";
 import { SettingsView } from "./views/SettingsView";
 
 type Tab = "drafts" | "open" | "review" | "activity" | "settings";
-
-const FlowCtx = createContext<{ ctx: FlowContext; poller: RepoPoller } | null>(null);
-
-export function useFlow() {
-  const v = useContext(FlowCtx);
-  if (!v) throw new Error("FlowCtx missing");
-  return v;
-}
 
 /** One repo, one window: tabbed shell that owns the poller and flow context. */
 export function RepoApp({ repo }: { repo: string }) {
@@ -222,9 +215,8 @@ export function RepoApp({ repo }: { repo: string }) {
             <button
               className="rail-btn"
               style={{ width: 26, height: 26 }}
-              onClick={() => poller.refresh()}
-              disabled={prData.polling}
-              title="Sync now"
+              onClick={(e) => (e.shiftKey ? window.location.reload() : poller.refresh())}
+              title="Sync now (⇧-click: reload the app)"
             >
               <IconRefresh />
             </button>

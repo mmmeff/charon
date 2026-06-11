@@ -302,15 +302,20 @@ h3, h4 {
   padding: 12px 14px;
   margin-bottom: 10px;
 }
-.card.selectable { cursor: pointer; border-left: 3px solid transparent; }
+.card.selectable {
+  cursor: pointer; border-left: 3px solid transparent;
+  /* the orange wash is an inset shadow (not a gradient) so it can fade */
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.card.selectable h4 { transition: color 140ms ease; }
+.card.selectable .meta { transition: color 140ms ease, opacity 140ms ease; }
 .card.selectable:hover { border-color: var(--fg-subtle); }
 .card.selected,
 .card.selected:hover {
   border-color: rgba(255, 79, 0, 0.45);
-  border-left: 3px solid var(--orange);
-  background:
-    linear-gradient(90deg, rgba(255, 79, 0, 0.16), rgba(255, 79, 0, 0.04) 45%, transparent 80%),
-    #181711;
+  border-left-color: var(--orange);
+  background-color: #181711;
+  box-shadow: inset 16px 0 42px -16px rgba(255, 79, 0, 0.34);
 }
 .card.selected h4 { color: var(--fg); }
 .card.selected .meta { color: var(--fg); opacity: 0.75; }
