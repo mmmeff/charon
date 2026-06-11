@@ -86,6 +86,9 @@ WORKFLOW:
 2. Commit with a clear message and push to the PR branch with:
    git push origin HEAD:${pr.headRef}
    (Pushing to this branch is explicitly authorized — it is the user's own PR branch.)
+   Other agents may be pushing fixes to this branch concurrently. If the push is rejected because
+   the remote moved, run \`git pull --rebase origin ${pr.headRef}\`, resolve any conflicts in favor of
+   keeping both fixes intact, and push again. NEVER force-push.
 3. If you determine no code change is needed, do not commit or push; explain why in the proposal.
 
 DEPENDENCY & VALIDATION POLICY:
@@ -272,24 +275,29 @@ export async function runFixFlow(
 ): Promise<string> {
   const wt = await createWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);
   const prompt = applySkills(fixFlowWrapper(ctx, pr, wt, task), ctx.skills, ctx.config.skills.fix);
-  return startAgent({
-    kind,
-    relation,
-    repo: ctx.repo,
-    prNumber: pr.number,
-    prTitle: pr.title,
-    prompt,
-    model: resolveModel(ctx, model),
-    binary: ctx.global.cursorBinary,
-    cwd: wt.path,
-    onDone: async (run) => {
-      try {
-        await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, relation);
-      } finally {
-        await releaseWorktree(wt);
-      }
-    },
-  });
+  try {
+    return await startAgent({
+      kind,
+      relation,
+      repo: ctx.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prompt,
+      model: resolveModel(ctx, model),
+      binary: ctx.global.cursorBinary,
+      cwd: wt.path,
+      onDone: async (run) => {
+        try {
+          await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, relation);
+        } finally {
+          await releaseWorktree(wt);
+        }
+      },
+    });
+  } catch (e) {
+    await releaseWorktree(wt); // spawn failure: free the slot lease
+    throw e;
+  }
 }
 
 /**
@@ -481,9 +489,10 @@ const findingInstruction = (f: ReviewFinding) =>
 const indent = (s: string, pad: string) => s.split("\n").map((l) => pad + l).join("\n");
 
 /**
- * Apply one or more local findings: a single fix agent implements them in a
- * worktree and pushes to the user's own branch (one run, one push — parallel
- * applies on the same PR would race each other on the remote branch).
+ * Apply one or more local findings: a fix agent implements them in a worktree
+ * and pushes to the user's own branch. Applies run in parallel — each run gets
+ * its own worktree slot, and agents rebase-and-retry if a concurrent push
+ * lands on the branch first.
  */
 export async function applyFindings(
   ctx: FlowContext,
@@ -508,26 +517,31 @@ ${findings.map(findingInstruction).join("\n\n")}${
   try {
     const wt = await createWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);
     const prompt = applySkills(fixFlowWrapper(ctx, pr, wt, task), ctx.skills, ctx.config.skills.fix);
-    return await startAgent({
-      kind: "feedback_fix",
-      relation: findings.length > 1 ? `apply ${findings.length} findings` : "apply finding",
-      repo: ctx.repo,
-      prNumber: pr.number,
-      prTitle: pr.title,
-      prompt,
-      model: resolveModel(ctx, model),
-      binary: ctx.global.cursorBinary,
-      cwd: wt.path,
-      onDone: async (run) => {
-        try {
-          const s = useRepoStore.getState();
-          for (const f of findings) await s.updateFinding(f.key, { status: "applied" });
-          await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "applied self-review findings");
-        } finally {
-          await releaseWorktree(wt);
-        }
-      },
-    });
+    try {
+      return await startAgent({
+        kind: "feedback_fix",
+        relation: findings.length > 1 ? `apply ${findings.length} findings` : "apply finding",
+        repo: ctx.repo,
+        prNumber: pr.number,
+        prTitle: pr.title,
+        prompt,
+        model: resolveModel(ctx, model),
+        binary: ctx.global.cursorBinary,
+        cwd: wt.path,
+        onDone: async (run) => {
+          try {
+            const s = useRepoStore.getState();
+            for (const f of findings) await s.updateFinding(f.key, { status: "applied" });
+            await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "applied self-review findings");
+          } finally {
+            await releaseWorktree(wt);
+          }
+        },
+      });
+    } catch (e) {
+      await releaseWorktree(wt); // spawn failure: free the slot lease
+      throw e;
+    }
   } catch (e) {
     // worktree/spawn failure: findings go back to open so the user can retry
     for (const f of findings) await store.updateFinding(f.key, { status: "open" });
@@ -609,28 +623,35 @@ WORKFLOW:
 1. Implement exactly what was asked — keep the change tightly scoped to the request.
 2. Commit with a clear message and push with: git push origin HEAD:${pr.headRef}
    (This is the user's own draft; pushing is authorized and expected.)
+   If the push is rejected because the remote moved (another agent pushed first), run
+   \`git pull --rebase origin ${pr.headRef}\` and push again. NEVER force-push.
 ${HITL_CONTRACT}
 ${PROPOSAL_CONTRACT}`;
 
   const prompt = applySkills(base, ctx.skills, ctx.config.skills.draft);
-  return startAgent({
-    kind: "draft_edit",
-    relation: selection ? `draft edit (${selection.path}:${selection.startLine})` : "draft edit",
-    repo: ctx.repo,
-    prNumber: pr.number,
-    prTitle: pr.title,
-    prompt,
-    model: resolveModel(ctx, model),
-    binary: ctx.global.cursorBinary,
-    cwd: wt.path,
-    onDone: async (run) => {
-      try {
-        await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "draft edit summary");
-      } finally {
-        await releaseWorktree(wt);
-      }
-    },
-  });
+  try {
+    return await startAgent({
+      kind: "draft_edit",
+      relation: selection ? `draft edit (${selection.path}:${selection.startLine})` : "draft edit",
+      repo: ctx.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prompt,
+      model: resolveModel(ctx, model),
+      binary: ctx.global.cursorBinary,
+      cwd: wt.path,
+      onDone: async (run) => {
+        try {
+          await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "draft edit summary");
+        } finally {
+          await releaseWorktree(wt);
+        }
+      },
+    });
+  } catch (e) {
+    await releaseWorktree(wt); // spawn failure: free the slot lease
+    throw e;
+  }
 }
 
 /**

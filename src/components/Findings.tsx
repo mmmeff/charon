@@ -84,7 +84,7 @@ export function FindingsStrip({ pr }: { pr: PrSummary }) {
 
   if (findings.length === 0) return null;
   const open = findings.filter((f) => f.status === "open");
-  const applying = findings.some((f) => f.status === "applying");
+  const applying = findings.filter((f) => f.status === "applying").length;
   const applied = findings.filter((f) => f.status === "applied").length;
 
   return (
@@ -93,9 +93,14 @@ export function FindingsStrip({ pr }: { pr: PrSummary }) {
         <Badge color={open.length > 0 ? "yellow" : "green"}>
           {open.length} finding{open.length === 1 ? "" : "s"} open · {applied} applied
         </Badge>
+        {applying > 0 && (
+          <Badge color="blue">
+            {applying} applying <Spinner />
+          </Badge>
+        )}
         {open.length > 0 && (
-          <button className="small" disabled={applying} onClick={() => setApplyOpen(!applyOpen)}>
-            {applying ? <Spinner /> : null} Apply all open
+          <button className="small" onClick={() => setApplyOpen(!applyOpen)}>
+            Apply all open
           </button>
         )}
         {summary && (
@@ -127,9 +132,6 @@ export function FindingsStrip({ pr }: { pr: PrSummary }) {
 /** One local finding, anchored inline on the diff. */
 export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSummary }) {
   const updateFinding = useRepoStore((s) => s.updateFinding);
-  const anyApplying = useRepoStore((s) =>
-    s.findings.some((f) => f.prNumber === pr.number && f.status === "applying")
-  );
   const [editing, setEditing] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
   const stale = finding.headSha !== pr.headSha;
@@ -189,7 +191,6 @@ export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSum
           <>
             <button
               className={`small ${applyOpen ? "" : "primary"}`}
-              disabled={anyApplying}
               onClick={() => setApplyOpen(!applyOpen)}
             >
               Apply

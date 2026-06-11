@@ -82,13 +82,57 @@ export async function ensureClone(
 const branchWorktreePath = (dataDir: string, repo: string, branch: string) =>
   `${dataDir}/worktrees/${sanitize(repo)}/${sanitize(branch)}`;
 
+/** How many persistent (dep-caching) worktrees a single branch may have. */
+const MAX_BRANCH_SLOTS = 3;
+
+/** Slot 0 keeps the historical single-worktree path so existing caches survive. */
+function slotInfo(dataDir: string, repo: string, branch: string, slot: number) {
+  const base = branchWorktreePath(dataDir, repo, branch);
+  const suffix = slot === 0 ? "" : `--${slot + 1}`;
+  return {
+    path: `${base}${suffix}`,
+    localBranch: `pr-copilot/${sanitize(branch)}${suffix}`,
+  };
+}
+
 /**
- * Get a worktree on the PR's head branch. One PERSISTENT worktree per branch,
- * reused across runs: code is hard-synced to the remote tip (`reset --hard` +
- * `clean -fd`), while git-ignored artifacts — node_modules, target/, venvs —
- * survive, so any dependency install is paid at most once per PR, not per
- * run. If the persistent worktree is busy with another agent, a throwaway one
- * is created instead. The agent pushes with `git push origin HEAD:<branch>`.
+ * Worktrees handed out but not yet released. Agent cwds only become visible in
+ * the agent store after spawn, so this set closes the allocation→spawn gap —
+ * without it, two simultaneous applies could be handed the same slot.
+ */
+const leases = new Set<string>();
+
+function isBusy(path: string): boolean {
+  if (leases.has(path)) return true;
+  return activeAgentCwds().some((c) => c === path || c.startsWith(`${path}/`));
+}
+
+/**
+ * Per-clone async mutex. Concurrent `fetch` / `worktree add` against the same
+ * clone can trip over git's lock files, so all clone-mutating setup runs
+ * serialized; agents then work in their own worktrees fully in parallel.
+ */
+const cloneLocks = new Map<string, Promise<unknown>>();
+async function withCloneLock<T>(clonePath: string, fn: () => Promise<T>): Promise<T> {
+  const prev = cloneLocks.get(clonePath) ?? Promise.resolve();
+  const next = prev.catch(() => undefined).then(fn);
+  cloneLocks.set(clonePath, next);
+  try {
+    return await next;
+  } finally {
+    if (cloneLocks.get(clonePath) === next) cloneLocks.delete(clonePath);
+  }
+}
+
+/**
+ * Get a worktree on the PR's head branch. Each branch has a small pool of
+ * PERSISTENT worktree slots reused across runs: code is hard-synced to the
+ * remote tip (`reset --hard` + `clean -fd`), while git-ignored artifacts —
+ * node_modules, target/, venvs — survive, so any dependency install is paid
+ * at most once per slot, not per run. Concurrent runs on the same branch each
+ * get their own slot (lowest free slot first, so the warmest caches are
+ * preferred); past the pool cap, a throwaway worktree is created. The agent
+ * pushes with `git push origin HEAD:<branch>`.
  */
 export async function createWorktree(
   gh: GitHubClient,
@@ -102,63 +146,72 @@ export async function createWorktree(
     );
   }
   const clonePath = await ensureClone(gh, repo, configuredClonePath);
-  await git(["fetch", "origin", pr.headRef, pr.baseRef], clonePath);
   const dataDir = await native.appDataDir();
-  const stablePath = branchWorktreePath(dataDir, repo, pr.headRef);
-  const localBranch = `pr-copilot/${sanitize(pr.headRef)}`;
 
-  const busy = activeAgentCwds().some((c) => c.startsWith(stablePath));
-  if (!busy) {
-    if (await isGitRepo(stablePath)) {
-      // reuse: sync code to the remote tip; ignored files (deps) survive
-      await git(["reset", "--hard", `origin/${pr.headRef}`], stablePath);
-      await git(["clean", "-fd"], stablePath);
-      return { path: stablePath, localBranch, prBranch: pr.headRef, clonePath, persistent: true };
+  return withCloneLock(clonePath, async () => {
+    await git(["fetch", "origin", pr.headRef, pr.baseRef], clonePath);
+
+    for (let slot = 0; slot < MAX_BRANCH_SLOTS; slot++) {
+      const { path, localBranch } = slotInfo(dataDir, repo, pr.headRef, slot);
+      if (isBusy(path)) continue;
+      if (await isGitRepo(path)) {
+        // reuse: sync code to the remote tip; ignored files (deps) survive
+        await git(["reset", "--hard", `origin/${pr.headRef}`], path);
+        await git(["clean", "-fd"], path);
+      } else {
+        await git(["worktree", "add", "-B", localBranch, path, `origin/${pr.headRef}`], clonePath);
+      }
+      leases.add(path);
+      return { path, localBranch, prBranch: pr.headRef, clonePath, persistent: true };
     }
-    await git(["worktree", "add", "-B", localBranch, stablePath, `origin/${pr.headRef}`], clonePath);
-    return { path: stablePath, localBranch, prBranch: pr.headRef, clonePath, persistent: true };
-  }
 
-  // persistent worktree is occupied — fall back to a throwaway
-  const tmpBranch = `pr-copilot/tmp-${uid()}`;
-  const tmpPath = `${stablePath}-tmp-${uid()}`;
-  await git(["worktree", "add", "-b", tmpBranch, tmpPath, `origin/${pr.headRef}`], clonePath);
-  return { path: tmpPath, localBranch: tmpBranch, prBranch: pr.headRef, clonePath, persistent: false };
+    // every persistent slot is occupied — fall back to a throwaway
+    const tmpBranch = `pr-copilot/tmp-${uid()}`;
+    const tmpPath = `${branchWorktreePath(dataDir, repo, pr.headRef)}-tmp-${uid()}`;
+    await git(["worktree", "add", "-b", tmpBranch, tmpPath, `origin/${pr.headRef}`], clonePath);
+    leases.add(tmpPath);
+    return { path: tmpPath, localBranch: tmpBranch, prBranch: pr.headRef, clonePath, persistent: false };
+  });
 }
 
 /** Post-run cleanup: persistent worktrees stay for reuse; temp ones go. */
 export async function releaseWorktree(wt: Worktree): Promise<void> {
+  leases.delete(wt.path);
   if (wt.persistent) return;
-  try {
-    await git(["worktree", "remove", "--force", wt.path], wt.clonePath);
-  } catch (e) {
-    console.warn("worktree cleanup failed", e);
-  }
-  try {
-    await git(["branch", "-D", wt.localBranch], wt.clonePath);
-  } catch {
-    /* branch may not exist */
-  }
+  await withCloneLock(wt.clonePath, async () => {
+    try {
+      await git(["worktree", "remove", "--force", wt.path], wt.clonePath);
+    } catch (e) {
+      console.warn("worktree cleanup failed", e);
+    }
+    try {
+      await git(["branch", "-D", wt.localBranch], wt.clonePath);
+    } catch {
+      /* branch may not exist */
+    }
+  });
 }
 
 /**
- * Reclaim the persistent worktree for a branch whose PR closed/merged.
- * No-op while an agent is still using it.
+ * Reclaim the persistent worktree slots for a branch whose PR closed/merged.
+ * Slots still in use by an agent are skipped.
  */
 export async function pruneBranchWorktree(repo: string, branch: string): Promise<void> {
-  try {
-    const dataDir = await native.appDataDir();
-    const path = branchWorktreePath(dataDir, repo, branch);
-    if (activeAgentCwds().some((c) => c.startsWith(path))) return;
-    if (!(await isGitRepo(path))) return;
-    // find the owning clone before deleting, so we can prune its registry
-    const common = (await git(["rev-parse", "--git-common-dir"], path)).trim();
-    const mainRepo = common.endsWith("/.git") ? common.slice(0, -5) : common;
-    await native.runExec("rm", ["-rf", path]);
-    await git(["worktree", "prune"], mainRepo).catch(() => undefined);
-    await git(["branch", "-D", `pr-copilot/${sanitize(branch)}`], mainRepo).catch(() => undefined);
-  } catch (e) {
-    console.warn("worktree prune failed", e);
+  const dataDir = await native.appDataDir();
+  for (let slot = 0; slot < MAX_BRANCH_SLOTS; slot++) {
+    try {
+      const { path, localBranch } = slotInfo(dataDir, repo, branch, slot);
+      if (isBusy(path)) continue;
+      if (!(await isGitRepo(path))) continue;
+      // find the owning clone before deleting, so we can prune its registry
+      const common = (await git(["rev-parse", "--git-common-dir"], path)).trim();
+      const mainRepo = common.endsWith("/.git") ? common.slice(0, -5) : common;
+      await native.runExec("rm", ["-rf", path]);
+      await git(["worktree", "prune"], mainRepo).catch(() => undefined);
+      await git(["branch", "-D", localBranch], mainRepo).catch(() => undefined);
+    } catch (e) {
+      console.warn("worktree prune failed", e);
+    }
   }
 }
 
