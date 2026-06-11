@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveHandler, usePrData } from "../lib/events";
 import { runCheckAnalysis, runFixFlow } from "../lib/flows";
 import { GitHubClient } from "../lib/github";
-import { useCiAnalysis } from "../lib/store";
+import { useCiAnalysis, useRepoStore } from "../lib/store";
 import { interpolate, prVars } from "../lib/template";
 import type { CheckInfo, PrSummary } from "../types";
 import { AgentLaunchForm } from "./AgentLaunchForm";
@@ -141,11 +141,16 @@ ${log.slice(-AGENT_LOG_TAIL)}
   };
 
   // auto-triage: every failed check gets a one-liner analysis (default model
-  // Composer 2.5 Fast), keyed by head sha so new pushes re-analyze
+  // Composer 2.5 Fast), keyed by head sha so new pushes re-analyze.
+  // Settings → CI: master toggle + per-check ignore list.
+  const autoAnalysis = ctx.config.ciAutoAnalysis !== false;
+  const ignored = ctx.config.ignoredChecks ?? [];
   const analyses = useCiAnalysis((s) => s.map);
   const analysisKey = (c: CheckInfo) => `${pr.number}:${c.name}:${pr.headSha}`;
   useEffect(() => {
+    if (!autoAnalysis) return;
     for (const c of failing) {
+      if (ignored.includes(c.name)) continue;
       const key = analysisKey(c);
       if (useCiAnalysis.getState().map[key]) continue;
       useCiAnalysis.getState().set(key, { status: "running", text: "" });
@@ -159,7 +164,13 @@ ${log.slice(-AGENT_LOG_TAIL)}
         );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pr.number, pr.headSha, failing.map((c) => c.name).join("|")]);
+  }, [pr.number, pr.headSha, autoAnalysis, ignored.join("|"), failing.map((c) => c.name).join("|")]);
+
+  const ignoreCheck = (name: string) => {
+    void useRepoStore
+      .getState()
+      .saveConfig({ ...ctx.config, ignoredChecks: [...new Set([...ignored, name])] });
+  };
 
   // teammate PRs: post the (already-read) analysis as a PR comment
   const [commented, setCommented] = useState<Record<string, "busy" | "sent" | string>>({});
@@ -265,6 +276,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
               )}
               {failed &&
                 (() => {
+                  if (ignored.includes(c.name)) return null;
                   const a = analyses[analysisKey(c)];
                   if (!a) return null;
                   const sent = commented[c.name];
@@ -305,6 +317,13 @@ ${log.slice(-AGENT_LOG_TAIL)}
                             {sent && sent !== "busy" && sent !== "sent" && (
                               <span style={{ color: "var(--red)" }}>{sent}</span>
                             )}
+                            <button
+                              className="link small"
+                              title="Never auto-analyze this check again (manage in Settings → CI)"
+                              onClick={() => ignoreCheck(c.name)}
+                            >
+                              ✕ ignore
+                            </button>
                           </span>
                         </>
                       ) : (

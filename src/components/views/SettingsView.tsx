@@ -12,6 +12,7 @@ const NAV_SECTIONS = [
   { id: "s-babysit", label: "My PRs · filters" },
   { id: "s-review", label: "Teammate · filters" },
   { id: "s-events", label: "Events" },
+  { id: "s-ci", label: "CI" },
   { id: "s-skills", label: "Skills" },
   { id: "s-defmodels", label: "Default models" },
   { id: "s-models", label: "Models" },
@@ -222,6 +223,46 @@ export function SettingsView() {
           skill's content when it exists.
         </p>
         <EventCatalogEditor config={config} update={update} />
+      </div>
+
+      <div className="settings-section" id="s-ci">
+        <h3>CI</h3>
+        <label className="switch" style={{ marginBottom: 14 }}>
+          <input
+            type="checkbox"
+            checked={config.ciAutoAnalysis !== false}
+            onChange={(e) => update({ ciAutoAnalysis: e.target.checked })}
+          />
+          Auto-analyze failed checks{" "}
+          <span className="subtle">
+            — a fast read-only agent summarizes each failure in one or two sentences
+          </span>
+        </label>
+        <label className="field">
+          <span>Ignored checks</span>
+          {(config.ignoredChecks ?? []).length === 0 ? (
+            <small>
+              None. Use <em>✕ ignore</em> on a failing check's analysis strip to mute it here.
+            </small>
+          ) : (
+            <>
+              {(config.ignoredChecks ?? []).map((name) => (
+                <div className="row" key={name} style={{ marginBottom: 4 }}>
+                  <code>{name}</code>
+                  <button
+                    className="link small"
+                    onClick={() =>
+                      update({ ignoredChecks: (config.ignoredChecks ?? []).filter((n) => n !== name) })
+                    }
+                  >
+                    remove
+                  </button>
+                </div>
+              ))}
+              <small>Ignored checks never trigger auto-analysis (status display is unaffected).</small>
+            </>
+          )}
+        </label>
       </div>
 
       <div className="settings-section" id="s-skills">

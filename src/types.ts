@@ -80,6 +80,10 @@ export interface RepoConfig {
   bugBotPatterns: string[];
   /** Approvals needed before pr_approved fires */
   requiredApprovals: number;
+  /** Auto-run the CI triage agent on failed checks */
+  ciAutoAnalysis: boolean;
+  /** Check names exempt from auto-analysis (managed in Settings → CI) */
+  ignoredChecks: string[];
 }
 
 // ---------------------------------------------------------------------------

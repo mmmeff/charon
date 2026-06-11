@@ -314,6 +314,8 @@ export function defaultRepoConfig(): RepoConfig {
     fixPolicy: DEFAULT_FIX_POLICY,
     babysitFilters: { ...DEFAULT_BABYSIT_FILTERS },
     reviewFilters: { ...DEFAULT_REVIEW_FILTERS },
+    ciAutoAnalysis: true,
+    ignoredChecks: [],
     events: {},
     skills: {
       review: ["thermonuclear-code-quality-review"],
