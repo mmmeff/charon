@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { eventDef, EVENT_CATALOG } from "./defaults";
 import { runAnalysisFlow, runFixFlow, runReviewFlow, type FlowContext, eventVars } from "./flows";
+import { notify } from "./notify";
 import { interpolate, truncate } from "./template";
 import { useRepoStore } from "./store";
 
@@ -262,14 +263,21 @@ const FIX_EVENTS = new Set([
 const REVIEW_EVENTS = new Set(["review_requested", "pr_updated_under_review", "draft_marked_ready"]);
 
 export async function dispatchEvent(ctx: FlowContext, ev: FiredEvent, pr: PrSummary): Promise<void> {
-  const handler = resolveHandler(ctx.config.events, ev.id);
-  if (!handler.enabled || !handler.prompt.trim()) return;
-
   const def = eventDef(ev.id);
   const label = def?.label ?? ev.id;
+  const handler = resolveHandler(ctx.config.events, ev.id);
+
+  // every occurrence is logged and surfaced natively, handled or not
+  await useRepoStore.getState().logEvent(ev);
+  void notify(
+    `${label} — ${ctx.repo}`,
+    `PR #${pr.number} ${pr.title}${handler.enabled ? "" : " (handler off)"}`
+  );
+
+  if (!handler.enabled || !handler.prompt.trim()) return;
+
   const vars = eventVars(ctx, pr, ev.vars);
   const prompt = interpolate(handler.prompt, vars);
-  await useRepoStore.getState().logEvent(ev);
 
   try {
     if (REVIEW_EVENTS.has(ev.id)) {

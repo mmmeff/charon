@@ -1,7 +1,16 @@
 import { native, type AgentStreamEvent } from "./tauri";
+import { notify } from "./notify";
 import { uid } from "./template";
 import { useAgentStore } from "./store";
 import type { AgentKind, AgentRun } from "../types";
+
+const agentNotif = (run: AgentRun, outcome: "started" | "finished" | "failed", extra = "") => {
+  const icon = outcome === "started" ? "▶" : outcome === "finished" ? "✓" : "✗";
+  void notify(
+    `${icon} Agent ${outcome}: ${run.relation}`,
+    `PR #${run.prNumber} ${run.prTitle} · ${run.repo}${extra}`
+  );
+};
 
 export interface StartAgentOptions {
   kind: AgentKind;
@@ -50,6 +59,7 @@ function handleStreamEvent(ev: AgentStreamEvent) {
       endedAt: Date.now(),
     });
     doneCallbacks.delete(ev.id);
+    agentNotif(run, "failed", " — could not start the Cursor agent");
     return;
   }
   if (ev.kind === "exit") {
@@ -65,6 +75,11 @@ function handleStreamEvent(ev: AgentStreamEvent) {
       endedAt: Date.now(),
       ...(ok ? {} : wasKilled ? {} : { error: `agent exited with code ${ev.code}` }),
     });
+    const elapsed = ` — ${Math.round((Date.now() - run.startedAt) / 1000)}s`;
+    if (ok) agentNotif(run, "finished", elapsed);
+    else if (!wasKilled) agentNotif(run, "failed", ` — exit code ${ev.code}`);
+    // killed-by-user stays silent: they did it themselves
+
     const cb = doneCallbacks.get(ev.id);
     doneCallbacks.delete(ev.id);
     if (cb && ok) {
@@ -74,6 +89,7 @@ function handleStreamEvent(ev: AgentStreamEvent) {
           status: "error",
           error: `post-processing failed: ${e instanceof Error ? e.message : String(e)}`,
         });
+        agentNotif(run, "failed", " — post-processing failed");
       });
     }
   }
@@ -169,6 +185,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
   };
   useAgentStore.getState().register(run);
   if (opts.onDone) doneCallbacks.set(id, opts.onDone);
+  agentNotif(run, "started");
 
   const args = ["--print", "--output-format", "stream-json", "--trust"];
   if (opts.mode === "ask" || opts.mode === "plan") {

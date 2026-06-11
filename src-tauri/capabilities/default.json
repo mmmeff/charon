@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capability for all PR Copilot windows",
   "windows": ["*"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "notification:default"]
 }

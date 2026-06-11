@@ -445,6 +445,7 @@ fn close_window(window: tauri::WebviewWindow) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .manage(AgentRegistry::default())
         .invoke_handler(tauri::generate_handler![
             spawn_agent,
