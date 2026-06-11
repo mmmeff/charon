@@ -6,7 +6,7 @@ import { runReviewFlow } from "../../lib/flows";
 import { interpolate, prVars } from "../../lib/template";
 import { useAgentStore, useRepoStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
-import { Badge, Spinner, timeAgo } from "../common";
+import { Badge, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { ModelPicker } from "../ModelPicker";
 import { InlineCommentEditor, ProposalCard } from "../ProposalCard";
@@ -20,7 +20,9 @@ import { useFlow } from "../RepoApp";
 export function ReviewView() {
   const queue = usePrData((s) => s.reviewQueue);
   const [selected, setSelected] = useState<number | null>(null);
-  const pr = queue.find((p) => p.number === selected) ?? queue[0] ?? null;
+  const [sort, setSort] = useState<SortKey>("updated");
+  const sorted = sortPrs(queue, sort);
+  const pr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;
 
   if (queue.length === 0) {
     return (
@@ -36,7 +38,13 @@ export function ReviewView() {
   return (
     <div className="main split">
       <div className="sidebar">
-        {queue.map((p) => (
+        <div className="row between" style={{ marginBottom: 8 }}>
+          <span className="subtle">
+            {queue.length} review{queue.length > 1 ? "s" : ""} waiting
+          </span>
+          <SortPicker value={sort} onChange={setSort} />
+        </div>
+        {sorted.map((p) => (
           <div
             key={p.number}
             className={`card selectable ${pr?.number === p.number ? "selected" : ""}`}
@@ -50,7 +58,9 @@ export function ReviewView() {
               <span>
                 +{p.additions} −{p.deletions}
               </span>
-              <span>{timeAgo(p.updatedAt)}</span>
+              <Badge color="gray" title={`updated ${p.updatedAt}`}>
+                {age(p.updatedAt)}
+              </Badge>
             </div>
           </div>
         ))}

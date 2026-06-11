@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Severity } from "../types";
+import type { PrSummary, Severity } from "../types";
 
 export function Badge({
   color,
@@ -55,10 +55,51 @@ export function Spinner() {
 }
 
 export function timeAgo(ts: number | string): string {
+  return `${age(ts)} ago`;
+}
+
+/** Compact age: "40s", "12m", "3h", "5d". */
+export function age(ts: number | string): string {
   const t = typeof ts === "string" ? Date.parse(ts) : ts;
   const sec = Math.max(0, (Date.now() - t) / 1000);
-  if (sec < 60) return `${Math.floor(sec)}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return `${Math.floor(sec / 86400)}d ago`;
+  if (sec < 60) return `${Math.floor(sec)}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h`;
+  return `${Math.floor(sec / 86400)}d`;
+}
+
+// ---------------------------------------------------------------------------
+// PR list sorting
+// ---------------------------------------------------------------------------
+
+export type SortKey = "updated" | "oldest" | "number" | "size";
+
+export function sortPrs(prs: PrSummary[], key: SortKey): PrSummary[] {
+  const list = [...prs];
+  switch (key) {
+    case "updated":
+      return list.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    case "oldest":
+      return list.sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt));
+    case "number":
+      return list.sort((a, b) => b.number - a.number);
+    case "size":
+      return list.sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions));
+  }
+}
+
+export function SortPicker({ value, onChange }: { value: SortKey; onChange: (k: SortKey) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as SortKey)}
+      title="Sort order"
+      style={{ fontSize: 12, padding: "3px 6px" }}
+    >
+      <option value="updated">recently updated</option>
+      <option value="oldest">least recently updated</option>
+      <option value="number">newest (PR #)</option>
+      <option value="size">largest diff</option>
+    </select>
+  );
 }

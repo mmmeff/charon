@@ -14,13 +14,14 @@ export function ModelPicker({
   const global = useGlobalConfig((s) => s.config);
   const repoModel = useRepoStore((s) => s.config.model);
   const models = global?.models ?? [];
+  const labels = global?.modelLabels ?? {};
   const def = repoModel || global?.defaultModel || "auto";
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} title="Model for this run">
-      <option value="">model: {def} (default)</option>
+      <option value="">model: {labels[def] ?? def} (default)</option>
       {models.map((m) => (
         <option key={m} value={m}>
-          {m}
+          {labels[m] ?? m}
         </option>
       ))}
     </select>

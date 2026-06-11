@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { refreshModels } from "../lib/agents";
 import { GitHubClient } from "../lib/github";
 import { RepoPoller, usePrData } from "../lib/events";
 import type { FlowContext } from "../lib/flows";
@@ -38,6 +39,17 @@ export function RepoApp({ repo }: { repo: string }) {
 
   useEffect(() => {
     if (global) void loadSkills(global.extraSkillDirs);
+  }, [global]);
+
+  // refresh the model list from the Cursor CLI once per window startup
+  const saveGlobal = useGlobalConfig((s) => s.save);
+  const modelsRefreshed = useRef(false);
+  useEffect(() => {
+    if (global && !modelsRefreshed.current) {
+      modelsRefreshed.current = true;
+      void refreshModels(global, saveGlobal);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [global]);
 
   const gh = useMemo(
@@ -89,7 +101,8 @@ export function RepoApp({ repo }: { repo: string }) {
       <div className="app">
         <div className="tabbar">
           <span className="title">
-            {repo.split("/")[1]} <span className="dim">{repo.split("/")[0]}/</span>
+            <span className="dim">{repo.split("/")[0]}/</span>
+            {repo.split("/")[1]}
           </span>
           {tabs.map((t) => (
             <button

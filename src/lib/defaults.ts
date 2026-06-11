@@ -320,7 +320,9 @@ export function defaultGlobalConfig(): GlobalConfig {
     insecureTls: false,
     login: "",
     cursorBinary: "cursor-agent",
-    models: ["auto", "gpt-5", "sonnet-4.5", "sonnet-4.5-thinking", "opus-4.1", "grok"],
+    // placeholder until `cursor-agent models` is queried on startup
+    models: ["auto"],
+    modelLabels: { auto: "Auto" },
     defaultModel: "auto",
     repos: [],
     extraSkillDirs: [],

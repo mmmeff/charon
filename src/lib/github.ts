@@ -242,6 +242,7 @@ export class GitHubClient {
       url: c.html_url ?? "",
       path: c.path,
       line: c.line ?? c.original_line ?? undefined,
+      side: c.side === "LEFT" ? "LEFT" : c.side === "RIGHT" ? "RIGHT" : undefined,
       inReplyTo: c.in_reply_to_id ?? undefined,
     };
   }

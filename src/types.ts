@@ -13,8 +13,10 @@ export interface GlobalConfig {
   login: string;
   /** Path or name of the cursor agent binary */
   cursorBinary: string;
-  /** Models available for runs (refreshed from `cursor-agent models`) */
+  /** Model ids available for runs (refreshed from `cursor-agent models` on startup) */
   models: string[];
+  /** Display labels keyed by model id */
+  modelLabels: Record<string, string>;
   defaultModel: string;
   /** Repos the user has added, "owner/name" */
   repos: string[];
@@ -142,6 +144,7 @@ export interface CommentInfo {
   url: string;
   path?: string;
   line?: number;
+  side?: "LEFT" | "RIGHT";
   inReplyTo?: number;
 }
 

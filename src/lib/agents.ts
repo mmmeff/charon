@@ -233,15 +233,44 @@ export function cleanResultText(text: string): string {
     .trim();
 }
 
-export async function listCursorModels(binary: string): Promise<string[]> {
+export interface CursorModel {
+  id: string;
+  label: string;
+}
+
+/** Parse `cursor-agent models` output: one `id - Display Name` per line. */
+export async function listCursorModels(binary: string): Promise<CursorModel[]> {
   try {
     const res = await native.runExec(binary, ["models"]);
     if (res.code !== 0) return [];
-    return res.stdout
-      .split("\n")
-      .map((l) => l.replace(/^[\s*•-]+/, "").trim())
-      .filter((l) => l && !/^(available|models|name|---|\w+:)/i.test(l) && !l.includes(" "));
+    const out: CursorModel[] = [];
+    for (const line of res.stdout.split("\n")) {
+      const m = /^([\w.\/:-]+)\s+-\s+(.+)$/.exec(line.trim());
+      if (m) out.push({ id: m[1], label: m[2].trim() });
+    }
+    return out;
   } catch {
     return [];
+  }
+}
+
+/**
+ * Refresh the available-model list from the Cursor CLI (called on startup of
+ * each window so the picker is never stale).
+ */
+export async function refreshModels(
+  global: import("../types").GlobalConfig,
+  save: (cfg: import("../types").GlobalConfig) => Promise<void>
+): Promise<void> {
+  const found = await listCursorModels(global.cursorBinary);
+  if (found.length === 0) return;
+  const models = found.map((f) => f.id);
+  const modelLabels = Object.fromEntries(found.map((f) => [f.id, f.label]));
+  const changed =
+    JSON.stringify(models) !== JSON.stringify(global.models) ||
+    JSON.stringify(modelLabels) !== JSON.stringify(global.modelLabels);
+  if (changed) {
+    const defaultModel = models.includes(global.defaultModel) ? global.defaultModel : "auto";
+    await save({ ...global, models, modelLabels, defaultModel });
   }
 }

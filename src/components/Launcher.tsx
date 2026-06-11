@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listCursorModels } from "../lib/agents";
+import { listCursorModels, refreshModels } from "../lib/agents";
 import { defaultGlobalConfig } from "../lib/defaults";
 import { GitHubClient } from "../lib/github";
 import { native } from "../lib/tauri";
@@ -41,11 +41,16 @@ function Onboarding({
       const gh = new GitHubClient({ githubUrl: url, token, insecureTls: insecure, login: "" });
       const login = await gh.connect();
       // verify the agent binary while we're at it (non-fatal)
-      let models = defaultGlobalConfig().models;
+      const defaults = defaultGlobalConfig();
+      let models = defaults.models;
+      let modelLabels = defaults.modelLabels;
       const discovered = await listCursorModels(binary);
-      if (discovered.length > 0) models = discovered;
+      if (discovered.length > 0) {
+        models = discovered.map((m) => m.id);
+        modelLabels = Object.fromEntries(discovered.map((m) => [m.id, m.label]));
+      }
       const cfg: GlobalConfig = {
-        ...defaultGlobalConfig(),
+        ...defaults,
         ...(existing ?? {}),
         githubUrl: url.replace(/\/+$/, ""),
         token,
@@ -53,6 +58,7 @@ function Onboarding({
         login,
         cursorBinary: binary,
         models,
+        modelLabels,
         defaultModel: existing?.defaultModel || "auto",
       };
       await onDone(cfg);
@@ -125,6 +131,12 @@ function RepoList({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const gh = new GitHubClient(config);
+
+  // keep the model list current with the Cursor CLI
+  useEffect(() => {
+    void refreshModels(config, save);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!query.includes("/") || query.length < 3) {

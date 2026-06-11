@@ -349,7 +349,7 @@ export class RepoPoller {
         (p) => p.author === me && notExcluded(p, config.babysitFilters.excludeLabels)
       );
       const myDrafts = mine.filter((p) => p.draft);
-      const myOpen = mine.filter((p) => !p.draft || config.babysitFilters.processDrafts);
+      const myNonDraft = mine.filter((p) => !p.draft);
       const teammate = openPulls
         .filter((p) => p.author !== me && requested.has(p.number))
         .filter((p) => notExcluded(p, config.reviewFilters.excludeLabels))
@@ -360,7 +360,8 @@ export class RepoPoller {
       const stillOpen = new Set(openPulls.map((p) => p.number));
       const vanished = Object.values(store.snapshots).filter((s) => !stillOpen.has(s.pr.number));
 
-      const watchMine = myOpen.slice(0, MAX_TRACKED_PER_CLASS);
+      const watchMine = myNonDraft.slice(0, MAX_TRACKED_PER_CLASS);
+      const watchDrafts = myDrafts.slice(0, MAX_TRACKED_PER_CLASS);
       const watchTeam = teammate.slice(0, MAX_TRACKED_PER_CLASS);
 
       const checks: Record<number, CheckInfo[]> = {};
@@ -368,11 +369,19 @@ export class RepoPoller {
       const reviews: Record<number, ReviewInfo[]> = {};
       const newSnapshots: Record<number, PrSnapshot> = {};
       const fired: { ev: FiredEvent; pr: PrSummary }[] = [];
+      // detail payloads carry diff stats + mergeable_state; the UI lists are
+      // built from these, not the shallow list responses
+      const detailed: Record<number, PrSummary> = {};
 
-      const pollOne = async (shallow: PrSummary, prClass: "mine" | "teammate") => {
+      const pollOne = async (
+        shallow: PrSummary,
+        prClass: "mine" | "teammate",
+        fireEvents: boolean
+      ) => {
         // detail fetch fills mergeable_state (computed lazily by GitHub)
         const detail = await gh.getPull(repo, shallow.number);
         detail.requestedFromMe = shallow.requestedFromMe || requested.has(shallow.number);
+        detailed[detail.number] = detail;
         const [ch, cm, rv] = await Promise.all([
           prClass === "mine" ? gh.listChecks(repo, detail.headSha) : Promise.resolve([]),
           gh.listComments(repo, shallow.number),
@@ -383,7 +392,7 @@ export class RepoPoller {
         reviews[detail.number] = rv;
         const pollData: PrPollData = { pr: detail, checks: ch, comments: cm, reviews: rv };
         const prevSnap = store.snapshots[detail.number];
-        if (!isFirstRun) {
+        if (!isFirstRun && fireEvents) {
           for (const ev of diffSnapshots(prevSnap, pollData, {
             repo,
             login: me,
@@ -401,14 +410,14 @@ export class RepoPoller {
         );
       };
 
-      // Drafts are tracked (shown in Drafts view) but only generate events if
-      // the babysit filter opts drafts in.
-      const mineToPoll = config.babysitFilters.processDrafts
-        ? watchMine
-        : watchMine.filter((p) => !p.draft);
+      // Drafts are always tracked (Drafts view needs diff stats and comments)
+      // but only generate events when the babysit filter opts drafts in.
       await Promise.all([
-        ...mineToPoll.map((p) => pollOne(p, "mine").catch((e) => console.error(e))),
-        ...watchTeam.map((p) => pollOne(p, "teammate").catch((e) => console.error(e))),
+        ...watchMine.map((p) => pollOne(p, "mine", true).catch((e) => console.error(e))),
+        ...watchDrafts.map((p) =>
+          pollOne(p, "mine", config.babysitFilters.processDrafts).catch((e) => console.error(e))
+        ),
+        ...watchTeam.map((p) => pollOne(p, "teammate", true).catch((e) => console.error(e))),
       ]);
 
       // closed/merged transitions for vanished PRs
@@ -435,10 +444,11 @@ export class RepoPoller {
       }
 
       await store.saveSnapshots(newSnapshots);
+      const enrich = (p: PrSummary) => detailed[p.number] ?? p;
       data.patch({
-        myDrafts,
-        myOpen: myOpen.filter((p) => !p.draft),
-        reviewQueue: watchTeam,
+        myDrafts: myDrafts.map(enrich),
+        myOpen: myNonDraft.map(enrich),
+        reviewQueue: watchTeam.map(enrich),
         checks,
         comments,
         reviews,

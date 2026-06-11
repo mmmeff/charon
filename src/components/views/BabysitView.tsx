@@ -1,161 +1,118 @@
 import { useState } from "react";
 import { eventDef } from "../../lib/defaults";
-import { resolveHandler, usePrData } from "../../lib/events";
-import { runFixFlow } from "../../lib/flows";
-import { interpolate, prVars } from "../../lib/template";
-import { useAgentStore, useRepoStore } from "../../lib/store";
-import type { PrSummary } from "../../types";
-import { Badge, CiBadge, MergeBadge, Spinner, timeAgo } from "../common";
+import { usePrData } from "../../lib/events";
+import { useRepoStore } from "../../lib/store";
+import { Badge, CiBadge, MergeBadge, SortPicker, age, sortPrs, timeAgo, type SortKey } from "../common";
 import { ProposalCard } from "../ProposalCard";
-import { useFlow } from "../RepoApp";
+import { PrWorkspace } from "../PrWorkspace";
 
 /**
  * Babysit: the user's open (non-draft) PRs under active watch. The event
- * system reacts automatically; this view shows state, pending proposals, and
- * manual triggers for the same flows.
+ * system reacts automatically; selecting a PR opens the same workspace as the
+ * Drafts view — diff with line-scoped Ask/Change runs, existing review
+ * comments anchored in place, pending proposals, and manual fix triggers.
  */
 export function BabysitView() {
   const myOpen = usePrData((s) => s.myOpen);
+  const checks = usePrData((s) => s.checks);
   const proposals = useRepoStore((s) => s.proposals);
   const eventLog = useRepoStore((s) => s.eventLog);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [sort, setSort] = useState<SortKey>("updated");
+  const sorted = sortPrs(myOpen, sort);
+  const pr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;
 
   const orphanProposals = proposals.filter(
-    (p) => p.status === "pending" && !myOpen.some((pr) => pr.number === p.prNumber)
+    (p) => p.status === "pending" && !myOpen.some((x) => x.number === p.prNumber)
   );
 
-  return (
-    <div className="main">
-      {myOpen.length === 0 && (
+  if (myOpen.length === 0) {
+    return (
+      <div className="main">
         <div className="empty">
           <h3>No open PRs to babysit</h3>
           <p>Your open (non-draft) pull requests are watched here: CI, conflicts, and incoming feedback.</p>
         </div>
-      )}
-      {myOpen.map((pr) => (
-        <BabysitCard key={pr.number} pr={pr} />
-      ))}
-
-      {orphanProposals.length > 0 && (
-        <>
-          <hr />
-          <h3>Other pending proposals</h3>
-          {orphanProposals.map((p) => (
-            <ProposalCard key={p.id} proposal={p} />
-          ))}
-        </>
-      )}
-
-      {eventLog.length > 0 && (
-        <>
-          <hr />
-          <h3>Recent events</h3>
-          {eventLog.slice(0, 30).map((e, i) => (
-            <div key={i} className="row" style={{ padding: "3px 0", fontSize: 12.5 }}>
-              <span className="subtle">{timeAgo(e.firedAt)}</span>
-              <Badge color={e.prClass === "mine" ? "blue" : "purple"}>
-                {eventDef(e.id)?.label ?? e.id}
-              </Badge>
-              <span>
-                #{e.prNumber} {e.prTitle}
-              </span>
-            </div>
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
-
-function BabysitCard({ pr }: { pr: PrSummary }) {
-  const { ctx } = useFlow();
-  const checks = usePrData((s) => s.checks[pr.number] ?? []);
-  const comments = usePrData((s) => s.comments[pr.number] ?? []);
-  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
-  const proposals = useRepoStore((s) => s.proposals);
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
-  const [error, setError] = useState("");
-
-  const prProposals = proposals.filter((p) => p.prNumber === pr.number && p.status !== "dismissed");
-  const activeRuns = order
-    .map((id) => runs[id])
-    .filter((r) => r && r.prNumber === pr.number && (r.status === "running" || r.status === "starting"));
-
-  const failing = checks.filter((c) => c.conclusion === "failure" || c.conclusion === "error");
-  const approvals = new Set(
-    reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)
-  ).size;
-
-  const manualFix = async (eventId: string, kind: "ci_fix" | "conflict_fix") => {
-    setError("");
-    try {
-      const handler = resolveHandler(ctx.config.events, eventId);
-      const extra: Record<string, string> =
-        kind === "ci_fix" && failing.length > 0
-          ? { "check-name": failing[0].name, "check-url": failing[0].url }
-          : {};
-      const prompt = interpolate(handler.prompt, { ...prVars(pr), repo: ctx.repo, ...extra });
-      await runFixFlow(ctx, pr, prompt, eventDef(eventId)?.label ?? eventId, kind);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
+        {orphanProposals.length > 0 && (
+          <>
+            <h3>Pending proposals</h3>
+            {orphanProposals.map((p) => (
+              <ProposalCard key={p.id} proposal={p} />
+            ))}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="card">
-      <div className="row between">
-        <h4>
-          #{pr.number}{" "}
-          <a href={pr.url} target="_blank" rel="noreferrer">
-            {pr.title}
-          </a>
-        </h4>
-        <span className="subtle">updated {timeAgo(pr.updatedAt)}</span>
-      </div>
-      <div className="row" style={{ margin: "6px 0" }}>
-        <CiBadge checks={checks} />
-        <MergeBadge state={pr.mergeableState} />
-        <Badge color={approvals >= ctx.config.requiredApprovals ? "green" : "gray"}>
-          {approvals}/{ctx.config.requiredApprovals} approvals
-        </Badge>
-        <Badge color="gray">{comments.length} comments</Badge>
-        <span className="subtle">
-          {pr.headRef} → {pr.baseRef}
-        </span>
-      </div>
-
-      {failing.length > 0 && (
-        <div className="subtle" style={{ marginBottom: 6 }}>
-          failing: {failing.map((c) => c.name).join(", ")}
-        </div>
-      )}
-
-      <div className="row">
-        {failing.length > 0 && (
-          <button className="small" onClick={() => void manualFix("ci_failed", "ci_fix")}>
-            Fix CI now
-          </button>
-        )}
-        {pr.mergeableState === "dirty" && (
-          <button className="small" onClick={() => void manualFix("merge_conflict_detected", "conflict_fix")}>
-            Resolve conflicts now
-          </button>
-        )}
-        {activeRuns.length > 0 && (
+    <div className="main split">
+      <div className="sidebar">
+        <div className="row between" style={{ marginBottom: 8 }}>
           <span className="subtle">
-            <Spinner /> {activeRuns.length} agent{activeRuns.length > 1 ? "s" : ""} working — see Activity Feed
+            {myOpen.length} open PR{myOpen.length > 1 ? "s" : ""}
           </span>
-        )}
-        {error && <span style={{ color: "var(--red)" }}>{error}</span>}
-      </div>
-
-      {prProposals.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          {prProposals.map((p) => (
-            <ProposalCard key={p.id} proposal={p} />
-          ))}
+          <SortPicker value={sort} onChange={setSort} />
         </div>
-      )}
+        {sorted.map((p) => {
+          const pending = proposals.filter(
+            (x) => x.prNumber === p.number && x.status === "pending"
+          ).length;
+          return (
+            <div
+              key={p.number}
+              className={`card selectable ${pr?.number === p.number ? "selected" : ""}`}
+              onClick={() => setSelected(p.number)}
+            >
+              <h4>
+                #{p.number} {p.title}
+              </h4>
+              <div className="meta">
+                <CiBadge checks={checks[p.number] ?? []} />
+                <MergeBadge state={p.mergeableState} />
+                <span>
+                  +{p.additions} −{p.deletions}
+                </span>
+                <Badge color="gray" title={`updated ${p.updatedAt}`}>
+                  {age(p.updatedAt)}
+                </Badge>
+                {pending > 0 && <Badge color="yellow">{pending} pending</Badge>}
+              </div>
+            </div>
+          );
+        })}
+
+        {eventLog.length > 0 && (
+          <>
+            <hr />
+            <div className="subtle" style={{ marginBottom: 6 }}>
+              Recent events
+            </div>
+            {eventLog.slice(0, 20).map((e, i) => (
+              <div key={i} style={{ padding: "3px 0", fontSize: 12 }}>
+                <span className="subtle">{timeAgo(e.firedAt)} · </span>
+                <Badge color={e.prClass === "mine" ? "blue" : "purple"}>
+                  {eventDef(e.id)?.label ?? e.id}
+                </Badge>{" "}
+                #{e.prNumber}
+              </div>
+            ))}
+          </>
+        )}
+
+        {orphanProposals.length > 0 && (
+          <>
+            <hr />
+            <div className="subtle" style={{ marginBottom: 6 }}>
+              Proposals for closed/other PRs
+            </div>
+            {orphanProposals.map((p) => (
+              <ProposalCard key={p.id} proposal={p} />
+            ))}
+          </>
+        )}
+      </div>
+      <div className="content">{pr && <PrWorkspace key={pr.number} pr={pr} variant="babysit" />}</div>
     </div>
   );
 }
