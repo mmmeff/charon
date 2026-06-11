@@ -73,6 +73,21 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
     }
   };
 
+  const convertToDraft = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await ctx.gh.convertToDraft(ctx.repo, pr.number);
+      void notify("Converted to draft", `#${pr.number} ${pr.title}`);
+      poller.refresh(); // re-buckets the PR from Open into Drafts
+      dismiss();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleAutoMerge = async () => {
     setBusy(true);
     setError("");
@@ -118,6 +133,16 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
             {busy && confirming === null ? <Spinner /> : null}{" "}
             {pr.autoMerge ? "Disable automerge" : "Enable automerge"}
           </button>
+          {!pr.draft && (
+            <button
+              className="overflow-item"
+              disabled={busy}
+              title="Send back to draft — review requests pause until it's marked ready again"
+              onClick={() => void convertToDraft()}
+            >
+              Convert to draft
+            </button>
+          )}
           {confirming === "merge" ? (
             <div className="row" style={{ padding: "2px 4px", gap: 4 }}>
               <button className="small primary" disabled={busy} onClick={() => void mergeNow()}>

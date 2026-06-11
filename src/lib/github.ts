@@ -659,6 +659,15 @@ export class GitHubClient {
     );
   }
 
+  /** Send an open PR back to draft — also GraphQL-only. */
+  async convertToDraft(repo: string, number: number): Promise<void> {
+    const detail = await this.json<{ node_id: string }>("GET", `/repos/${repo}/pulls/${number}`);
+    await this.graphql(
+      `mutation($id:ID!){ convertPullRequestToDraft(input:{pullRequestId:$id}){ pullRequest{ isDraft } } }`,
+      { id: detail.node_id }
+    );
+  }
+
   /** Edit/delete the user's own comments. `kind` matches CommentInfo.kind. */
   async updateComment(
     repo: string,
