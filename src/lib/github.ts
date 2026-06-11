@@ -77,11 +77,11 @@ export class GitHubClient {
     return resp.body ? (JSON.parse(resp.body) as T) : (undefined as T);
   }
 
-  /** GET with Link-header pagination (max ~500 items). */
-  private async paged<T>(path: string, accept?: string): Promise<T[]> {
+  /** GET with Link-header pagination. Default cap ~500 items. */
+  private async paged<T>(path: string, accept?: string, maxPages = 5): Promise<T[]> {
     const out: T[] = [];
     let url: string | null = path + (path.includes("?") ? "&" : "?") + "per_page=100";
-    for (let i = 0; i < 5 && url; i++) {
+    for (let i = 0; i < maxPages && url; i++) {
       const resp = await this.raw("GET", url, { accept });
       out.push(...(JSON.parse(resp.body) as T[]));
       const link = resp.headers.find(([k]) => k.toLowerCase() === "link")?.[1] ?? "";
@@ -528,9 +528,9 @@ export class GitHubClient {
     return res.map((p) => String(p.title));
   }
 
-  /** Repo collaborators — the reviewer candidate pool. */
+  /** Repo collaborators — the reviewer candidate pool. Fully paginated. */
   async listCollaborators(repo: string): Promise<string[]> {
-    const res = await this.json<any[]>("GET", `/repos/${repo}/collaborators?per_page=100`);
+    const res = await this.paged<any>(`/repos/${repo}/collaborators`, undefined, 30);
     return res.map((u) => String(u.login));
   }
 
@@ -538,7 +538,7 @@ export class GitHubClient {
   async listOrgTeams(repo: string): Promise<{ slug: string; name: string }[]> {
     const org = repo.split("/")[0];
     try {
-      const res = await this.json<any[]>("GET", `/orgs/${org}/teams?per_page=100`);
+      const res = await this.paged<any>(`/orgs/${org}/teams`, undefined, 30);
       return res.map((t) => ({ slug: String(t.slug), name: String(t.name) }));
     } catch {
       return [];
