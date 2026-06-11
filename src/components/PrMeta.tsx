@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { usePrData } from "../lib/events";
-import { notify } from "../lib/notify";
 import { runAddressComment, runDescriptionDraft, runTitleDraft } from "../lib/flows";
 import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
 import { AgentLaunchForm } from "./AgentLaunchForm";
-import { BranchOps } from "./BranchOps";
+import { ControlCenter } from "./ControlCenter";
 import { age } from "../lib/ui";
 import { Badge, Spinner } from "./common";
 import { IconDrafts, IconExpand } from "./icons";
@@ -49,78 +48,6 @@ function AddressWithAgent({
         />
       )}
     </>
-  );
-}
-
-/**
- * Approve a teammate's PR, with an optional review comment — a direct
- * user-authored action (the user clicks, the user's words), no approval
- * gate. Hidden on the user's own PRs: GitHub forbids self-approval.
- */
-function ApprovePrControl({ pr }: { pr: PrSummary }) {
-  const { ctx, poller } = useFlow();
-  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
-  const [open, setOpen] = useState(false);
-  const [comment, setComment] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  if (pr.author === ctx.gh.login) return null;
-  const approvedByMe = reviews.some((r) => r.author === ctx.gh.login && r.state === "APPROVED");
-
-  const approve = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      await ctx.gh.submitReview(ctx.repo, pr.number, {
-        body: comment.trim(),
-        event: "APPROVE",
-        comments: [],
-      });
-      void notify("PR approved", `#${pr.number} ${pr.title}`);
-      setOpen(false);
-      setComment("");
-      poller.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="approve-box">
-      {!open ? (
-        <div className="row">
-          <button className={`small ${approvedByMe ? "" : "primary"}`} onClick={() => setOpen(true)}>
-            ✓ {approvedByMe ? "Re-approve" : "Approve PR"}
-          </button>
-          {approvedByMe && <Badge color="green">you approved</Badge>}
-        </div>
-      ) : (
-        <>
-          <textarea
-            rows={2}
-            autoFocus
-            placeholder="Optional approval comment…"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !busy) void approve();
-              if (e.key === "Escape") setOpen(false);
-            }}
-          />
-          <div className="row" style={{ marginTop: 6 }}>
-            <button className="small primary" disabled={busy} onClick={() => void approve()}>
-              {busy ? <Spinner /> : "✓"} Approve{comment.trim() ? " with comment" : ""}
-            </button>
-            <button className="small" onClick={() => setOpen(false)}>
-              Cancel
-            </button>
-            {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
-          </div>
-        </>
-      )}
-    </div>
   );
 }
 
@@ -515,8 +442,7 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
     <div className="ws-activity" style={{ width }}>
       {handle}
       <div className="ws-activity-inner">
-      <BranchOps pr={pr} />
-      <ApprovePrControl pr={pr} />
+      <ControlCenter pr={pr} />
       <div className="subtle" style={{ marginBottom: 8, fontWeight: 600 }}>
         Activity ({count})
       </div>
