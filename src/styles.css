@@ -50,6 +50,9 @@
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
 
+  /* shared cap for scrolling panels (description, checks list) */
+  --capped-panel: calc(14 * 1.55em);
+
   /* textures */
   --dotgrid: radial-gradient(rgba(233, 228, 212, 0.045) 1px, transparent 1px);
   --hatch-orange: repeating-linear-gradient(
@@ -491,8 +494,8 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
   font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--fg-muted);
 }
+.checks-list { max-height: var(--capped-panel); overflow-y: auto; margin-top: 8px; }
 .check-row { border-top: 1px solid var(--border-subtle); padding: 6px 0; }
-.check-row:first-of-type { margin-top: 8px; }
 .check-glyph { font-size: 13px; width: 14px; text-align: center; flex-shrink: 0; }
 .check-name { font-size: 12.5px; font-weight: 600; }
 .check-output { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30%; }
@@ -821,7 +824,7 @@ a.act-event-detail:hover { color: var(--orange); }
 }
 .suggestion-block code { background: none; border: none; padding: 0; }
 
-.pr-description { max-height: calc(20 * 1.55em); overflow-y: auto; }
+.pr-description { max-height: var(--capped-panel); overflow-y: auto; }
 .pr-description-wrap { position: relative; }
 .desc-expand {
   position: absolute; top: 6px; right: 6px; z-index: 5;

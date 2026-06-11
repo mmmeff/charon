@@ -109,8 +109,9 @@ ${log.slice(-AGENT_LOG_TAIL)}
         </span>
       </div>
 
-      {expanded &&
-        checks.map((c) => {
+      {expanded && (
+      <div className="checks-list">
+        {checks.map((c) => {
           const g = glyphFor(c);
           const log = logs[c.name];
           const failed = c.conclusion === "failure" || c.conclusion === "error";
@@ -161,6 +162,8 @@ ${log.slice(-AGENT_LOG_TAIL)}
             </div>
           );
         })}
+      </div>
+      )}
     </div>
   );
 }

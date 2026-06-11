@@ -211,6 +211,8 @@ interface AgentState {
   appendResultText(id: string, text: string): void;
   /** restore persisted history (app start) — keeps newest-first order */
   hydrate(history: AgentRun[]): void;
+  /** wipe finished runs; active ones stay (persistence follows via subscribe) */
+  clearHistory(): void;
 }
 
 export const useAgentStore = create<AgentState>((set) => ({
@@ -268,6 +270,18 @@ export const useAgentStore = create<AgentState>((set) => ({
       return {
         runs: { ...s.runs, ...Object.fromEntries(restored.map((r) => [r.id, r])) },
         order: [...s.order, ...restored.map((r) => r.id)],
+      };
+    });
+  },
+  clearHistory() {
+    set((s) => {
+      const keep = s.order.filter((id) => {
+        const r = s.runs[id];
+        return r && (r.status === "running" || r.status === "starting");
+      });
+      return {
+        order: keep,
+        runs: Object.fromEntries(keep.map((id) => [id, s.runs[id]])),
       };
     });
   },

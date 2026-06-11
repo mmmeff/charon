@@ -9,7 +9,9 @@ type Filter = "all" | "active" | "done" | "failed";
 export function ActivityView() {
   const runs = useAgentStore((s) => s.runs);
   const order = useAgentStore((s) => s.order);
+  const clearHistory = useAgentStore((s) => s.clearHistory);
   const [filter, setFilter] = useState<Filter>("all");
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const all = order.map((id) => runs[id]).filter(Boolean);
   const filtered = all.filter((r) => {
@@ -19,6 +21,7 @@ export function ActivityView() {
     return true;
   });
   const activeCount = all.filter((r) => r.status === "running" || r.status === "starting").length;
+  const finishedCount = all.length - activeCount;
 
   return (
     <div className="main">
@@ -29,6 +32,32 @@ export function ActivityView() {
             {f === "active" && activeCount > 0 ? ` (${activeCount})` : ""}
           </button>
         ))}
+        <span style={{ flex: 1 }} />
+        {finishedCount > 0 &&
+          (confirmClear ? (
+            <>
+              <button
+                className="small danger"
+                onClick={() => {
+                  clearHistory();
+                  setConfirmClear(false);
+                }}
+              >
+                Clear {finishedCount} finished run{finishedCount > 1 ? "s" : ""}
+              </button>
+              <button className="small" onClick={() => setConfirmClear(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              className="small"
+              title="Remove finished runs from the feed — active agents stay"
+              onClick={() => setConfirmClear(true)}
+            >
+              Clear history
+            </button>
+          ))}
       </div>
       {filtered.length === 0 && (
         <EmptyState title={`All units idle${filter !== "all" ? ` (${filter})` : ""}`}>
