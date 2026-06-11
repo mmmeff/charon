@@ -215,7 +215,12 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
       {/* ── drive agents: ask / change / review + their output ── */}
       <Section label="Console">
-        <Composer pr={pr} modes={["ask", "edit", "review"]} reviewKind="self" />
+        <Composer
+          pr={pr}
+          // drafts lead with Review (the pre-flight ritual); open PRs lead with Ask
+          modes={variant === "draft" ? ["review", "edit", "ask"] : ["ask", "edit", "review"]}
+          reviewKind="self"
+        />
         <FindingsStrip pr={pr} />
         <RunResults pr={pr} onReloadDiff={() => void loadDiff()} />
       </Section>
