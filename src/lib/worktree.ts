@@ -1,4 +1,5 @@
 import { native } from "./tauri";
+import { notify } from "./notify";
 import { uid } from "./template";
 import type { GitHubClient } from "./github";
 import type { PrSummary } from "../types";
@@ -25,20 +26,41 @@ const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_.-]/g, "-");
  * set (must already be a clone); otherwise maintains an app-managed bare-ish
  * clone under appData/clones.
  */
+/**
+ * Is `path` a git repository? Tolerates the directory not existing at all —
+ * spawning git with a missing cwd fails at the OS level (ENOENT), which must
+ * read as "no repo here yet", not as an error.
+ */
+async function isGitRepo(path: string): Promise<boolean> {
+  try {
+    const r = await native.runGit(["rev-parse", "--git-dir"], path);
+    return r.code === 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureClone(
   gh: GitHubClient,
   repo: string,
   configuredPath: string
 ): Promise<string> {
   if (configuredPath.trim()) {
-    await git(["rev-parse", "--git-dir"], configuredPath.trim());
-    return configuredPath.trim();
+    const p = configuredPath.trim();
+    if (!(await isGitRepo(p))) {
+      throw new Error(
+        `Configured clone path is not a git repository: ${p} — fix it in Settings, or clear it to let the app manage its own clone.`
+      );
+    }
+    return p;
   }
   const dataDir = await native.appDataDir();
   const clonePath = `${dataDir}/clones/${sanitize(repo)}`;
-  const probe = await native.runGit(["rev-parse", "--git-dir"], clonePath);
-  if (probe.code !== 0) {
-    await git(["clone", "--no-checkout", gh.authedCloneUrl(repo), clonePath]);
+  if (!(await isGitRepo(clonePath))) {
+    // first use: create the managed clone. Blobless partial clone keeps this
+    // fast even on huge repos — worktree checkouts fetch blobs on demand.
+    void notify("Preparing local clone", `${repo} — first agent run sets up a working copy`);
+    await git(["clone", "--filter=blob:none", "--no-checkout", gh.authedCloneUrl(repo), clonePath]);
   } else {
     // keep the remote URL fresh in case the token rotated
     await git(["remote", "set-url", "origin", gh.authedCloneUrl(repo)], clonePath);
