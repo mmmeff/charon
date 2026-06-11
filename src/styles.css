@@ -1,7 +1,7 @@
 /* ===========================================================================
-   SWITCHYARD — design system
-   Neo-americana industrial: warm-black charcoal, signal orange, acid green,
-   bone white. Mono-first labels, tracked uppercase, dot-matrix texture,
+   CHARON — design system
+   Industrial underworld: black-river charcoal, ember orange, ghost-light
+   green, bone white. Mono-first labels, tracked uppercase, dot-matrix texture,
    hatched accents, bracket-cornered spec cards. Dense, flat, square.
    ========================================================================= */
 
@@ -715,7 +715,7 @@ input[type="checkbox"] { accent-color: var(--orange); }
   font-family: var(--sans); font-weight: 800; font-size: 30px; letter-spacing: 0.01em;
   margin: 0;
 }
-.launcher h1::before { content: "▙ "; color: var(--orange); }
+.launcher h1::before { content: "◉ "; color: var(--orange); }
 .launcher .sub {
   color: var(--fg-muted); margin: 4px 0 0;
   font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;

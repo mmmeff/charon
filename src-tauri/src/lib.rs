@@ -432,7 +432,7 @@ fn open_repo_window(app: tauri::AppHandle, repo: String) -> Result<(), String> {
         .unwrap_or((1380.0, 900.0));
     let url = format!("index.html?repo={}", urlencoding::encode(&repo));
     tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
-        .title(format!("Switchyard — {repo}"))
+        .title(format!("Charon — {repo}"))
         .inner_size(w, h)
         .min_inner_size(900.0, 600.0)
         .build()
@@ -454,7 +454,7 @@ fn open_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
         "launcher",
         tauri::WebviewUrl::App("index.html?picker=1".into()),
     )
-    .title("Switchyard")
+    .title("Charon")
     .inner_size(760.0, 680.0)
     .min_inner_size(560.0, 480.0)
     .build()

@@ -75,8 +75,8 @@ function Onboarding({
       <div className="hero">
         <AsciiField height={120} opacity={0.45} />
         <div className="hero-text">
-          <h1>SWITCHYARD</h1>
-          <div className="sub">PR operations terminal</div>
+          <h1>CHARON</h1>
+          <div className="sub">the ferryman for your pull requests</div>
         </div>
       </div>
       <p className="sub2">
@@ -193,8 +193,8 @@ function RepoList({
       <div className="hero">
         <AsciiField height={120} opacity={0.45} />
         <div className="hero-text">
-          <h1>SWITCHYARD</h1>
-          <div className="sub">select facility — each repo runs in its own window</div>
+          <h1>CHARON</h1>
+          <div className="sub">select a crossing — each repo runs in its own window</div>
         </div>
       </div>
       <div className="row between" style={{ marginBottom: 16 }}>

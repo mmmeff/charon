@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/hero.svg" alt="SWITCHYARD — the rail yard for your pull requests" width="100%"/>
+  <img src="docs/hero.svg" alt="Charon — the ferryman for your pull requests" width="100%"/>
 </p>
 
 <p align="center">
@@ -10,28 +10,28 @@
   <img src="https://img.shields.io/badge/agents-Cursor%20CLI-ffb000?style=flat-square&labelColor=15140f" alt="Cursor CLI"/>
 </p>
 
-**Switchyard is a desktop control room for your pull requests.** It watches every PR you own and
-every review you owe, fires AI agents at the busywork — failing CI, merge conflicts, bug-bot
-findings, review requests — and queues up their output as **proposals you approve before anything
-touches GitHub**. You stay the operator. The agents stay in the yard.
+**Charon is a desktop control room for your pull requests.** It watches every PR you own and every
+review you owe, fires AI agents at the busywork — failing CI, merge conflicts, bug-bot findings,
+review requests — and queues up their output as **proposals you approve before anything touches
+GitHub**. Every branch needs passage to main; Charon works the crossing. You set the fare.
 
 <p align="center">
-  <img src="docs/tour.gif" alt="Switchyard tour: babysitting PRs, reviewing a teammate's diff, watching agents stream" width="100%"/>
+  <img src="docs/tour.gif" alt="Charon tour: babysitting PRs, reviewing a teammate's diff, watching agents stream" width="100%"/>
 </p>
 
-## The deal: agents do the work, you throw the switches
+## The deal: agents do the work, you set the fare
 
-Most AI-PR tools post on your behalf and hope you would have said the same thing. Switchyard
-inverts that:
+Most AI-PR tools post on your behalf and hope you would have said the same thing. Charon inverts
+that:
 
 - **The app never posts comments, replies, or reviews on its own.** Every GitHub-facing write is a
   proposal card — edit it, regenerate it with a custom prompt, run it through a humanize skill, or
-  dismiss it. Nothing ships until you hit *Approve & send*.
+  dismiss it. Nothing crosses until you hit *Approve & send*.
 - **One automated exception, by design:** during fix flows the agent commits and pushes to *your
   own* PR branches (never forks, never teammates' branches). Code you can still review; comments
   that never impersonate you.
 - Agents reviewing teammates' code run **read-only**. Fix agents get an **isolated git worktree**
-  scoped to the one PR they're fixing.
+  scoped to the one PR they're fixing. You hold the tiller; the agents pull the oars.
 
 ## What it does
 

@@ -1,4 +1,4 @@
-<svg viewBox="0 0 1280 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Switchyard — the rail yard for your pull requests">
+<svg viewBox="0 0 1280 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Charon — the ferryman for your pull requests">
   <defs>
     <pattern id="dots" width="14" height="14" patternUnits="userSpaceOnUse">
       <circle cx="1.2" cy="1.2" r="1.2" fill="#e9e4d4" opacity="0.05"/>
@@ -18,48 +18,62 @@
   <path d="M14 30 V14 H30" fill="none" stroke="#ff4f00" stroke-width="3"/>
   <path d="M1266 270 V286 H1250" fill="none" stroke="#ff4f00" stroke-width="3"/>
 
-  <!-- block-L mark -->
+  <!-- obol mark: a coin (the fare) with a ferry prow notched out -->
   <g transform="translate(60,74)">
-    <rect x="0" y="0" width="26" height="64" fill="#ff4f00"/>
-    <rect x="0" y="44" width="46" height="20" fill="#ff4f00"/>
-    <rect x="34" y="0" width="12" height="12" fill="#cff24d"/>
+    <circle cx="23" cy="32" r="23" fill="#ff4f00"/>
+    <circle cx="23" cy="32" r="23" fill="none" stroke="#0e0d0a" stroke-width="3" stroke-dasharray="3 4"/>
+    <path d="M9 28 H37 L30 40 H16 Z" fill="#0e0d0a"/>
+    <rect x="20" y="12" width="6" height="12" fill="#cff24d"/>
   </g>
 
   <!-- wordmark -->
-  <text x="128" y="138" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="64" letter-spacing="6" fill="#e9e4d4" textLength="478" lengthAdjust="spacingAndGlyphs">SWITCHYARD</text>
+  <text x="128" y="138" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="64" letter-spacing="8" fill="#e9e4d4" textLength="360" lengthAdjust="spacingAndGlyphs">CHARON</text>
 
   <!-- hatched accent -->
   <rect x="130" y="156" width="200" height="8" fill="url(#hatch)"/>
   <rect x="338" y="156" width="8" height="8" fill="#cff24d"/>
 
   <!-- tagline -->
-  <text x="130" y="196" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="17" letter-spacing="3" fill="#9b9480" textLength="610" lengthAdjust="spacingAndGlyphs">THE RAIL YARD FOR YOUR PULL REQUESTS</text>
-  <text x="130" y="226" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" letter-spacing="2" fill="#6d6757" textLength="540" lengthAdjust="spacingAndGlyphs">SORT · COUPLE · ROUTE BRANCHES ONTO THE MAIN LINE</text>
+  <text x="130" y="196" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="17" letter-spacing="3" fill="#9b9480" textLength="600" lengthAdjust="spacingAndGlyphs">THE FERRYMAN FOR YOUR PULL REQUESTS</text>
+  <text x="130" y="226" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" letter-spacing="2" fill="#6d6757" textLength="560" lengthAdjust="spacingAndGlyphs">REVIEW THE FARE · WORK THE CROSSING · LAND THEM ON MAIN</text>
 
-  <!-- yard ladder: tracks + acid route -->
-  <g transform="translate(860,52)">
-    <g stroke="#2e2b21" stroke-width="6">
-      <line x1="0" y1="16"  x2="360" y2="16"/>
-      <line x1="0" y1="72"  x2="360" y2="72"/>
-      <line x1="0" y1="128" x2="360" y2="128"/>
-      <line x1="0" y1="184" x2="360" y2="184"/>
+  <!-- the crossing: a branch ferried across black water to the far shore (main) -->
+  <g transform="translate(860,48)">
+    <!-- river ripples -->
+    <g stroke="#2e2b21" stroke-width="3" stroke-linecap="round">
+      <line x1="6"   y1="44"  x2="84"  y2="44"/>
+      <line x1="120" y1="44"  x2="210" y2="44"/>
+      <line x1="246" y1="44"  x2="320" y2="44"/>
+      <line x1="40"  y1="84"  x2="150" y2="84"/>
+      <line x1="186" y1="84"  x2="300" y2="84"/>
+      <line x1="0"   y1="124" x2="96"  y2="124"/>
+      <line x1="132" y1="124" x2="250" y2="124"/>
+      <line x1="60"  y1="164" x2="180" y2="164"/>
+      <line x1="216" y1="164" x2="340" y2="164"/>
     </g>
-    <!-- ties -->
-    <g stroke="#1e1c15" stroke-width="3">
-      <line x1="30" y1="6" x2="30" y2="194"/>
-      <line x1="110" y1="6" x2="110" y2="194"/>
-      <line x1="190" y1="6" x2="190" y2="194"/>
-      <line x1="270" y1="6" x2="270" y2="194"/>
-      <line x1="340" y1="6" x2="340" y2="194"/>
+
+    <!-- near shore (branches wait) / far shore (main) -->
+    <rect x="-6" y="6" width="26" height="24" fill="#2e2b21"/>
+    <rect x="-6" y="6" width="26" height="6" fill="#cff24d"/>
+    <rect x="334" y="170" width="32" height="24" fill="#2e2b21"/>
+
+    <!-- crossing route + wake -->
+    <path d="M14 22 C 90 24, 110 92, 184 104 S 300 168, 352 180" fill="none" stroke="#cff24d" stroke-width="5" stroke-linejoin="round"/>
+
+    <!-- obol tolls along the route (your approval gates) -->
+    <circle cx="110" cy="64"  r="7" fill="#0e0d0a" stroke="#ff4f00" stroke-width="4"/>
+    <circle cx="248" cy="138" r="7" fill="#0e0d0a" stroke="#ff4f00" stroke-width="4"/>
+
+    <!-- the ferry, mid-crossing -->
+    <g transform="translate(150,86) rotate(20)">
+      <path d="M0 14 H64 L52 30 H12 Z" fill="#15140f" stroke="#e9e4d4" stroke-width="2.5"/>
+      <rect x="28" y="-2" width="3" height="16" fill="#9b9480"/>
+      <rect x="22" y="0" width="14" height="8" fill="#ff4f00"/>
     </g>
-    <!-- route: descends the ladder onto the main line -->
-    <path d="M0 16 H70 L126 72 H150 L206 128 H230 L286 184 H360" fill="none" stroke="#cff24d" stroke-width="5" stroke-linejoin="round"/>
-    <!-- junction signals -->
-    <circle cx="70"  cy="16"  r="7" fill="#0e0d0a" stroke="#ff4f00" stroke-width="4"/>
-    <circle cx="150" cy="72"  r="7" fill="#0e0d0a" stroke="#ff4f00" stroke-width="4"/>
-    <circle cx="230" cy="128" r="7" fill="#0e0d0a" stroke="#ff4f00" stroke-width="4"/>
-    <!-- merge marker on the main line -->
-    <rect x="318" y="174" width="20" height="20" fill="#ff4f00"/>
-    <text x="0" y="222" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" letter-spacing="2" fill="#6d6757" textLength="360" lengthAdjust="spacingAndGlyphs">FEATURE BRANCHES ──── APPROVAL GATES ──── MAIN</text>
+
+    <!-- arrival marker on the far shore (merge onto main) -->
+    <rect x="338" y="172" width="20" height="20" fill="#ff4f00"/>
+
+    <text x="0" y="222" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" letter-spacing="2" fill="#6d6757" textLength="360" lengthAdjust="spacingAndGlyphs">FEATURE BRANCHES ──── THE FARE ──── MAIN</text>
   </g>
 </svg>

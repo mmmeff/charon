@@ -148,8 +148,8 @@ export function RepoApp({ repo }: { repo: string }) {
     <FlowCtx.Provider value={{ ctx: ctxRef.current, poller }}>
       <div className="app">
         <nav className="rail">
-          <div className="rail-brand" title="Switchyard">
-            ▙
+          <div className="rail-brand" title="Charon">
+            ◉
           </div>
           {tabs.map((t, i) => (
             <button
@@ -178,7 +178,7 @@ export function RepoApp({ repo }: { repo: string }) {
 
         <div className="app-col">
           <div className="topstrip">
-            <span className="brand">SWITCHYARD</span>
+            <span className="brand">CHARON</span>
             <span className="dim">/ {repo}</span>
             {crumb && (
               <button
