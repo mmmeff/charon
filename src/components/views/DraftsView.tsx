@@ -2,7 +2,7 @@ import { useState } from "react";
 import { usePrData } from "../../lib/events";
 import { useUiStore } from "../../lib/store";
 import { age, sortPrs, type SortKey } from "../../lib/ui";
-import { Badge, EmptyState, RunningAgentsChip, SortPicker } from "../common";
+import { Badge, CiBadge, EmptyState, RunningAgentsChip, SortPicker } from "../common";
 import { Sidebar } from "../Panels";
 import { PrWorkspace } from "../PrWorkspace";
 
@@ -13,6 +13,7 @@ import { PrWorkspace } from "../PrWorkspace";
  */
 export function DraftsView() {
   const drafts = usePrData((s) => s.myDrafts);
+  const checks = usePrData((s) => s.checks);
   const selected = useUiStore((s) => s.focusedPr["drafts"] ?? null);
   const setSelected = (n: number) => useUiStore.getState().setFocusedPr("drafts", n);
   const [sort, setSort] = useState<SortKey>("updated");
@@ -48,6 +49,7 @@ export function DraftsView() {
             <div className="meta">
               <RunningAgentsChip prNumber={p.number} />
               <Badge color="gray">draft</Badge>
+              <CiBadge checks={checks[p.number] ?? []} />
               <span>{p.headRef}</span>
               <span>
                 +{p.additions} −{p.deletions}
