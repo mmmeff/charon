@@ -127,7 +127,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
       <PrTitle pr={pr} />
       <div className="row" style={{ marginBottom: 12 }}>
         {pr.draft && <Badge color="gray">draft</Badge>}
-        {variant === "draft" && pr.draft && <SubmitForReview pr={pr} />}
         {variant === "babysit" && (
           <>
             <CiBadge checks={checks} />
@@ -144,6 +143,12 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         <span className="subtle">
           +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
         </span>
+        {variant === "draft" && pr.draft && (
+          <>
+            <span style={{ flex: 1 }} />
+            <SubmitForReview pr={pr} />
+          </>
+        )}
       </div>
 
       <PrDescription pr={pr} />
