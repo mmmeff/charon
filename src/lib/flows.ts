@@ -145,8 +145,8 @@ ${
   propose
     ? PROPOSAL_CONTRACT
     : `
-This is routine branch maintenance — no PR comment is wanted. Do NOT emit a proposal block;
-end with a short summary of what you did for the activity log.`
+No PR comment is wanted for this run. Do NOT emit a proposal block; end with a short summary
+of what you did for the activity log.`
 }`;
 }
 
@@ -602,7 +602,7 @@ export async function applyFindings(
 
   const task = `Address the following self-review finding${findings.length > 1 ? "s" : ""} from an automated code review
 of this PR. Treat each as a strong recommendation: verify it is correct in context, then implement the fix.
-If a finding is wrong, skip it and say why in the proposal.
+If a finding is wrong, skip it and say why in your final message.
 
 ${findings.map(findingInstruction).join("\n\n")}${
     guidance?.trim()
@@ -612,7 +612,8 @@ ${findings.map(findingInstruction).join("\n\n")}${
 
   try {
     const wt = await createWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);
-    const prompt = applySkills(fixFlowWrapper(ctx, pr, wt, task), ctx.skills, ctx.config.skills.fix);
+    // propose=false: these findings are local-only — fix and push, no PR comment
+    const prompt = applySkills(fixFlowWrapper(ctx, pr, wt, task, false), ctx.skills, ctx.config.skills.fix);
     try {
       return await startAgent({
         kind: "feedback_fix",
@@ -628,7 +629,6 @@ ${findings.map(findingInstruction).join("\n\n")}${
           try {
             const s = useRepoStore.getState();
             for (const f of findings) await s.updateFinding(f.key, { status: "applied" });
-            await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "applied self-review findings");
           } finally {
             await releaseWorktree(wt);
           }
