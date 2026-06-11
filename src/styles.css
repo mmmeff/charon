@@ -543,6 +543,12 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 button.chip-add { cursor: pointer; color: var(--fg); }
 button.chip-add:hover:not(:disabled) { background: rgba(233, 228, 212, 0.06); border: none; }
 
+/* agent-drafted reply, inline in its thread */
+.proposed-reply {
+  margin-top: 6px; padding: 8px 10px;
+  background: var(--amber-bg); border-left: 2px solid var(--amber);
+}
+
 /* sidebar group labels (Review tab) */
 .list-group-label {
   margin: 10px 0 6px; color: var(--fg-subtle);

@@ -60,7 +60,15 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, pr.headSha]);
 
-  const prProposals = proposals.filter((p) => p.prNumber === pr.number && p.status !== "dismissed");
+  const commentIds = new Set(comments.map((c) => c.id));
+  const prProposals = proposals.filter(
+    (p) =>
+      p.prNumber === pr.number &&
+      p.status !== "dismissed" &&
+      // replies render inline inside their thread, not up top (unless the
+      // target comment vanished — then this list is the fallback)
+      !(p.type === "comment_reply" && p.status === "pending" && commentIds.has(p.inReplyToCommentId))
+  );
 
   // review-comment threads (bug-bots and humans) anchored onto the diff,
   // each with inline reply

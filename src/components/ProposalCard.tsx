@@ -136,6 +136,65 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
 // ---------------------------------------------------------------------------
 
 /**
+ * A proposed reply rendered inline inside the comment thread it answers —
+ * edit, approve & send (becomes a real GitHub reply), or dismiss.
+ */
+export function ProposedReplyCard({
+  proposal,
+}: {
+  proposal: Extract<Proposal, { type: "comment_reply" }>;
+}) {
+  const { ctx, poller } = useFlow();
+  const upsert = useRepoStore((s) => s.upsertProposal);
+  const remove = useRepoStore((s) => s.removeProposal);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const send = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await sendProposal(ctx, proposal);
+      await remove(proposal.id); // the real reply takes its place on refresh
+      void poller.refreshPr(proposal.prNumber);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="proposed-reply">
+      <div className="row" style={{ marginBottom: 4 }}>
+        <span className="origin-chip local" title="Drafted by an agent — nothing is on GitHub until you approve">
+          Local only
+        </span>
+        <Badge color="yellow">proposed reply</Badge>
+        <span className="subtle">{proposal.context}</span>
+      </div>
+      <EditableText
+        value={proposal.body}
+        onChange={(body) => void upsert({ ...proposal, body })}
+        prNumber={proposal.prNumber}
+        prTitle={proposal.prTitle}
+        rows={3}
+      />
+      <div className="row">
+        <button className="small primary" disabled={busy} onClick={() => void send()}>
+          {busy ? <Spinner /> : null} Approve &amp; reply
+        </button>
+        <button className="small danger" disabled={busy} onClick={() => void remove(proposal.id)}>
+          Dismiss
+        </button>
+        {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/**
  * Slim control strip for a pending teammate review. The comments themselves
  * live inline on the diff (where they're actually judgeable); this strip is
  * the batch path — verdict, editable summary, and one submit for everything

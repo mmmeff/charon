@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { usePrData } from "../lib/events";
 import { runAddressComment, runDescriptionDraft, runTitleDraft } from "../lib/flows";
 import type { ReviewThreadInfo } from "../lib/github";
-import { useAgentStore, useUiStore } from "../lib/store";
-import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
+import { useAgentStore, useRepoStore, useUiStore } from "../lib/store";
+import type { CommentInfo, Proposal, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
 import { AgentCard } from "./AgentCard";
 import { AgentLaunchForm } from "./AgentLaunchForm";
 import { ControlCenter } from "./ControlCenter";
@@ -11,6 +11,7 @@ import { age } from "../lib/ui";
 import { Badge, Spinner } from "./common";
 import { IconDrafts, IconExpand } from "./icons";
 import { Markdown } from "./Markdown";
+import { ProposedReplyCard } from "./ProposalCard";
 import { useResizablePanel } from "./useResizablePanel";
 import { useFlow } from "./flow";
 
@@ -54,6 +55,18 @@ function AddressWithAgent({
       )}
       {run && <AgentCard run={run} embedded defaultOpen />}
     </>
+  );
+}
+
+
+/** Pending agent-drafted replies aimed at any comment in this thread. */
+function usePendingReplies(prNumber: number, root: CommentInfo, replies: CommentInfo[]) {
+  return useRepoStore((s) => s.proposals).filter(
+    (p): p is Extract<Proposal, { type: "comment_reply" }> =>
+      p.type === "comment_reply" &&
+      p.status === "pending" &&
+      p.prNumber === prNumber &&
+      (p.inReplyToCommentId === root.id || replies.some((r) => r.id === p.inReplyToCommentId))
   );
 }
 
@@ -646,9 +659,11 @@ export function DiffCommentThread({
   const [replying, setReplying] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const thread = useThread(pr.number, root.id);
+  const pendingReplies = usePendingReplies(pr.number, root, replies);
 
-  // resolved threads collapse to a single quiet line
-  if (thread?.isResolved && !expanded) {
+  // resolved threads collapse to a single quiet line (not while a drafted
+  // reply is waiting — that needs eyes)
+  if (thread?.isResolved && !expanded && pendingReplies.length === 0) {
     return (
       <div className="row resolved-line">
         <span className="origin-chip github">GitHub</span>
@@ -683,6 +698,11 @@ export function DiffCommentThread({
         <div key={c.id} className="act-reply">
           <ActHeader author={c.author} isBot={c.authorIsBot} at={Date.parse(c.createdAt) || 0} url={c.url} />
           <CommentBody pr={pr} comment={c} />
+        </div>
+      ))}
+      {pendingReplies.map((p) => (
+        <div key={p.id} className="act-reply">
+          <ProposedReplyCard proposal={p} />
         </div>
       ))}
       <div className="row" style={{ marginTop: 4 }}>
@@ -755,6 +775,7 @@ function Thread({ pr, root, replies }: { pr: PrSummary; root: CommentInfo; repli
   const requestDiffScroll = useUiStore((s) => s.requestDiffScroll);
   const [replying, setReplying] = useState(false);
   const thread = useThread(pr.number, root.id);
+  const pendingReplies = usePendingReplies(pr.number, root, replies);
 
   const lineLink = root.path && root.line && (
     <button
@@ -777,6 +798,11 @@ function Thread({ pr, root, replies }: { pr: PrSummary; root: CommentInfo; repli
         <div key={c.id} className="act-reply">
           <ActHeader author={c.author} isBot={c.authorIsBot} at={Date.parse(c.createdAt) || 0} url={c.url} />
           <CommentBody pr={pr} comment={c} />
+        </div>
+      ))}
+      {pendingReplies.map((p) => (
+        <div key={p.id} className="act-reply">
+          <ProposedReplyCard proposal={p} />
         </div>
       ))}
       <div className="row" style={{ marginTop: 4 }}>
