@@ -201,19 +201,22 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
           const ev = e.ev;
           return (
             <div key={ev.id} className="act-event">
-              <Badge color={ev.color}>{ev.verb}</Badge>
-              <strong>{ev.actor}</strong>
+              <div className="row act-top">
+                <Badge color={ev.color}>{ev.verb}</Badge>
+                <span style={{ flex: 1 }} />
+                <span className="subtle">{age(ev.at)}</span>
+              </div>
+              <div>
+                <strong>{ev.actor}</strong>
+              </div>
               {ev.detail &&
                 (ev.url ? (
                   <a href={ev.url} target="_blank" rel="noreferrer" className="act-event-detail">
                     {ev.detail}
                   </a>
                 ) : (
-                  <span className="act-event-detail subtle">{ev.detail}</span>
+                  <div className="act-event-detail subtle">{ev.detail}</div>
                 ))}
-              <span className="subtle" style={{ marginLeft: "auto", flexShrink: 0 }}>
-                {age(ev.at)}
-              </span>
             </div>
           );
         }
@@ -462,6 +465,7 @@ export function groupCommentThreads(
     }));
 }
 
+/** Two-line activity header: type + age on top, author beneath. */
 function ActHeader({
   author,
   isBot,
@@ -476,17 +480,22 @@ function ActHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="row" style={{ marginBottom: 3 }}>
-      <strong>{author}</strong>
-      {isBot && <Badge color="purple">bot</Badge>}
-      {children}
-      <span className="subtle">{age(at)}</span>
-      {url && (
-        <a href={url} target="_blank" rel="noreferrer" className="subtle">
-          ↗
-        </a>
-      )}
-    </div>
+    <>
+      <div className="row act-top">
+        {children}
+        <span style={{ flex: 1 }} />
+        <span className="subtle">{age(at)}</span>
+        {url && (
+          <a href={url} target="_blank" rel="noreferrer" className="subtle">
+            ↗
+          </a>
+        )}
+      </div>
+      <div className="row" style={{ marginBottom: 3 }}>
+        <strong>{author}</strong>
+        {isBot && <Badge color="purple">bot</Badge>}
+      </div>
+    </>
   );
 }
 
