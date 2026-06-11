@@ -24,7 +24,7 @@ fast, well-presented decisions: **proposals you edit and approve before anything
   <img src="docs/tour.gif" alt="Charon tour: babysitting PRs, reviewing a teammate's diff, watching agents stream" width="100%"/>
 </p>
 
-## Tools for the human in the loop, not a louder bot
+## Tools for the human in the loop
 
 You can't fix an AI-volume problem by adding more unsupervised AI output — auto-posted reviews and
 auto-replies are how PR threads became unreadable in the first place. Charon spends its
