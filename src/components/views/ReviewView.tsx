@@ -94,11 +94,13 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   );
 
   // existing GitHub comment threads, with inline reply
+  const threadInfos = usePrData((s) => s.threads[pr.number] ?? []);
   const threadAnchors: DiffAnchor[] = groupCommentThreads(comments).map(({ root, replies }) => ({
     path: root.path!,
     line: root.line!,
     side: root.side ?? "RIGHT",
     tone: "github" as const,
+    resolved: threadInfos.find((t) => t.commentIds.includes(root.id))?.isResolved ?? false,
     node: <DiffCommentThread pr={pr} root={root} replies={replies} />,
   }));
 
@@ -110,6 +112,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
           line: c.line,
           side: c.side,
           tone: "local" as const,
+          resolved: !c.included,
           node: (
             <InlineCommentEditor
               comment={c}

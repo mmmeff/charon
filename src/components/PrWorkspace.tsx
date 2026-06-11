@@ -90,6 +90,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   // review-comment threads (bug-bots and humans) anchored onto the diff,
   // each with inline reply
   const threads = groupCommentThreads(comments);
+  const threadInfos = usePrData((s) => s.threads[pr.number] ?? []);
   const findings = useRepoStore((s) => s.findings).filter(
     (f) => f.prNumber === pr.number && f.status !== "dismissed"
   );
@@ -100,6 +101,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         line: root.line!,
         side: root.side ?? "RIGHT",
         tone: "github",
+        resolved: threadInfos.find((t) => t.commentIds.includes(root.id))?.isResolved ?? false,
         node: <DiffCommentThread pr={pr} root={root} replies={replies} />,
       })
     ),
@@ -110,6 +112,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         line: f.line,
         side: f.side,
         tone: "local",
+        resolved: f.status !== "open",
         node: <FindingCard finding={f} pr={pr} />,
       })
     ),

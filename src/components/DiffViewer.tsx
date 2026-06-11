@@ -19,6 +19,8 @@ export interface DiffAnchor {
   node: ReactNode;
   /** github = synced/on GitHub; local = app-only, not (yet) on GitHub */
   tone?: "github" | "local";
+  /** resolved/handled — still rendered, but prev/next nav skips it */
+  resolved?: boolean;
 }
 
 interface DragState {
@@ -108,23 +110,27 @@ export function DiffViewer({
   };
 
   // ---- prev/next comment navigation (floats top-right once scrolled) ----
+  // "next actionable thing": resolved threads / handled findings are skipped
+  const actionable = anchors.filter((a) => !a.resolved).length;
   const rootRef = useRef<HTMLDivElement>(null);
   const [navVisible, setNavVisible] = useState(false);
   useEffect(() => {
-    if (anchors.length === 0) return;
+    if (actionable === 0) return;
     const scroller = rootRef.current?.closest(".ws-main");
     if (!scroller) return;
     const onScroll = () => setNavVisible(scroller.scrollTop > 180);
     onScroll();
     scroller.addEventListener("scroll", onScroll, { passive: true });
     return () => scroller.removeEventListener("scroll", onScroll);
-  }, [anchors.length]);
+  }, [actionable]);
 
   const navToComment = (dir: 1 | -1) => {
     const root = rootRef.current;
     const scroller = root?.closest(".ws-main");
     if (!root || !scroller) return;
-    const rows = Array.from(root.querySelectorAll("tr.comment-anchor-row")) as HTMLElement[];
+    const rows = Array.from(
+      root.querySelectorAll("tr.comment-anchor-row:not(.resolved-anchor)")
+    ) as HTMLElement[];
     if (rows.length === 0) return;
     const top = scroller.getBoundingClientRect().top;
     const target =
@@ -136,6 +142,25 @@ export function DiffViewer({
     el.classList.add("flash");
     setTimeout(() => el.classList.remove("flash"), 1800);
   };
+
+  // vim-style j/k between actionable comments (ignored while typing)
+  const navRef = useRef(navToComment);
+  navRef.current = navToComment;
+  useEffect(() => {
+    if (actionable === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable))
+        return;
+      if (e.key === "j" || e.key === "k") {
+        e.preventDefault();
+        navRef.current(e.key === "j" ? 1 : -1);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [actionable]);
 
   // Escape cancels an in-progress drag or open selection/composer.
   useEffect(() => {
@@ -223,7 +248,10 @@ export function DiffViewer({
         .filter((a) => a.path === path && a.side === e.side && a.line === e.num)
         .forEach((a, j) =>
           out.push(
-            <tr key={`a-${e.side}-${e.num}-${j}`} className="comment-anchor-row">
+            <tr
+              key={`a-${e.side}-${e.num}-${j}`}
+              className={`comment-anchor-row${a.resolved ? " resolved-anchor" : ""}`}
+            >
               <td colSpan={colSpan}>
                 <div className={`inline-comment-box ${a.tone ?? ""}`}>{a.node}</div>
               </td>
@@ -245,14 +273,14 @@ export function DiffViewer({
 
   return (
     <div onMouseLeave={() => drag && setDrag(null)} ref={rootRef}>
-      {anchors.length > 0 && (
+      {actionable > 0 && (
         <div className={`comment-nav-wrap ${navVisible ? "show" : ""}`}>
           <div className="comment-nav">
-            <span className="comment-nav-count">{anchors.length} comments</span>
-            <button title="Previous comment" onClick={() => navToComment(-1)}>
+            <span className="comment-nav-count">{actionable} actionable</span>
+            <button title="Previous (k)" onClick={() => navToComment(-1)}>
               ↑
             </button>
-            <button title="Next comment" onClick={() => navToComment(1)}>
+            <button title="Next (j)" onClick={() => navToComment(1)}>
               ↓
             </button>
           </div>
