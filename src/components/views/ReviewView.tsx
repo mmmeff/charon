@@ -3,7 +3,7 @@ import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
-import { Badge, EmptyState, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
+import { Badge, EmptyState, RunningAgentsChip, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
@@ -53,6 +53,7 @@ export function ReviewView() {
               #{p.number} {p.title}
             </h4>
             <div className="meta">
+              <RunningAgentsChip prNumber={p.number} />
               <span>by {p.author}</span>
               <span>
                 +{p.additions} −{p.deletions}

@@ -139,13 +139,16 @@ select {
   letter-spacing: 0.04em;
   cursor: pointer;
 }
-label.field { display: block; margin-bottom: 14px; }
+label.field { display: block; margin-bottom: 18px; }
 label.field > span {
-  display: block; margin-bottom: 4px;
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--fg-muted);
+  display: block; margin-bottom: 5px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fg-subtle);
 }
-label.field > small { display: block; color: var(--fg-subtle); margin-top: 4px; font-size: 11px; }
+label.field > small {
+  display: block; color: var(--fg-subtle); opacity: 0.8;
+  margin-top: 5px; font-size: 10.5px; line-height: 1.55; max-width: 72ch;
+}
 
 a { color: var(--orange); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -491,20 +494,48 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   white-space: pre-wrap; word-break: break-word; color: var(--fg-muted);
 }
 
-/* ---- settings ---- */
-.settings-section { max-width: 880px; margin-bottom: 30px; }
+/* ---- settings: explicit typographic hierarchy ----
+   level 1  section header   — sans 800, bone, orange tick
+   level 2  group header     — mono caps, muted, dashed rule
+   level 3  field label / row title
+   level 4  content (inputs)
+   level 5  help text        — smallest, dimmest                         */
+.settings-section { max-width: 880px; margin-bottom: 42px; }
 .settings-section h3 {
-  border-bottom: 1px solid var(--border); padding-bottom: 6px;
-  font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-  font-family: var(--mono); font-weight: 700; color: var(--fg-muted);
+  border-bottom: 1px solid var(--border); padding-bottom: 8px; margin: 0 0 16px;
+  font-family: var(--sans); font-weight: 800; font-size: 15px;
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--fg);
 }
-.settings-section h3::before { content: "// "; color: var(--orange); }
+.settings-section h3::before { content: "// "; color: var(--orange); font-family: var(--mono); }
+.settings-section h4 {
+  margin: 26px 0 10px; padding-bottom: 4px;
+  font-family: var(--mono); font-weight: 700; font-size: 10px;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--fg-muted);
+  border-bottom: 1px dashed var(--border-subtle);
+}
+.settings-section > p.subtle {
+  color: var(--fg-subtle); font-size: 11px; line-height: 1.7; max-width: 72ch;
+}
+.settings-section p.subtle code, label.field > small code {
+  font-size: 10px; padding: 0 3px; color: var(--fg-muted); background: transparent;
+}
+
 .event-row {
   border: 1px solid var(--border-subtle); border-left: 2px solid var(--border);
-  border-radius: 0; padding: 10px 12px; margin-bottom: 8px;
+  border-radius: 0; padding: 12px 14px; margin-bottom: 10px;
 }
 .event-row:hover { border-left-color: var(--orange); }
-.event-row .desc { color: var(--fg-muted); font-size: 11px; margin: 4px 0 6px; line-height: 1.5; }
+.event-row strong { font-family: var(--sans); font-size: 13.5px; letter-spacing: 0; }
+.event-row code {
+  font-size: 9.5px; color: var(--fg-subtle); background: transparent;
+  border-color: var(--border-subtle);
+}
+.event-row .desc { color: var(--fg-subtle); font-size: 11px; margin: 5px 0 8px; line-height: 1.55; }
+.event-row textarea { font-size: 11.5px; color: var(--fg-muted); }
+.event-row textarea:focus { color: var(--fg); }
+.event-row button.link { color: var(--fg-subtle); }
+.event-row button.link:hover { color: var(--orange); }
+
 .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; font-size: 12px; }
 input[type="checkbox"] { accent-color: var(--orange); }
 
@@ -537,6 +568,13 @@ input[type="checkbox"] { accent-color: var(--orange); }
   vertical-align: -1px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* live agent indicator on PR list cards */
+.livedot {
+  width: 6px; height: 6px; background: var(--acid); display: inline-block;
+  animation: livedot-pulse 1.1s ease-in-out infinite;
+}
+@keyframes livedot-pulse { 50% { opacity: 0.25; } }
 
 /* blinking block cursor for live status text */
 .cursor-blink::after { content: "▌"; color: var(--acid); animation: blink 1s steps(1) infinite; margin-left: 2px; }

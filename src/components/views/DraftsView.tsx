@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { usePrData } from "../../lib/events";
 import { useUiStore } from "../../lib/store";
-import { Badge, EmptyState, SortPicker, age, sortPrs, type SortKey } from "../common";
+import { Badge, EmptyState, RunningAgentsChip, SortPicker, age, sortPrs, type SortKey } from "../common";
 import { Sidebar } from "../Panels";
 import { PrWorkspace } from "../PrWorkspace";
 
@@ -45,6 +45,7 @@ export function DraftsView() {
               #{p.number} {p.title}
             </h4>
             <div className="meta">
+              <RunningAgentsChip prNumber={p.number} />
               <Badge color="gray">draft</Badge>
               <span>{p.headRef}</span>
               <span>

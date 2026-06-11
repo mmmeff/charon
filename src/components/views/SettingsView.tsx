@@ -283,7 +283,7 @@ function EventCatalogEditor({
     <>
       {groups.map((g) => (
         <div key={g}>
-          <h4 style={{ margin: "16px 0 8px" }}>{g}</h4>
+          <h4>{g}</h4>
           {EVENT_CATALOG.filter((e) => e.group === g).map((def) => {
             const handler = resolveHandler(config.events, def.id);
             const isDefault =

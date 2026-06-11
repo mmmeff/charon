@@ -2,7 +2,7 @@ import { useState } from "react";
 import { eventDef } from "../../lib/defaults";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
-import { Badge, CiBadge, EmptyState, MergeBadge, SortPicker, age, sortPrs, timeAgo, type SortKey } from "../common";
+import { Badge, CiBadge, EmptyState, MergeBadge, RunningAgentsChip, SortPicker, age, sortPrs, timeAgo, type SortKey } from "../common";
 import { Sidebar } from "../Panels";
 import { ProposalCard } from "../ProposalCard";
 import { PrWorkspace } from "../PrWorkspace";
@@ -69,6 +69,7 @@ export function BabysitView() {
                 #{p.number} {p.title}
               </h4>
               <div className="meta">
+                <RunningAgentsChip prNumber={p.number} />
                 <CiBadge checks={checks[p.number] ?? []} />
                 <MergeBadge state={p.mergeableState} />
                 <span>

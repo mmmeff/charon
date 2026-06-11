@@ -1,6 +1,25 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useAgentStore } from "../lib/store";
 import type { PrSummary, Severity } from "../types";
 import { AsciiField } from "./AsciiField";
+
+/** Live indicator: how many agents are currently executing against a PR. */
+export function RunningAgentsChip({ prNumber }: { prNumber: number }) {
+  const count = useAgentStore(
+    (s) =>
+      s.order.filter((id) => {
+        const r = s.runs[id];
+        return r && r.prNumber === prNumber && (r.status === "running" || r.status === "starting");
+      }).length
+  );
+  if (count === 0) return null;
+  return (
+    <span className="badge green agents-live" title={`${count} agent${count > 1 ? "s" : ""} working on this PR — see Activity Feed`}>
+      <span className="livedot" />
+      {count} agent{count > 1 ? "s" : ""}
+    </span>
+  );
+}
 
 /** Empty-state block: ASCII flow-field texture + tracked uppercase title. */
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
