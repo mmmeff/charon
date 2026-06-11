@@ -2,7 +2,7 @@ import { useState } from "react";
 import { eventDef } from "../../lib/defaults";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
-import { Badge, CiBadge, MergeBadge, SortPicker, age, sortPrs, timeAgo, type SortKey } from "../common";
+import { Badge, CiBadge, EmptyState, MergeBadge, SortPicker, age, sortPrs, timeAgo, type SortKey } from "../common";
 import { Sidebar } from "../Panels";
 import { ProposalCard } from "../ProposalCard";
 import { PrWorkspace } from "../PrWorkspace";
@@ -31,10 +31,9 @@ export function BabysitView() {
   if (myOpen.length === 0) {
     return (
       <div className="main">
-        <div className="empty">
-          <h3>No open PRs to babysit</h3>
-          <p>Your open (non-draft) pull requests are watched here: CI, conflicts, and incoming feedback.</p>
-        </div>
+        <EmptyState title="Yard is clear">
+          Your open (non-draft) pull requests are watched here: CI, conflicts, and incoming feedback.
+        </EmptyState>
         {orphanProposals.length > 0 && (
           <>
             <h3>Pending proposals</h3>

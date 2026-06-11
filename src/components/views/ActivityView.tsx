@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAgentStore } from "../../lib/store";
 import { AgentCard } from "../AgentCard";
+import { EmptyState } from "../common";
 
 type Filter = "all" | "active" | "done" | "failed";
 
@@ -30,13 +31,10 @@ export function ActivityView() {
         ))}
       </div>
       {filtered.length === 0 && (
-        <div className="empty">
-          <h3>No agent activity{filter !== "all" ? ` (${filter})` : ""}</h3>
-          <p>
-            Agent runs appear here live: which PR they work on, in what relation (review, CI fix, conflict
-            fix, draft edit, response…), their prompt, and a stream of what they're doing.
-          </p>
-        </div>
+        <EmptyState title={`All units idle${filter !== "all" ? ` (${filter})` : ""}`}>
+          Agent runs appear here live: which PR they work on, in what relation (review, CI fix, conflict
+          fix, draft edit, response…), their prompt, and a stream of what they're doing.
+        </EmptyState>
       )}
       {filtered.map((r) => (
         <AgentCard key={r.id} run={r} defaultOpen={r.status === "running" || r.status === "starting"} />

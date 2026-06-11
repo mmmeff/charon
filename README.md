@@ -1,4 +1,6 @@
-# PR Copilot
+# SWITCHYARD
+
+*The rail yard for your pull requests — sort, couple, and route branches onto the main line.*
 
 A cross-platform desktop app (Tauri 2 + React/TypeScript) that connects to GitHub and helps you review
 and manage pull requests with Cursor agents — under strict human-in-the-loop control. **The app never

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listCursorModels, refreshModels } from "../lib/agents";
+import { AsciiField } from "./AsciiField";
 import { defaultGlobalConfig } from "../lib/defaults";
 import { GitHubClient } from "../lib/github";
 import { native } from "../lib/tauri";
@@ -71,8 +72,14 @@ function Onboarding({
 
   return (
     <div className="launcher">
-      <h1>PR Copilot</h1>
-      <p className="sub">
+      <div className="hero">
+        <AsciiField height={120} opacity={0.45} />
+        <div className="hero-text">
+          <h1>SWITCHYARD</h1>
+          <div className="sub">PR operations terminal</div>
+        </div>
+      </div>
+      <p className="sub2">
         Connect to GitHub to get started. Works with github.com and GitHub Enterprise. Agents never
         write to GitHub without your approval — only pushes to your own PR branches are automated.
       </p>
@@ -183,20 +190,25 @@ function RepoList({
 
   return (
     <div className="launcher">
-      <div className="row between">
-        <h1>PR Copilot</h1>
-        <span className="subtle">
-          {config.login} @ {config.githubUrl.replace(/^https?:\/\//, "")}{" "}
-          <button
-            className="link small"
-            onClick={() => void save({ ...config, login: "" })}
-            title="Reconfigure connection"
-          >
-            change
-          </button>
-        </span>
+      <div className="hero">
+        <AsciiField height={120} opacity={0.45} />
+        <div className="hero-text">
+          <h1>SWITCHYARD</h1>
+          <div className="sub">select facility — each repo runs in its own window</div>
+        </div>
       </div>
-      <p className="sub">Each repository opens in its own window with its own configuration.</p>
+      <div className="row between" style={{ marginBottom: 16 }}>
+        <span className="subtle">
+          operator: {config.login} @ {config.githubUrl.replace(/^https?:\/\//, "")}
+        </span>
+        <button
+          className="link small"
+          onClick={() => void save({ ...config, login: "" })}
+          title="Reconfigure connection"
+        >
+          change
+        </button>
+      </div>
 
       <label className="field">
         <span>Add a repository</span>

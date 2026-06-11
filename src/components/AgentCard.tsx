@@ -27,7 +27,7 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
   const elapsed = Math.round(((run.endedAt ?? Date.now()) - run.startedAt) / 1000);
 
   return (
-    <div className="card">
+    <div className={`card ${active ? "agent-running" : ""}`}>
       <div className="row between">
         <div className="row">
           {active && <Spinner />}

@@ -1,5 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { PrSummary, Severity } from "../types";
+import { AsciiField } from "./AsciiField";
+
+/** Empty-state block: ASCII flow-field texture + tracked uppercase title. */
+export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className="empty">
+      <AsciiField height={96} opacity={0.4} />
+      <h3>{title}</h3>
+      {children && <p>{children}</p>}
+    </div>
+  );
+}
 
 /**
  * Re-render ticker for relative timestamps ("synced 5s ago", elapsed

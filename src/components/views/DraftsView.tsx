@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { usePrData } from "../../lib/events";
 import { useUiStore } from "../../lib/store";
-import { Badge, SortPicker, age, sortPrs, type SortKey } from "../common";
+import { Badge, EmptyState, SortPicker, age, sortPrs, type SortKey } from "../common";
 import { Sidebar } from "../Panels";
 import { PrWorkspace } from "../PrWorkspace";
 
@@ -21,10 +21,9 @@ export function DraftsView() {
   if (drafts.length === 0) {
     return (
       <div className="main">
-        <div className="empty">
-          <h3>No draft PRs</h3>
-          <p>Your draft pull requests appear here as a workspace for iterating on the diff.</p>
-        </div>
+        <EmptyState title="No drafts on the siding">
+          Your draft pull requests appear here as a workspace for iterating on the diff.
+        </EmptyState>
       </div>
     );
   }

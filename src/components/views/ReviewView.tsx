@@ -3,7 +3,7 @@ import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
-import { Badge, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
+import { Badge, EmptyState, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
@@ -27,10 +27,9 @@ export function ReviewView() {
   if (queue.length === 0) {
     return (
       <div className="main">
-        <div className="empty">
-          <h3>No reviews waiting</h3>
-          <p>PRs where your review is requested (directly or via a team) appear here.</p>
-        </div>
+        <EmptyState title="No inbound traffic">
+          PRs where your review is requested (directly or via a team) appear here.
+        </EmptyState>
       </div>
     );
   }

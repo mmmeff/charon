@@ -105,8 +105,8 @@ export function RepoApp({ repo }: { repo: string }) {
       <div className="app">
         <div className="tabbar">
           <span className="title">
-            <span className="dim">{repo.split("/")[0]}/</span>
-            {repo.split("/")[1]}
+            <span className="brand">SWITCHYARD</span>
+            <span className="dim">facility: {repo}</span>
           </span>
           <button
             className="small"
@@ -142,15 +142,13 @@ export function RepoApp({ repo }: { repo: string }) {
             }
           >
             {prData.polling ? (
-              <>
-                <span className="spin" /> syncing…
-              </>
+              <span className="cursor-blink">syncing</span>
             ) : prData.pollError ? (
               "sync error"
             ) : prData.nextPollAt ? (
-              `next sync in ${Math.max(0, Math.ceil((prData.nextPollAt - Date.now()) / 1000))}s`
+              `sync t-${Math.max(0, Math.ceil((prData.nextPollAt - Date.now()) / 1000))}s`
             ) : (
-              "starting…"
+              <span className="cursor-blink">starting</span>
             )}
           </span>
           <button className="small" onClick={() => poller.refresh()} disabled={prData.polling}>
