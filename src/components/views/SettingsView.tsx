@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { EVENT_CATALOG } from "../../lib/defaults";
+import { EVENT_CATALOG, FLOW_MODEL_CATALOG } from "../../lib/defaults";
 import { resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
 import { useGlobalConfig, useRepoStore, useSkillStore } from "../../lib/store";
@@ -13,6 +13,7 @@ const NAV_SECTIONS = [
   { id: "s-review", label: "Teammate · filters" },
   { id: "s-events", label: "Events" },
   { id: "s-skills", label: "Skills" },
+  { id: "s-defmodels", label: "Default models" },
   { id: "s-models", label: "Models" },
   { id: "s-conn", label: "Connection" },
 ];
@@ -276,6 +277,64 @@ export function SettingsView() {
         </label>
       </div>
 
+      <div className="settings-section" id="s-defmodels">
+        <h3>Default models (global)</h3>
+        <label className="field">
+          <span>Global default model</span>
+          <select
+            value={global.defaultModel}
+            onChange={(e) => void saveGlobal({ ...global, defaultModel: e.target.value })}
+          >
+            {global.models
+              .filter((m) => !(global.disabledModels ?? []).includes(m) || m === global.defaultModel)
+              .map((m) => (
+                <option key={m} value={m}>
+                  {global.modelLabels[m] ?? m}
+                </option>
+              ))}
+          </select>
+          <small>
+            Applies to every flow in every repo unless overridden — by a per-flow default below, a
+            per-repo default (Agent section), or an explicit pick in a launch form.
+          </small>
+        </label>
+        <p className="subtle" style={{ maxWidth: "76ch" }}>
+          Every AI-driven flow, with what you can steer at launch. Set a per-flow default to route a
+          flow to a different model without touching the launch forms.
+        </p>
+        {FLOW_MODEL_CATALOG.map((f) => (
+          <label key={f.kind} className="field flow-model-row">
+            <span>
+              {f.label} <em className="flow-cap">{f.capability}</em>
+            </span>
+            <select
+              value={global.modelOverrides?.[f.kind] ?? ""}
+              onChange={(e) => {
+                const next = { ...(global.modelOverrides ?? {}) };
+                if (e.target.value) next[f.kind] = e.target.value;
+                else delete next[f.kind];
+                void saveGlobal({ ...global, modelOverrides: next });
+              }}
+            >
+              <option value="">
+                global default ({global.modelLabels[global.defaultModel] ?? global.defaultModel})
+              </option>
+              {global.models
+                .filter(
+                  (m) =>
+                    !(global.disabledModels ?? []).includes(m) ||
+                    m === global.modelOverrides?.[f.kind]
+                )
+                .map((m) => (
+                  <option key={m} value={m}>
+                    {global.modelLabels[m] ?? m}
+                  </option>
+                ))}
+            </select>
+          </label>
+        ))}
+      </div>
+
       <div className="settings-section" id="s-models">
         <h3>Models (global)</h3>
         <p className="subtle" style={{ maxWidth: "72ch" }}>
@@ -328,21 +387,6 @@ export function SettingsView() {
           {global.login} @ {global.githubUrl} · agent binary <code>{global.cursorBinary}</code>. Reconfigure
           from the launcher window.
         </p>
-        <label className="field">
-          <span>Global default model</span>
-          <select
-            value={global.defaultModel}
-            onChange={(e) => void saveGlobal({ ...global, defaultModel: e.target.value })}
-          >
-            {global.models
-              .filter((m) => !(global.disabledModels ?? []).includes(m) || m === global.defaultModel)
-              .map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-          </select>
-        </label>
       </div>
         </div>
       </div>

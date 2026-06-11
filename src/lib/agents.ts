@@ -385,7 +385,14 @@ export async function refreshModels(
     JSON.stringify(models) !== JSON.stringify(global.models) ||
     JSON.stringify(modelLabels) !== JSON.stringify(global.modelLabels);
   if (changed) {
-    const defaultModel = models.includes(global.defaultModel) ? global.defaultModel : "auto";
+    // keep the configured default when the CLI still lists it; otherwise
+    // prefer the install default, then "auto"
+    const { DEFAULT_MODEL_ID } = await import("./defaults");
+    const defaultModel = models.includes(global.defaultModel)
+      ? global.defaultModel
+      : models.includes(DEFAULT_MODEL_ID)
+        ? DEFAULT_MODEL_ID
+        : "auto";
     await save({ ...global, models, modelLabels, defaultModel });
   }
 }

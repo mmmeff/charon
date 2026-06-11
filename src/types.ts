@@ -20,6 +20,8 @@ export interface GlobalConfig {
   /** Model ids hidden from every model picker (managed in Settings) */
   disabledModels: string[];
   defaultModel: string;
+  /** Per-flow default model overrides, keyed by AgentKind; empty = global default */
+  modelOverrides: Record<string, string>;
   /** Repos the user has added, "owner/name" */
   repos: string[];
   /** Most recently opened repo — auto-opened on next app boot */

@@ -326,6 +326,42 @@ export function defaultRepoConfig(): RepoConfig {
   };
 }
 
+/** Out-of-the-box default model for every installation. If the Cursor CLI
+ *  doesn't list it, the startup model refresh falls back to "auto". */
+export const DEFAULT_MODEL_ID = "composer-2.5-fast";
+
+/**
+ * Every AI-prompt-driven flow, keyed by its AgentKind, with what the user can
+ * steer at launch time. Drives the Default-models settings table; overrides
+ * land in GlobalConfig.modelOverrides.
+ */
+export const FLOW_MODEL_CATALOG: { kind: string; label: string; capability: string }[] = [
+  { kind: "draft_question", label: "Ask / Q&A", capability: "prompt ✓ · model picker ✓" },
+  { kind: "draft_edit", label: "Edit (composer Change mode)", capability: "prompt ✓ · model picker ✓" },
+  { kind: "review", label: "Review (self-review & teammate review)", capability: "prompt ✓ · model picker ✓" },
+  {
+    kind: "feedback_fix",
+    label: "Apply findings / address comments",
+    capability: "guidance ✓ · model picker ✓",
+  },
+  { kind: "ci_fix", label: "CI fix", capability: "guidance ✓ · model picker ✓" },
+  {
+    kind: "conflict_fix",
+    label: "Branch maintenance (conflicts, merge from base)",
+    capability: "prompt from event settings · no launch form",
+  },
+  {
+    kind: "event",
+    label: "Automated event handlers",
+    capability: "prompt per event (Events section) · no model picker at launch",
+  },
+  {
+    kind: "rewrite",
+    label: "Writing (description / title drafts, comment rewrites)",
+    capability: "instruction ✓ · model picker ✓ on drafts; rewrites have none",
+  },
+];
+
 export function defaultGlobalConfig(): GlobalConfig {
   return {
     githubUrl: "https://github.com",
@@ -334,10 +370,11 @@ export function defaultGlobalConfig(): GlobalConfig {
     login: "",
     cursorBinary: "cursor-agent",
     // placeholder until `cursor-agent models` is queried on startup
-    models: ["auto"],
-    modelLabels: { auto: "Auto" },
+    models: ["auto", DEFAULT_MODEL_ID],
+    modelLabels: { auto: "Auto", [DEFAULT_MODEL_ID]: "Composer 2.5 Fast" },
     disabledModels: [],
-    defaultModel: "auto",
+    defaultModel: DEFAULT_MODEL_ID,
+    modelOverrides: {},
     repos: [],
     lastRepo: "",
     extraSkillDirs: [],

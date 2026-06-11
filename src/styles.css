@@ -457,6 +457,13 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .ws-section-label::before { content: "▚"; color: var(--orange); opacity: 0.7; font-size: 8px; }
 .ws-section-label::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
 
+/* settings: per-flow default model rows */
+.flow-model-row { margin-bottom: 12px; }
+.flow-model-row .flow-cap {
+  font-style: normal; text-transform: none; font-weight: 500;
+  color: var(--fg-subtle); letter-spacing: 0.03em; margin-left: 6px;
+}
+
 /* settings: model enable/disable list */
 .model-list {
   max-height: var(--capped-panel); overflow-y: auto;

@@ -28,8 +28,18 @@ export interface FlowContext {
 
 const MAX_DIFF_CHARS = 90_000;
 
-export function resolveModel(ctx: FlowContext, explicit?: string): string {
-  return explicit || ctx.config.model || ctx.global.defaultModel || "auto";
+/**
+ * Model resolution, most specific wins:
+ * explicit pick at launch > per-flow override > repo default > global default.
+ */
+export function resolveModel(ctx: FlowContext, explicit?: string, kind?: string): string {
+  return (
+    explicit ||
+    (kind ? ctx.global.modelOverrides?.[kind] : "") ||
+    ctx.config.model ||
+    ctx.global.defaultModel ||
+    "auto"
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +320,7 @@ export async function runFixFlow(
       prNumber: pr.number,
       prTitle: pr.title,
       prompt,
-      model: resolveModel(ctx, model),
+      model: resolveModel(ctx, model, kind),
       binary: ctx.global.cursorBinary,
       cwd: wt.path,
       onDone: async (run) => {
@@ -422,7 +432,7 @@ ${REVIEW_CONTRACT}`;
     prNumber: pr.number,
     prTitle: pr.title,
     prompt,
-    model: resolveModel(ctx, model),
+    model: resolveModel(ctx, model, "review"),
     binary: ctx.global.cursorBinary,
     mode: "ask", // read-only: a review must never touch code or GitHub
     onDone: (run) =>
@@ -483,7 +493,7 @@ ${REVIEW_CONTRACT}`;
     prNumber: pr.number,
     prTitle: pr.title,
     prompt,
-    model: resolveModel(ctx, model),
+    model: resolveModel(ctx, model, "review"),
     binary: ctx.global.cursorBinary,
     mode: "ask",
     onDone: async (run) => {
@@ -561,7 +571,7 @@ ${findings.map(findingInstruction).join("\n\n")}${
         prNumber: pr.number,
         prTitle: pr.title,
         prompt,
-        model: resolveModel(ctx, model),
+        model: resolveModel(ctx, model, "feedback_fix"),
         binary: ctx.global.cursorBinary,
         cwd: wt.path,
         onDone: async (run) => {
@@ -662,7 +672,7 @@ ${PROPOSAL_CONTRACT}`;
     prNumber: pr.number,
     prTitle: pr.title,
     prompt,
-    model: resolveModel(ctx, model),
+    model: resolveModel(ctx, model, "event"),
     binary: ctx.global.cursorBinary,
     mode: "ask",
     onDone: (run) => createProposalFromFixOutput(ctx, pr, run.id, run.resultText, relation),
@@ -719,7 +729,7 @@ ${PROPOSAL_CONTRACT}`;
       prNumber: pr.number,
       prTitle: pr.title,
       prompt,
-      model: resolveModel(ctx, model),
+      model: resolveModel(ctx, model, "draft_edit"),
       binary: ctx.global.cursorBinary,
       cwd: wt.path,
       onDone: async (run) => {
@@ -773,7 +783,7 @@ Answer directly and concretely; reference files and line numbers from the diff w
     prNumber: pr.number,
     prTitle: pr.title,
     prompt,
-    model: resolveModel(ctx, model),
+    model: resolveModel(ctx, model, "draft_question"),
     binary: ctx.global.cursorBinary,
     mode: "ask",
   });
@@ -817,7 +827,7 @@ Respond with ONLY the new PR description markdown — no preamble, no commentary
       prNumber: pr.number,
       prTitle: pr.title,
       prompt,
-      model: resolveModel(ctx, model),
+      model: resolveModel(ctx, model, "rewrite"),
       binary: ctx.global.cursorBinary,
       mode: "ask",
       onDone: (run) => {
@@ -875,7 +885,7 @@ Respond with ONLY the new title — one line, no quotes, no preamble, no markdow
       prNumber: pr.number,
       prTitle: pr.title,
       prompt,
-      model: resolveModel(ctx, model),
+      model: resolveModel(ctx, model, "rewrite"),
       binary: ctx.global.cursorBinary,
       mode: "ask",
       onDone: (run) => {
@@ -922,7 +932,7 @@ Respond with ONLY the rewritten text — no preamble, no fences, no commentary.`
       prNumber: opts.prNumber,
       prTitle: opts.prTitle,
       prompt,
-      model: resolveModel(ctx, opts.model),
+      model: resolveModel(ctx, opts.model, "rewrite"),
       binary: ctx.global.cursorBinary,
       mode: "ask",
       onDone: (run) => {
@@ -969,7 +979,7 @@ export function eventVars(
   return {
     ...prVars(pr),
     repo: ctx.repo,
-    model: resolveModel(ctx),
+    model: resolveModel(ctx, undefined, "event"),
     "filter-criteria":
       pr.author === ctx.gh.login ? ctx.config.babysitFilters.criteria : ctx.config.reviewFilters.criteria,
     ...extra,
