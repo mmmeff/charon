@@ -535,14 +535,21 @@ export class GitHubClient {
   }
 
   /**
-   * Reviewer autocomplete: org-scoped login/name search via the search API —
-   * covers the whole org without paginating the collaborator list.
+   * Reviewer autocomplete: server-side filtered search over the repo's FULL
+   * collaborator set via GraphQL. (The REST /search/users API only sees
+   * public org membership, so it misses most teammates.)
    */
-  async searchUsers(repo: string, q: string): Promise<string[]> {
-    const org = repo.split("/")[0];
-    const query = encodeURIComponent(`${q} in:login type:user org:${org}`);
-    const res = await this.json<{ items: any[] }>("GET", `/search/users?q=${query}&per_page=10`);
-    return (res.items ?? []).map((u) => String(u.login));
+  async searchCollaborators(repo: string, q: string): Promise<string[]> {
+    const [owner, name] = repo.split("/");
+    const data = await this.graphql<any>(
+      `query($owner:String!,$name:String!,$q:String!){
+        repository(owner:$owner,name:$name){
+          collaborators(query:$q,first:15){ nodes{ login } }
+        }
+      }`,
+      { owner, name, q }
+    );
+    return (data.repository?.collaborators?.nodes ?? []).map((n: any) => String(n.login));
   }
 
   /** Org teams (team review requests); empty for user-owned repos / no scope. */

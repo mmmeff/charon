@@ -60,7 +60,7 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
     const t = setTimeout(() => {
       setSearching(true);
       ctx.gh
-        .searchUsers(ctx.repo, q)
+        .searchCollaborators(ctx.repo, q)
         .then(setRemote)
         .catch(() => setRemote([]))
         .finally(() => setSearching(false));
