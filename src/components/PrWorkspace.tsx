@@ -1,28 +1,25 @@
 import { useEffect, useState } from "react";
-import { cleanResultText } from "../lib/agents";
 import { eventDef } from "../lib/defaults";
 import { findLineByText, parseUnifiedDiff } from "../lib/diff";
 import { resolveHandler, usePrData } from "../lib/events";
-import { runDraftEdit, runDraftQuestion, runFixFlow } from "../lib/flows";
+import { runFixFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useRepoStore } from "../lib/store";
-import type { CommentInfo, FileDiff, LineSelection, PrSummary } from "../types";
+import type { CommentInfo, FileDiff, PrSummary } from "../types";
 import { Badge, CiBadge, MergeBadge, Spinner, age, timeAgo } from "./common";
+import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
-import { FindingCard, SelfReviewBar } from "./Findings";
+import { FindingCard, FindingsStrip } from "./Findings";
 import { Markdown } from "./Markdown";
-import { ModelPicker } from "./ModelPicker";
 import { PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
-import { PromptInput } from "./PromptInput";
 import { ProposalCard } from "./ProposalCard";
 import { useFlow } from "./RepoApp";
 
 /**
- * Shared PR workspace: native diff with GitHub-style line selection driving
- * Ask/Change agent runs, existing review comments anchored on the diff, and
- * (babysit variant) status chips, manual fix triggers, and pending proposals.
- * Used by both the Drafts and Babysit views — both operate on the user's own
- * PRs, so Change runs push without an approval gate.
+ * Shared PR workspace for the user's own PRs (Drafts and Open). All agent
+ * flows are driven through one composer (Ask / Change / Review) — whole-diff
+ * at the top, line-scoped via GitHub-style selection on the diff. Existing
+ * review comments and local findings anchor inline on the diff.
  */
 export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" | "babysit" }) {
   const { ctx } = useFlow();
@@ -32,10 +29,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   const proposals = useRepoStore((s) => s.proposals);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [diffErr, setDiffErr] = useState("");
-  const [model, setModel] = useState("");
-  const [general, setGeneral] = useState("");
-  const [generalMode, setGeneralMode] = useState<"ask" | "edit">("ask");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const runs = useAgentStore((s) => s.runs);
   const order = useAgentStore((s) => s.order);
@@ -69,9 +62,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, pr.headSha]);
 
-  const myRuns = order
-    .map((id) => runs[id])
-    .filter((r) => r && r.prNumber === pr.number && (r.kind === "draft_edit" || r.kind === "draft_question"));
   const activeRuns = order
     .map((id) => runs[id])
     .filter((r) => r && r.prNumber === pr.number && (r.status === "running" || r.status === "starting"));
@@ -79,21 +69,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
   const failing = checks.filter((c) => c.conclusion === "failure" || c.conclusion === "error");
   const approvals = new Set(reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)).size;
-
-  const submitGeneral = async () => {
-    if (!general.trim()) return;
-    setBusy(true);
-    setError("");
-    try {
-      if (generalMode === "edit") await runDraftEdit(ctx, pr, null, general, model || undefined);
-      else await runDraftQuestion(ctx, pr, general, null, model || undefined);
-      setGeneral("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const manualFix = async (eventId: string, kind: "ci_fix" | "conflict_fix") => {
     setError("");
@@ -162,15 +137,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
       <PrDescription pr={pr} />
 
-      <SelfReviewBar pr={pr} />
-
       {variant === "babysit" && (failing.length > 0 || pr.mergeableState === "dirty" || activeRuns.length > 0) && (
-        <div className="card">
-          {failing.length > 0 && (
-            <div className="subtle" style={{ marginBottom: 6 }}>
-              failing: {failing.map((c) => c.name).join(", ")}
-            </div>
-          )}
+        <div className="card" style={{ padding: "8px 14px" }}>
           <div className="row">
             {failing.length > 0 && (
               <button className="small" onClick={() => void manualFix("ci_failed", "ci_fix")}>
@@ -182,11 +150,15 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
                 Resolve conflicts now
               </button>
             )}
+            {failing.length > 0 && (
+              <span className="subtle">failing: {failing.map((c) => c.name).join(", ")}</span>
+            )}
             {activeRuns.length > 0 && (
               <span className="subtle">
                 <Spinner /> {activeRuns.length} agent{activeRuns.length > 1 ? "s" : ""} working — see Activity Feed
               </span>
             )}
+            {error && <span style={{ color: "var(--red)" }}>{error}</span>}
           </div>
         </div>
       )}
@@ -199,62 +171,9 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         </div>
       )}
 
-      <div className="card">
-        <div className="subtle" style={{ marginBottom: 6 }}>
-          Feedback or a question about the whole diff — or select lines below for a targeted run. Type{" "}
-          <code>/</code> to reference a skill.
-        </div>
-        <PromptInput
-          rows={3}
-          placeholder={
-            generalMode === "edit"
-              ? "Describe the change to make across this PR…"
-              : "Ask a question or request feedback on the diff (no code changes)…"
-          }
-          value={general}
-          onChange={setGeneral}
-        />
-        <div className="row" style={{ marginTop: 8 }}>
-          <ModeSelect value={generalMode} onChange={setGeneralMode} />
-          <ModelPicker value={model} onChange={setModel} />
-          <button className="primary" disabled={busy || !general.trim()} onClick={() => void submitGeneral()}>
-            {busy ? <Spinner /> : null} {generalMode === "edit" ? "Run agent" : "Ask"}
-          </button>
-          {error && <span style={{ color: "var(--red)" }}>{error}</span>}
-        </div>
-      </div>
-
-      {myRuns.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          {myRuns.slice(0, 6).map((r) => (
-            <div className="card" key={r.id}>
-              <div className="row between">
-                <div className="row">
-                  {(r.status === "running" || r.status === "starting") && <Spinner />}
-                  <Badge color={r.status === "done" ? "green" : r.status === "error" ? "red" : "blue"}>
-                    {r.kind === "draft_edit" ? "change" : "ask"} · {r.status}
-                  </Badge>
-                  <span className="subtle">{r.relation}</span>
-                </div>
-                <span className="subtle">{timeAgo(r.startedAt)}</span>
-              </div>
-              {r.kind === "draft_question" && r.resultText && (
-                <div style={{ marginTop: 8 }}>
-                  <Markdown text={cleanResultText(r.resultText)} />
-                </div>
-              )}
-              {r.kind === "draft_edit" && r.status === "done" && (
-                <div className="subtle" style={{ marginTop: 6 }}>
-                  Pushed to <code>{pr.headRef}</code>.{" "}
-                  <button className="link small" onClick={() => void loadDiff()}>
-                    reload diff
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <Composer pr={pr} modes={["ask", "change", "review"]} reviewKind="self" />
+      <FindingsStrip pr={pr} />
+      <RunResults pr={pr} onReloadDiff={() => void loadDiff()} />
 
       {diffErr && <p style={{ color: "var(--red)" }}>{diffErr}</p>}
       {!files && !diffErr && (
@@ -268,29 +187,13 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           selectable
           anchors={anchors}
           renderCommentForm={(sel, close) => (
-            <LineCommentForm pr={pr} sel={sel} close={close} defaultModel={model} />
+            <Composer pr={pr} modes={["change", "ask"]} reviewKind="self" compact selection={sel} onClose={close} />
           )}
         />
       )}
       </div>
       <PrActivityPanel pr={pr} />
     </div>
-  );
-}
-
-/** Mode picker mirroring Cursor's modes: Ask (read-only) / Change (agent edits). */
-function ModeSelect({
-  value,
-  onChange,
-}: {
-  value: "ask" | "edit";
-  onChange: (v: "ask" | "edit") => void;
-}) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value as "ask" | "edit")} title="Agent mode">
-      <option value="ask">Ask</option>
-      <option value="edit">Change</option>
-    </select>
   );
 }
 
@@ -307,68 +210,6 @@ function ExistingComment({ comment }: { comment: CommentInfo }) {
         </a>
       </div>
       <Markdown text={comment.body} className="compact" />
-    </div>
-  );
-}
-
-/** GitHub-style comment box attached to a line selection. */
-function LineCommentForm({
-  pr,
-  sel,
-  close,
-  defaultModel,
-}: {
-  pr: PrSummary;
-  sel: LineSelection;
-  close: () => void;
-  defaultModel: string;
-}) {
-  const { ctx } = useFlow();
-  const [text, setText] = useState("");
-  const [mode, setMode] = useState<"ask" | "edit">("edit");
-  const [model, setModel] = useState(defaultModel);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  const submit = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      if (mode === "edit") await runDraftEdit(ctx, pr, sel, text, model || undefined);
-      else await runDraftQuestion(ctx, pr, text, sel, model || undefined);
-      close();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div>
-      <div className="subtle" style={{ marginBottom: 6 }}>
-        {sel.path}: lines {sel.startLine}
-        {sel.endLine !== sel.startLine ? `–${sel.endLine}` : ""} ({sel.side === "RIGHT" ? "new" : "old"} side)
-      </div>
-      <PromptInput
-        autoFocus
-        rows={3}
-        placeholder={mode === "edit" ? "Describe the change for these lines…" : "Ask about these lines…"}
-        value={text}
-        onChange={setText}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim()) void submit();
-        }}
-      />
-      <div className="row" style={{ marginTop: 8 }}>
-        <ModeSelect value={mode} onChange={setMode} />
-        <ModelPicker value={model} onChange={setModel} />
-        <button className="primary" disabled={busy || !text.trim()} onClick={() => void submit()}>
-          {busy ? <Spinner /> : null} {mode === "edit" ? "Run agent" : "Ask"}
-        </button>
-        <button onClick={close}>Cancel</button>
-        {error && <span style={{ color: "var(--red)" }}>{error}</span>}
-      </div>
     </div>
   );
 }

@@ -252,6 +252,9 @@ interface UiState {
   setFocusedPr(tab: string, prNumber: number): void;
   diffScrollTarget: DiffScrollTarget | null;
   requestDiffScroll(path: string, side: "LEFT" | "RIGHT", line: number): void;
+  /** model chosen in any composer — shared so one choice applies everywhere */
+  composerModel: string;
+  setComposerModel(m: string): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -262,6 +265,10 @@ export const useUiStore = create<UiState>((set) => ({
   diffScrollTarget: null,
   requestDiffScroll(path, side, line) {
     set({ diffScrollTarget: { path, side, line, nonce: Date.now() } });
+  },
+  composerModel: "",
+  setComposerModel(m) {
+    set({ composerModel: m });
   },
 }));
 

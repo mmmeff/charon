@@ -226,6 +226,13 @@ async function createReviewProposal(
     ? `\n\n_(${dropped.length} proposed comment(s) could not be anchored to the diff and were dropped: ${dropped.join(", ")})_`
     : "";
 
+  // a fresh review supersedes any stale pending review proposal for this PR
+  for (const p of store.proposals) {
+    if (p.type === "review" && p.prNumber === pr.number && p.status === "pending") {
+      await store.removeProposal(p.id);
+    }
+  }
+
   await store.upsertProposal({
     id: uid("prop-"),
     type: "review",
@@ -328,12 +335,17 @@ ${REVIEW_CONTRACT}`;
  * flow, but the output becomes LOCAL findings — inline feedback that never
  * syncs to GitHub. Each finding can then be applied via a fix agent.
  */
-export async function runSelfReviewFlow(ctx: FlowContext, pr: PrSummary, model?: string): Promise<string> {
+export async function runSelfReviewFlow(
+  ctx: FlowContext,
+  pr: PrSummary,
+  model?: string,
+  focus?: string
+): Promise<string> {
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   const diff = truncate(diffText, MAX_DIFF_CHARS, "\n…[diff truncated — review what is shown]");
   const base = `You are PR Copilot's review agent. The user wants a critical self-review of THEIR OWN PR #${pr.number}
 ("${pr.title}") in ${ctx.repo} before others see it. Find real problems they should fix.
-
+${focus?.trim() ? `\nThe user asked this review to focus on: ${focus.trim()}\n` : ""}
 Reviewer guidance configured for this repo:
 ${ctx.config.reviewFilters.criteria}
 
@@ -553,8 +565,8 @@ export async function runDraftQuestion(
   const scope = selection
     ? `\nThe question is about ${selection.path} lines ${selection.startLine}–${selection.endLine}:\n\`\`\`\n${selection.snippet}\n\`\`\`\n`
     : "";
-  const base = `You are PR Copilot's analysis agent. The user has a question / wants feedback on their own draft
-PR #${pr.number} ("${pr.title}") in ${ctx.repo}. Do NOT make any code changes — answer in text only.
+  const base = `You are PR Copilot's analysis agent. The user has a question / wants feedback on
+PR #${pr.number} ("${pr.title}") by ${pr.author} in ${ctx.repo}. Do NOT make any code changes — answer in text only.
 ${scope}
 QUESTION / FEEDBACK REQUEST:
 ${question}

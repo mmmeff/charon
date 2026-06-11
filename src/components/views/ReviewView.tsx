@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
-import { resolveHandler } from "../../lib/events";
-import { runReviewFlow } from "../../lib/flows";
-import { interpolate, prVars } from "../../lib/template";
-import { useAgentStore, useRepoStore, useUiStore } from "../../lib/store";
+import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { Badge, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
+import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
-import { ModelPicker } from "../ModelPicker";
 import { PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
 import { InlineCommentEditor, ProposalCard } from "../ProposalCard";
 import { useFlow } from "../RepoApp";
@@ -77,11 +74,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   const proposals = useRepoStore((s) => s.proposals);
   const upsert = useRepoStore((s) => s.upsertProposal);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
-  const [model, setModel] = useState("");
-  const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
 
   useEffect(() => {
     ctx.gh
@@ -95,26 +88,6 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
     (p): p is Extract<Proposal, { type: "review" }> =>
       p.type === "review" && p.prNumber === pr.number && p.status === "pending"
   );
-  const runningReview = order
-    .map((id) => runs[id])
-    .find(
-      (r) =>
-        r && r.prNumber === pr.number && r.kind === "review" && (r.status === "running" || r.status === "starting")
-    );
-
-  const startReview = async () => {
-    setStarting(true);
-    setError("");
-    try {
-      const handler = resolveHandler(ctx.config.events, "review_requested");
-      const task = interpolate(handler.prompt, { ...prVars(pr), repo: ctx.repo });
-      await runReviewFlow(ctx, pr, task, model || undefined);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setStarting(false);
-    }
-  };
 
   // anchor proposed comments onto the diff
   const anchors: DiffAnchor[] =
@@ -158,31 +131,9 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
 
       <PrDescription pr={pr} />
 
-      {!reviewProposal && (
-        <div className="card">
-          <div className="row">
-            <ModelPicker value={model} onChange={setModel} />
-            <button
-              className="primary"
-              disabled={starting || !!runningReview}
-              onClick={() => void startReview()}
-            >
-              {runningReview ? (
-                <>
-                  <Spinner /> review in progress — watch in Activity Feed
-                </>
-              ) : (
-                "Run automated self-review"
-              )}
-            </button>
-          </div>
-          <div className="subtle" style={{ marginTop: 6 }}>
-            Runs the configured review skill (default: thermonuclear code quality review) over the diff and
-            proposes inline comments with severity and confidence. Nothing is sent until you approve.
-          </div>
-          {error && <p style={{ color: "var(--red)" }}>{error}</p>}
-        </div>
-      )}
+      <Composer pr={pr} modes={["review", "ask"]} reviewKind="teammate" />
+      <RunResults pr={pr} />
+      {error && <p style={{ color: "var(--red)" }}>{error}</p>}
 
       {reviewProposal && (
         <>

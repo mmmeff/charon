@@ -1,49 +1,29 @@
 import { useState } from "react";
-import { applyFindings, runSelfReviewFlow } from "../lib/flows";
-import { useAgentStore, useRepoStore } from "../lib/store";
+import { applyFindings } from "../lib/flows";
+import { useRepoStore, useUiStore } from "../lib/store";
 import type { PrSummary, ReviewFinding } from "../types";
 import { Badge, ConfidenceBadge, SeverityBadge, Spinner, timeAgo } from "./common";
 import { Markdown } from "./Markdown";
-import { ModelPicker } from "./ModelPicker";
 import { useFlow } from "./RepoApp";
 
 /**
- * Self-review bar (own PRs): runs an agent review whose findings stay local —
- * inline on the diff, never synced to GitHub. Findings are applied (a fix
- * agent pushes to your branch), edited, or dismissed.
+ * Slim status strip for a PR's local self-review findings: counts, apply-all,
+ * clear, and the collapsible review summary. Only renders when findings
+ * exist; the review itself is launched from the composer.
  */
-export function SelfReviewBar({ pr }: { pr: PrSummary }) {
+export function FindingsStrip({ pr }: { pr: PrSummary }) {
   const { ctx } = useFlow();
   const findings = useRepoStore((s) => s.findings).filter((f) => f.prNumber === pr.number);
   const summary = useRepoStore((s) => s.reviewSummaries[pr.number]);
   const clearFindings = useRepoStore((s) => s.clearFindings);
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
-  const [model, setModel] = useState("");
+  const model = useUiStore((s) => s.composerModel);
   const [error, setError] = useState("");
   const [showSummary, setShowSummary] = useState(false);
 
-  const reviewing = order
-    .map((id) => runs[id])
-    .some(
-      (r) =>
-        r &&
-        r.prNumber === pr.number &&
-        r.relation === "self-review" &&
-        (r.status === "running" || r.status === "starting")
-    );
+  if (findings.length === 0) return null;
   const open = findings.filter((f) => f.status === "open");
   const applying = findings.some((f) => f.status === "applying");
   const applied = findings.filter((f) => f.status === "applied").length;
-
-  const start = async () => {
-    setError("");
-    try {
-      await runSelfReviewFlow(ctx, pr, model || undefined);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
 
   const applyAll = async () => {
     setError("");
@@ -55,47 +35,29 @@ export function SelfReviewBar({ pr }: { pr: PrSummary }) {
   };
 
   return (
-    <div className="card">
+    <div className="card" style={{ padding: "8px 14px" }}>
       <div className="row">
-        <button className="primary" disabled={reviewing} onClick={() => void start()}>
-          {reviewing ? (
-            <>
-              <Spinner /> reviewing…
-            </>
-          ) : findings.length > 0 ? (
-            "Re-review"
-          ) : (
-            "Review"
-          )}
-        </button>
-        <ModelPicker value={model} onChange={setModel} />
-        {findings.length > 0 && (
-          <>
-            <Badge color={open.length > 0 ? "yellow" : "green"}>
-              {open.length} open · {applied} applied
-            </Badge>
-            {open.length > 0 && (
-              <button disabled={applying || reviewing} onClick={() => void applyAll()}>
-                {applying ? <Spinner /> : null} Apply all open
-              </button>
-            )}
-            <button className="small" onClick={() => void clearFindings(pr.number)}>
-              Clear
-            </button>
-          </>
+        <Badge color={open.length > 0 ? "yellow" : "green"}>
+          {open.length} finding{open.length === 1 ? "" : "s"} open · {applied} applied
+        </Badge>
+        {open.length > 0 && (
+          <button className="small" disabled={applying} onClick={() => void applyAll()}>
+            {applying ? <Spinner /> : null} Apply all open
+          </button>
         )}
+        {summary && (
+          <button className="link small" onClick={() => setShowSummary(!showSummary)}>
+            {showSummary ? "▾" : "▸"} summary ({timeAgo(summary.at)})
+          </button>
+        )}
+        <button className="link small" onClick={() => void clearFindings(pr.number)}>
+          clear all
+        </button>
         {error && <span style={{ color: "var(--red)" }}>{error}</span>}
       </div>
-      <div className="subtle" style={{ marginTop: 6 }}>
-        Agent review with local-only inline findings — nothing is posted to GitHub. Apply pushes the fix to
-        your branch.
-      </div>
-      {summary && (
-        <div style={{ marginTop: 8 }}>
-          <button className="link small" onClick={() => setShowSummary(!showSummary)}>
-            {showSummary ? "▾" : "▸"} review summary ({timeAgo(summary.at)})
-          </button>
-          {showSummary && <Markdown text={summary.text} className="compact" />}
+      {showSummary && summary && (
+        <div style={{ marginTop: 6 }}>
+          <Markdown text={summary.text} className="compact" />
         </div>
       )}
     </div>
