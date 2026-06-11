@@ -475,6 +475,18 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .ws-section-label::before { content: "▚"; color: var(--orange); opacity: 0.7; font-size: 8px; }
 .ws-section-label::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
 
+/* branch badge: head → base, each name click-copies */
+.branch-badge { gap: 5px; }
+.branch-badge .branch-name {
+  background: none; border: none; padding: 0;
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: none;
+  cursor: pointer;
+}
+.branch-badge .branch-name:hover {
+  color: var(--orange); background: none; border: none;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+
 /* slim animated ASCII strip on loading/waiting states */
 .loading-field { text-align: center; padding: 4px 0 10px; }
 .loading-field canvas { margin-bottom: 4px; }

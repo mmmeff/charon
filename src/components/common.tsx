@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useAgentStore } from "../lib/store";
 import type { SortKey } from "../lib/ui";
 import type { Severity } from "../types";
@@ -39,6 +39,35 @@ export function Section({ label, children }: { label?: string; children: ReactNo
       )}
       {children}
     </section>
+  );
+}
+
+/** head → base branch badge; each branch name click-copies itself. */
+export function BranchBadge({ head, base }: { head: string; base: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (name: string) => {
+    navigator.clipboard?.writeText(name).catch(() => {
+      // webview fallback
+      const ta = document.createElement("textarea");
+      ta.value = name;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    });
+    setCopied(name);
+    setTimeout(() => setCopied(null), 1200);
+  };
+  return (
+    <span className="badge gray branch-badge">
+      <button className="branch-name" title={`Copy "${head}"`} onClick={() => copy(head)}>
+        {copied === head ? "✓ copied" : head}
+      </button>
+      <span>→</span>
+      <button className="branch-name" title={`Copy "${base}"`} onClick={() => copy(base)}>
+        {copied === base ? "✓ copied" : base}
+      </button>
+    </span>
   );
 }
 

@@ -7,7 +7,7 @@ import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
 import { timeAgo, useScrolledPrTitle } from "../lib/ui";
-import { Badge, CiBadge, LoadingField, MergeBadge, Section, Spinner } from "./common";
+import { Badge, BranchBadge, CiBadge, LoadingField, MergeBadge, Section, Spinner } from "./common";
 import { ChecksPanel } from "./ChecksPanel";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
@@ -162,9 +162,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
               </Badge>
             </>
           )}
-          <Badge color="gray">
-            {pr.headRef} → {pr.baseRef}
-          </Badge>
+          <BranchBadge head={pr.headRef} base={pr.baseRef} />
           <PrLabels pr={pr} />
           <span className="subtle">
             +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
