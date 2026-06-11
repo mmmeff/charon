@@ -249,10 +249,10 @@ export function DiffViewer({
         <div className={`comment-nav-wrap ${navVisible ? "show" : ""}`}>
           <div className="comment-nav">
             <span className="comment-nav-count">{anchors.length} comments</span>
-            <button data-tip="Previous comment" className="tip-left" onClick={() => navToComment(-1)}>
+            <button title="Previous comment" onClick={() => navToComment(-1)}>
               ↑
             </button>
-            <button data-tip="Next comment" className="tip-left" onClick={() => navToComment(1)}>
+            <button title="Next comment" onClick={() => navToComment(1)}>
               ↓
             </button>
           </div>
