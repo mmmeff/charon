@@ -294,6 +294,27 @@ export class GitHubClient {
    * (job id parsed from the check's html_url); other CI providers fall back
    * to the check-run output summary plus annotations.
    */
+  /** Is this check a GitHub Actions job we can re-run via the API? */
+  static actionsJobRef(checkUrl: string): { runId: string; jobId: string } | null {
+    const m = /\/actions\/runs\/(\d+)\/job\/(\d+)/.exec(checkUrl ?? "");
+    return m ? { runId: m[1], jobId: m[2] } : null;
+  }
+
+  /**
+   * Re-run a failed Actions job. Tries the single-job rerun first; grouped /
+   * matrix / reusable-workflow jobs that GitHub refuses to re-run alone fall
+   * back to "re-run failed jobs" on the whole run.
+   */
+  async rerunCheck(repo: string, checkUrl: string): Promise<void> {
+    const ref = GitHubClient.actionsJobRef(checkUrl);
+    if (!ref) throw new Error("not a re-runnable GitHub Actions job");
+    try {
+      await this.json("POST", `/repos/${repo}/actions/jobs/${ref.jobId}/rerun`, {});
+    } catch {
+      await this.json("POST", `/repos/${repo}/actions/runs/${ref.runId}/rerun-failed-jobs`, {});
+    }
+  }
+
   async getCheckLog(
     repo: string,
     check: { name: string; url: string; id?: number; outputTitle?: string; outputSummary?: string }

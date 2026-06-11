@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { resolveHandler, usePrData } from "../lib/events";
 import { runFixFlow } from "../lib/flows";
+import { GitHubClient } from "../lib/github";
 import { interpolate, prVars } from "../lib/template";
 import type { CheckInfo, PrSummary } from "../types";
 import { AgentLaunchForm } from "./AgentLaunchForm";
@@ -39,12 +40,13 @@ const duration = (c: CheckInfo): string => {
  * fix-flow agent as additional context.
  */
 export function ChecksPanel({ pr }: { pr: PrSummary }) {
-  const { ctx } = useFlow();
+  const { ctx, poller } = useFlow();
   const checks = usePrData((s) => s.checks[pr.number] ?? []);
   const failing = checks.filter((c) => c.conclusion === "failure" || c.conclusion === "error");
   const [openOverride, setOpenOverride] = useState<boolean | null>(null);
   const [logs, setLogs] = useState<Record<string, { loading: boolean; text: string; open: boolean }>>({});
   const [fixOpen, setFixOpen] = useState<Record<string, boolean>>({});
+  const [retrying, setRetrying] = useState<Record<string, "busy" | "queued" | string>>({});
 
   if (checks.length === 0) return null;
   const expanded = openOverride ?? failing.length > 0;
@@ -90,6 +92,17 @@ ${log.slice(-AGENT_LOG_TAIL)}
     await runFixFlow(ctx, pr, task, `CI fix (${c.name})`, "ci_fix", model);
   };
 
+  const retry = async (c: CheckInfo) => {
+    setRetrying((r) => ({ ...r, [c.name]: "busy" }));
+    try {
+      await ctx.gh.rerunCheck(ctx.repo, c.url);
+      setRetrying((r) => ({ ...r, [c.name]: "queued" }));
+      poller.refresh();
+    } catch (e) {
+      setRetrying((r) => ({ ...r, [c.name]: e instanceof Error ? e.message : String(e) }));
+    }
+  };
+
   return (
     <div className="card checks-panel">
       <div className="row">
@@ -115,6 +128,10 @@ ${log.slice(-AGENT_LOG_TAIL)}
           const g = glyphFor(c);
           const log = logs[c.name];
           const failed = c.conclusion === "failure" || c.conclusion === "error";
+          const retryable =
+            ["failure", "error", "cancelled", "timed_out"].includes(c.conclusion ?? "") &&
+            GitHubClient.actionsJobRef(c.url) !== null;
+          const retryState = retrying[c.name];
           return (
             <div key={c.name} className="check-row">
               <div className="row">
@@ -128,6 +145,21 @@ ${log.slice(-AGENT_LOG_TAIL)}
                 <button className="link small" onClick={() => toggleLog(c)}>
                   {log?.open ? "hide logs" : "logs"}
                 </button>
+                {retryable &&
+                  (retryState === "queued" ? (
+                    <span className="subtle" style={{ fontSize: 10.5 }}>
+                      re-queued ✓
+                    </span>
+                  ) : (
+                    <button
+                      className="small"
+                      disabled={retryState === "busy"}
+                      title="Re-run this job (falls back to re-running all failed jobs when GitHub won't re-run it alone)"
+                      onClick={() => void retry(c)}
+                    >
+                      {retryState === "busy" ? <Spinner /> : "↻"} Retry
+                    </button>
+                  ))}
                 {failed && (
                   <button
                     className={`small ${fixOpen[c.name] ? "" : "primary"}`}
@@ -140,6 +172,11 @@ ${log.slice(-AGENT_LOG_TAIL)}
                   ↗
                 </a>
               </div>
+              {retryState && retryState !== "busy" && retryState !== "queued" && (
+                <div style={{ color: "var(--red)", fontSize: 11, marginTop: 2 }}>
+                  retry failed: {retryState}
+                </div>
+              )}
               {failed && fixOpen[c.name] && (
                 <AgentLaunchForm
                   label={`Fix ${c.name}`}
