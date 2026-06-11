@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/hero.svg" alt="Charon — the ferryman for your pull requests" width="100%"/>
+  <img src="docs/hero.svg" alt="Charon — human-in-the-loop agents for pull requests" width="100%"/>
 </p>
 
 <p align="center">
