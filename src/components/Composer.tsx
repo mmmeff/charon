@@ -3,7 +3,7 @@ import { cleanResultText } from "../lib/agents";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/defaults";
 import { runDraftEdit, runDraftQuestion, runReviewFlow, runSelfReviewFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
-import { useAgentStore, useUiStore } from "../lib/store";
+import { useAgentStore } from "../lib/store";
 import type { LineSelection, PrSummary } from "../types";
 import { timeAgo } from "../lib/ui";
 import { Badge, Spinner } from "./common";
@@ -86,8 +86,8 @@ export function Composer({
     setModeState(next);
   };
   const [error, setError] = useState("");
-  const model = useUiStore((s) => s.composerModel);
-  const setModel = useUiStore((s) => s.setComposerModel);
+  // one-shot model pick: local to this composer instance, no cross-form memory
+  const [model, setModel] = useState("");
   const runs = useAgentStore((s) => s.runs);
   const order = useAgentStore((s) => s.order);
 
@@ -182,7 +182,13 @@ export function Composer({
           {busy || (mode === "review" && reviewing) ? <Spinner /> : null}{" "}
           {mode === "review" && reviewing ? "reviewing…" : meta.submit}
         </button>
-        {mode !== "comment" && <ModelPicker value={model} onChange={setModel} />}
+        {mode !== "comment" && (
+          <ModelPicker
+            value={model}
+            onChange={setModel}
+            flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+          />
+        )}
         {onClose && <button onClick={onClose}>Cancel</button>}
         {error && <span style={{ color: "var(--red)" }}>{error}</span>}
       </div>

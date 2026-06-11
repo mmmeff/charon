@@ -182,6 +182,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
               {failed && fixOpen[c.name] && (
                 <AgentLaunchForm
                   label={`Fix ${c.name}`}
+                  flowKind="ci_fix"
                   placeholder="Optional: extra context — suspected cause, constraints, what not to touch  ( / for skills )"
                   onRun={(model, guidance) => fix(c, model, guidance)}
                   onClose={() => setFixOpen((f) => ({ ...f, [c.name]: false }))}

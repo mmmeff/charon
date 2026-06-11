@@ -41,6 +41,7 @@ function AddressWithAgent({
       {open && (
         <AgentLaunchForm
           label="Address with agent"
+          flowKind="feedback_fix"
           onRun={(model, guidance) => runAddressComment(ctx, pr, root, replies, model, guidance)}
           onClose={() => setOpen(false)}
         />
@@ -183,6 +184,7 @@ export function PrTitle({ pr }: { pr: PrSummary }) {
       {aiOpen && (
         <AgentLaunchForm
           label="Suggest title"
+          flowKind="rewrite"
           placeholder="Optional: guidance, e.g. 'conventional-commits style', 'mention the ticket'  ( / for skills )"
           onRun={async (model, instruction) => {
             // suggestion lands in the input — the user reviews, then saves
@@ -309,6 +311,7 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
         {aiOpen && (
           <AgentLaunchForm
             label="Generate draft"
+            flowKind="rewrite"
             placeholder="How should the description change? e.g. reflect the latest commits, add a test plan  ( / for skills )"
             onRun={async (model, instruction) => {
               // result lands in the editor — the user reviews, then saves

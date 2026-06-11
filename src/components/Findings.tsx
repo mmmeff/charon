@@ -24,6 +24,7 @@ function ApplyForm({
   return (
     <AgentLaunchForm
       label={label}
+      flowKind="feedback_fix"
       onRun={(model, guidance) => applyFindings(ctx, pr, findings, model, guidance)}
       onClose={onClose}
     />

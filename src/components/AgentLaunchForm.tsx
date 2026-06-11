@@ -1,27 +1,29 @@
 import { useState } from "react";
-import { useUiStore } from "../lib/store";
 import { Spinner } from "./common";
 import { ModelPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
 
 /**
  * Generic agent launch form: optional guidance for the agent plus model
- * choice, so the user can steer the work before it starts. Used by the
- * findings apply flow and the address-a-comment flow.
+ * choice, so the user can steer the work before it starts. The model pick is
+ * one-shot — local to this form, no memory: the next launch starts back at
+ * the configured default.
  */
 export function AgentLaunchForm({
   label,
   placeholder = "Optional: anything the agent should know or do differently?  ( / for skills )",
+  flowKind,
   onRun,
   onClose,
 }: {
   label: string;
   placeholder?: string;
+  /** AgentKind of the flow this launches — shows the right default in the picker */
+  flowKind?: string;
   onRun: (model: string | undefined, guidance: string) => Promise<unknown>;
   onClose: () => void;
 }) {
-  const model = useUiStore((s) => s.composerModel);
-  const setModel = useUiStore((s) => s.setComposerModel);
+  const [model, setModel] = useState("");
   const [guidance, setGuidance] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -56,7 +58,7 @@ export function AgentLaunchForm({
         <button className="small primary" disabled={busy} onClick={() => void run()}>
           {busy ? <Spinner /> : null} {label}
         </button>
-        <ModelPicker value={model} onChange={setModel} />
+        <ModelPicker value={model} onChange={setModel} flowKind={flowKind} />
         <button className="small" onClick={onClose}>
           Cancel
         </button>

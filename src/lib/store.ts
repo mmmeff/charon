@@ -305,9 +305,6 @@ interface UiState {
   setFocusedPr(tab: string, prNumber: number): void;
   diffScrollTarget: DiffScrollTarget | null;
   requestDiffScroll(path: string, side: "LEFT" | "RIGHT", line: number): void;
-  /** model chosen in any composer — shared so one choice applies everywhere */
-  composerModel: string;
-  setComposerModel(m: string): void;
   /** PR whose title scrolled out of view — shown as a topstrip breadcrumb */
   scrolledPrTitle: { number: number; title: string } | null;
   setScrolledPrTitle(v: { number: number; title: string } | null): void;
@@ -334,10 +331,6 @@ export const useUiStore = create<UiState>((set, get) => ({
   diffScrollTarget: null,
   requestDiffScroll(path, side, line) {
     set({ diffScrollTarget: { path, side, line, nonce: Date.now() } });
-  },
-  composerModel: "",
-  setComposerModel(m) {
-    set({ composerModel: m });
   },
   scrolledPrTitle: null,
   setScrolledPrTitle(v) {
