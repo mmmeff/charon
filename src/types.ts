@@ -128,6 +128,8 @@ export interface PrSummary {
   labels: string[];
   url: string;
   mergeableState: string; // clean | dirty | behind | blocked | unstable | unknown
+  /** GitHub auto-merge is armed on this PR */
+  autoMerge: boolean;
   requestedFromMe: boolean;
   updatedAt: string;
   additions: number;

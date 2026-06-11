@@ -193,6 +193,7 @@ export class GitHubClient {
       labels: (p.labels ?? []).map((l: any) => l.name),
       url: p.html_url ?? "",
       mergeableState: p.mergeable_state ?? "unknown",
+      autoMerge: p.auto_merge != null,
       requestedFromMe,
       updatedAt: p.updated_at ?? "",
       additions: p.additions ?? 0,
@@ -600,6 +601,37 @@ export class GitHubClient {
   /** Close the user's own PR without merging (direct user-authored action). */
   async closePull(repo: string, number: number): Promise<void> {
     await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { state: "closed" });
+  }
+
+  /**
+   * Arm GitHub auto-merge (GraphQL-only). Merge method follows what the repo
+   * allows, preferring squash > merge commit > rebase.
+   */
+  async enableAutoMerge(repo: string, number: number): Promise<void> {
+    const [pull, repoInfo] = await Promise.all([
+      this.json<{ node_id: string }>("GET", `/repos/${repo}/pulls/${number}`),
+      this.json<any>("GET", `/repos/${repo}`),
+    ]);
+    const method = repoInfo.allow_squash_merge
+      ? "SQUASH"
+      : repoInfo.allow_merge_commit
+        ? "MERGE"
+        : "REBASE";
+    await this.graphql(
+      `mutation($id:ID!,$m:PullRequestMergeMethod!){
+        enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:$m}){ pullRequest{ number } }
+      }`,
+      { id: pull.node_id, m: method }
+    );
+  }
+
+  /** Disarm GitHub auto-merge. */
+  async disableAutoMerge(repo: string, number: number): Promise<void> {
+    const pull = await this.json<{ node_id: string }>("GET", `/repos/${repo}/pulls/${number}`);
+    await this.graphql(
+      `mutation($id:ID!){ disablePullRequestAutoMerge(input:{pullRequestId:$id}){ pullRequest{ number } } }`,
+      { id: pull.node_id }
+    );
   }
 
   /** Server-side "Update branch": merge the base branch into the PR head. */

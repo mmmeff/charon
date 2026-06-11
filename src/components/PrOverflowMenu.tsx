@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePrData } from "../lib/events";
 import { notify } from "../lib/notify";
 import type { PrSummary } from "../types";
 import { Spinner } from "./common";
@@ -56,6 +57,26 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
     }
   };
 
+  const toggleAutoMerge = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      if (pr.autoMerge) await ctx.gh.disableAutoMerge(ctx.repo, pr.number);
+      else await ctx.gh.enableAutoMerge(ctx.repo, pr.number);
+      // optimistic flag flip; the next poll reconciles
+      const d = usePrData.getState();
+      const fix = (l: PrSummary[]) =>
+        l.map((p) => (p.number === pr.number ? { ...p, autoMerge: !pr.autoMerge } : p));
+      d.patch({ myDrafts: fix(d.myDrafts), myOpen: fix(d.myOpen), reviewQueue: fix(d.reviewQueue) });
+      poller.refresh();
+      dismiss();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="overflow-menu" ref={ref}>
       <button
@@ -68,6 +89,19 @@ export function PrOverflowMenu({ pr }: { pr: PrSummary }) {
       {open && (
         <div className="overflow-pop">
           {error && <div className="overflow-error">{error}</div>}
+          <button
+            className="overflow-item"
+            disabled={busy}
+            title={
+              pr.autoMerge
+                ? "Disarm auto-merge"
+                : "Merge automatically once requirements are met (method follows repo settings)"
+            }
+            onClick={() => void toggleAutoMerge()}
+          >
+            {busy && confirming === null ? <Spinner /> : null}{" "}
+            {pr.autoMerge ? "Disable automerge" : "Enable automerge"}
+          </button>
           {confirming === "close" ? (
             <div className="row" style={{ padding: "2px 4px", gap: 4 }}>
               <button className="small danger" disabled={busy} onClick={() => void closePr()}>

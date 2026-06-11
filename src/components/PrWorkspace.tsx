@@ -148,6 +148,11 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         <PrTitle pr={pr} />
         <div className="row" style={{ marginBottom: 12 }}>
           {pr.draft && <Badge color="gray">draft</Badge>}
+          {pr.autoMerge && (
+            <Badge color="green" title="Auto-merge is armed — merges once all requirements pass">
+              ⏻ automerge
+            </Badge>
+          )}
           {variant === "babysit" && (
             <>
               <CiBadge checks={checks} />
