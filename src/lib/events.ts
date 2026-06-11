@@ -7,6 +7,7 @@ import type {
   PrSnapshot,
   PrSummary,
   ReviewInfo,
+  TimelineEventInfo,
 } from "../types";
 import { eventDef, EVENT_CATALOG } from "./defaults";
 import { runAnalysisFlow, runFixFlow, runReviewFlow, type FlowContext, eventVars } from "./flows";
@@ -28,6 +29,8 @@ interface PrDataState {
   reviews: Record<number, ReviewInfo[]>;
   /** review threads (resolution state) keyed by PR number */
   threads: Record<number, ReviewThreadInfo[]>;
+  /** non-comment timeline events (pushes, merges, labels…) keyed by PR number */
+  timeline: Record<number, TimelineEventInfo[]>;
   polling: boolean;
   lastPollAt: number | null;
   /** when the next poll is scheduled to fire */
@@ -44,6 +47,7 @@ export const usePrData = create<PrDataState>((set) => ({
   comments: {},
   reviews: {},
   threads: {},
+  timeline: {},
   polling: false,
   lastPollAt: null,
   nextPollAt: null,
@@ -384,6 +388,7 @@ export class RepoPoller {
       const comments: Record<number, CommentInfo[]> = {};
       const reviews: Record<number, ReviewInfo[]> = {};
       const threads: Record<number, ReviewThreadInfo[]> = {};
+      const timeline: Record<number, TimelineEventInfo[]> = {};
       const newSnapshots: Record<number, PrSnapshot> = {};
       const fired: { ev: FiredEvent; pr: PrSummary }[] = [];
       // detail payloads carry diff stats + mergeable_state; the UI lists are
@@ -399,17 +404,19 @@ export class RepoPoller {
         const detail = await gh.getPull(repo, shallow.number);
         detail.requestedFromMe = shallow.requestedFromMe || requested.has(shallow.number);
         detailed[detail.number] = detail;
-        const [ch, cm, rv, th] = await Promise.all([
+        const [ch, cm, rv, th, tl] = await Promise.all([
           prClass === "mine" ? gh.listChecks(repo, detail.headSha) : Promise.resolve([]),
           gh.listComments(repo, shallow.number),
           gh.listReviews(repo, shallow.number),
           // GraphQL-only; tolerate failure on older GHE
           gh.listReviewThreads(repo, shallow.number).catch(() => []),
+          gh.listTimeline(repo, shallow.number),
         ]);
         checks[detail.number] = ch;
         comments[detail.number] = cm;
         reviews[detail.number] = rv;
         threads[detail.number] = th;
+        timeline[detail.number] = tl;
         const pollData: PrPollData = { pr: detail, checks: ch, comments: cm, reviews: rv };
         const prevSnap = store.snapshots[detail.number];
         if (!isFirstRun && fireEvents) {
@@ -473,6 +480,7 @@ export class RepoPoller {
         comments,
         reviews,
         threads,
+        timeline,
         lastPollAt: Date.now(),
         pollError: null,
       });

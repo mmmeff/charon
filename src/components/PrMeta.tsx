@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePrData } from "../lib/events";
 import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
-import type { CommentInfo, PrSummary, ReviewInfo } from "../types";
+import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
 import { Badge, Spinner, age } from "./common";
 import { IconExpand } from "./icons";
 import { Markdown } from "./Markdown";
@@ -139,7 +139,8 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
 type ActivityEntry =
   | { kind: "thread"; at: number; root: CommentInfo; replies: CommentInfo[] }
   | { kind: "issue_comment"; at: number; comment: CommentInfo }
-  | { kind: "review"; at: number; review: ReviewInfo };
+  | { kind: "review"; at: number; review: ReviewInfo }
+  | { kind: "timeline"; at: number; ev: TimelineEventInfo };
 
 /**
  * Right-hand column: the PR's GitHub-derived activity. Inline diff comments
@@ -149,6 +150,7 @@ type ActivityEntry =
 export function PrActivityPanel({ pr }: { pr: PrSummary }) {
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
   const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
+  const timeline = usePrData((s) => s.timeline[pr.number] ?? []);
   const { width, handle } = useResizablePanel("prc-w-activity", 320, 230, 640, "left");
 
   const reviewComments = comments.filter((c) => c.kind === "review_comment");
@@ -173,6 +175,7 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
     ...reviews
       .filter((r) => r.state && r.state !== "PENDING")
       .map((r): ActivityEntry => ({ kind: "review", at: Date.parse(r.submittedAt) || 0, review: r })),
+    ...timeline.map((ev): ActivityEntry => ({ kind: "timeline", at: ev.at, ev })),
   ].sort((a, b) => b.at - a.at);
 
   const count = entries.reduce(
@@ -194,6 +197,26 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
       />
       {entries.length === 0 && <div className="subtle">No comments or reviews yet.</div>}
       {entries.map((e, i) => {
+        if (e.kind === "timeline") {
+          const ev = e.ev;
+          return (
+            <div key={ev.id} className="act-event">
+              <Badge color={ev.color}>{ev.verb}</Badge>
+              <strong>{ev.actor}</strong>
+              {ev.detail &&
+                (ev.url ? (
+                  <a href={ev.url} target="_blank" rel="noreferrer" className="act-event-detail">
+                    {ev.detail}
+                  </a>
+                ) : (
+                  <span className="act-event-detail subtle">{ev.detail}</span>
+                ))}
+              <span className="subtle" style={{ marginLeft: "auto", flexShrink: 0 }}>
+                {age(ev.at)}
+              </span>
+            </div>
+          );
+        }
         if (e.kind === "review") {
           const r = e.review;
           return (

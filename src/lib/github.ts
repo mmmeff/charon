@@ -6,6 +6,7 @@ import type {
   PrSummary,
   ProposedInlineComment,
   ReviewInfo,
+  TimelineEventInfo,
 } from "../types";
 
 export interface ReviewThreadInfo {
@@ -340,6 +341,94 @@ export class GitHubClient {
       bodyHtml: r.body_html || undefined,
       submittedAt: r.submitted_at ?? "",
     }));
+  }
+
+  /**
+   * Non-comment PR timeline: pushes, merge/close, force-pushes, labels,
+   * review requests… Comment/review entries are skipped (rendered from their
+   * own streams). Curated mapping; unknown event types are ignored, so this
+   * degrades gracefully across GitHub versions.
+   */
+  async listTimeline(repo: string, number: number): Promise<TimelineEventInfo[]> {
+    let items: any[] = [];
+    try {
+      items = await this.paged<any>(`/repos/${repo}/issues/${number}/timeline`);
+    } catch {
+      return []; // timeline API unavailable (older GHE)
+    }
+    const out: TimelineEventInfo[] = [];
+    const firstLine = (s: string) => (s ?? "").split("\n").find((x) => x.trim()) ?? "";
+    for (const e of items) {
+      const actor = e.actor?.login ?? e.author?.name ?? "";
+      const at =
+        Date.parse(e.created_at ?? e.committer?.date ?? e.author?.date ?? "") || 0;
+      const push = (verb: string, color: TimelineEventInfo["color"], detail?: string, url?: string) =>
+        out.push({
+          id: `${e.event}-${e.id ?? e.sha ?? at}-${out.length}`,
+          at,
+          actor,
+          verb,
+          detail,
+          color,
+          url,
+        });
+      switch (e.event) {
+        case "committed":
+          push("pushed", "blue", `${firstLine(e.message)} (${(e.sha ?? "").slice(0, 7)})`, e.html_url);
+          break;
+        case "merged":
+          push("merged", "purple", e.commit_id ? `(${e.commit_id.slice(0, 7)})` : undefined);
+          break;
+        case "closed":
+          push("closed", "red");
+          break;
+        case "reopened":
+          push("reopened", "green");
+          break;
+        case "head_ref_force_pushed":
+          push("force-pushed", "yellow");
+          break;
+        case "head_ref_deleted":
+          push("deleted branch", "gray");
+          break;
+        case "head_ref_restored":
+          push("restored branch", "gray");
+          break;
+        case "review_requested":
+          push("requested review", "purple", e.requested_reviewer?.login ?? e.requested_team?.name);
+          break;
+        case "review_request_removed":
+          push("removed review request", "gray", e.requested_reviewer?.login ?? e.requested_team?.name);
+          break;
+        case "labeled":
+          push("labeled", "gray", e.label?.name);
+          break;
+        case "unlabeled":
+          push("unlabeled", "gray", e.label?.name);
+          break;
+        case "ready_for_review":
+          push("marked ready", "green");
+          break;
+        case "convert_to_draft":
+          push("converted to draft", "gray");
+          break;
+        case "renamed":
+          push("renamed", "gray", `“${e.rename?.from}” → “${e.rename?.to}”`);
+          break;
+        case "base_ref_changed":
+          push("changed base", "yellow");
+          break;
+        case "assigned":
+          push("assigned", "gray", e.assignee?.login);
+          break;
+        case "unassigned":
+          push("unassigned", "gray", e.assignee?.login);
+          break;
+        default:
+          break; // comments/reviews come from their own streams
+      }
+    }
+    return out;
   }
 
   // -- Writes (only ever called from approved proposals or explicit user action)

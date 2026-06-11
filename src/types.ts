@@ -164,6 +164,17 @@ export interface ReviewInfo {
   submittedAt: string;
 }
 
+/** A non-comment PR timeline entry (pushed, merged, labeled, …). */
+export interface TimelineEventInfo {
+  id: string;
+  at: number;
+  actor: string;
+  verb: string;
+  detail?: string;
+  color: "gray" | "green" | "red" | "yellow" | "blue" | "purple";
+  url?: string;
+}
+
 /** Snapshot persisted between polls; diffing two snapshots yields events. */
 export interface PrSnapshot {
   pr: PrSummary;
