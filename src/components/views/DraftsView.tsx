@@ -2,6 +2,7 @@ import { useState } from "react";
 import { usePrData } from "../../lib/events";
 import { useUiStore } from "../../lib/store";
 import { Badge, SortPicker, age, sortPrs, type SortKey } from "../common";
+import { Sidebar } from "../Panels";
 import { PrWorkspace } from "../PrWorkspace";
 
 /**
@@ -30,7 +31,7 @@ export function DraftsView() {
 
   return (
     <div className="main split">
-      <div className="sidebar">
+      <Sidebar>
         <div className="row between" style={{ marginBottom: 8 }}>
           <span className="subtle">{drafts.length} draft{drafts.length > 1 ? "s" : ""}</span>
           <SortPicker value={sort} onChange={setSort} />
@@ -56,7 +57,7 @@ export function DraftsView() {
             </div>
           </div>
         ))}
-      </div>
+      </Sidebar>
       <div className="content">{pr && <PrWorkspace key={pr.number} pr={pr} variant="draft" />}</div>
     </div>
   );

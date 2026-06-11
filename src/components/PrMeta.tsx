@@ -4,6 +4,7 @@ import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo } from "../types";
 import { Badge, Spinner, age } from "./common";
 import { Markdown } from "./Markdown";
+import { useResizablePanel } from "./Panels";
 import { useFlow } from "./RepoApp";
 
 export function PrLabels({ pr }: { pr: PrSummary }) {
@@ -51,6 +52,7 @@ type ActivityEntry =
 export function PrActivityPanel({ pr }: { pr: PrSummary }) {
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
   const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
+  const { width, handle } = useResizablePanel("prc-w-activity", 320, 230, 640, "left");
 
   const reviewComments = comments.filter((c) => c.kind === "review_comment");
   const ids = new Set(reviewComments.map((c) => c.id));
@@ -82,7 +84,9 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
   );
 
   return (
-    <div className="ws-activity">
+    <div className="ws-activity" style={{ width }}>
+      {handle}
+      <div className="ws-activity-inner">
       <div className="subtle" style={{ marginBottom: 8, fontWeight: 600 }}>
         Activity ({count})
       </div>
@@ -121,6 +125,7 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
         }
         return <Thread key={`t${e.root.id}`} pr={pr} root={e.root} replies={e.replies} />;
       })}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { eventDef } from "../../lib/defaults";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import { Badge, CiBadge, MergeBadge, SortPicker, age, sortPrs, timeAgo, type SortKey } from "../common";
+import { Sidebar } from "../Panels";
 import { ProposalCard } from "../ProposalCard";
 import { PrWorkspace } from "../PrWorkspace";
 
@@ -48,7 +49,7 @@ export function BabysitView() {
 
   return (
     <div className="main split">
-      <div className="sidebar">
+      <Sidebar>
         <div className="row between" style={{ marginBottom: 8 }}>
           <span className="subtle">
             {myOpen.length} open PR{myOpen.length > 1 ? "s" : ""}
@@ -112,7 +113,7 @@ export function BabysitView() {
             ))}
           </>
         )}
-      </div>
+      </Sidebar>
       <div className="content">{pr && <PrWorkspace key={pr.number} pr={pr} variant="babysit" />}</div>
     </div>
   );

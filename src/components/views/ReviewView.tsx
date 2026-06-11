@@ -6,6 +6,7 @@ import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { Badge, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
+import { Sidebar } from "../Panels";
 import { PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
 import { InlineCommentEditor, ProposalCard } from "../ProposalCard";
 import { useFlow } from "../RepoApp";
@@ -36,7 +37,7 @@ export function ReviewView() {
 
   return (
     <div className="main split">
-      <div className="sidebar">
+      <Sidebar>
         <div className="row between" style={{ marginBottom: 8 }}>
           <span className="subtle">
             {queue.length} review{queue.length > 1 ? "s" : ""} waiting
@@ -63,7 +64,7 @@ export function ReviewView() {
             </div>
           </div>
         ))}
-      </div>
+      </Sidebar>
       <div className="content">{pr && <ReviewWorkspace key={pr.number} pr={pr} />}</div>
     </div>
   );
