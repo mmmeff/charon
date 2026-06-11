@@ -121,7 +121,7 @@ export function Composer({
         const handler = resolveHandler(ctx.config.events, "review_requested");
         let task = interpolate(handler.prompt, { ...prVars(pr), repo: ctx.repo });
         if (text.trim()) task += `\n\nPay particular attention to: ${text.trim()}`;
-        await runReviewFlow(ctx, pr, task, m);
+        await runReviewFlow(ctx, pr, task, m, selection);
       }
       setText("");
       onClose?.();
@@ -165,6 +165,7 @@ export function Composer({
         onChange={setText}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit && !busy) void submit();
+          if (e.key === "Escape" && onClose) onClose();
         }}
       />
       <div className="row" style={{ marginTop: 8 }}>

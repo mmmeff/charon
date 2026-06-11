@@ -107,6 +107,9 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
                   comments: proposal.comments.map((x) => (x.key === c.key ? next : x)),
                 })
               }
+              onDelete={() =>
+                void patch({ comments: proposal.comments.filter((x) => x.key !== c.key) })
+              }
             />
           ))}
       </div>
@@ -206,12 +209,14 @@ export function EditableText({
 export function InlineCommentEditor({
   comment,
   onChange,
+  onDelete,
   prNumber,
   prTitle,
   compact = false,
 }: {
   comment: ProposedInlineComment;
   onChange: (c: ProposedInlineComment) => void;
+  onDelete?: () => void;
   prNumber: number;
   prTitle: string;
   compact?: boolean;
@@ -249,6 +254,15 @@ export function InlineCommentEditor({
               </option>
             ))}
           </select>
+          {onDelete && (
+            <button
+              className="link small danger-link"
+              title="Remove this proposed comment entirely"
+              onClick={onDelete}
+            >
+              delete
+            </button>
+          )}
         </div>
       </div>
       <div style={{ marginTop: 6 }}>

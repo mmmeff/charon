@@ -108,6 +108,12 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
                   comments: reviewProposal.comments.map((x) => (x.key === c.key ? next : x)),
                 })
               }
+              onDelete={() =>
+                void upsert({
+                  ...reviewProposal,
+                  comments: reviewProposal.comments.filter((x) => x.key !== c.key),
+                })
+              }
             />
           ),
         }))
@@ -149,7 +155,23 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
           <Spinner /> loading diff…
         </p>
       )}
-      {files && <DiffViewer files={files} anchors={anchors} />}
+      {files && (
+        <DiffViewer
+          files={files}
+          anchors={anchors}
+          selectable
+          renderCommentForm={(sel, close) => (
+            <Composer
+              pr={pr}
+              modes={["comment", "review", "ask"]}
+              reviewKind="teammate"
+              compact
+              selection={sel}
+              onClose={close}
+            />
+          )}
+        />
+      )}
       </div>
       <PrActivityPanel pr={pr} />
     </div>

@@ -107,6 +107,19 @@ export function DiffViewer({
     );
   };
 
+  // Escape cancels an in-progress drag or open selection/composer.
+  useEffect(() => {
+    if (!sel && !drag) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSel(null);
+        setDrag(null);
+      }
+    };
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [sel, drag]);
+
   // ---- scroll-to-line requests (activity stream "on file:line" links) ----
   const scrollTarget = useUiStore((s) => s.diffScrollTarget);
   useEffect(() => {

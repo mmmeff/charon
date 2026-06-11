@@ -197,18 +197,9 @@ function parseReviewOutput(
   return { summary, verdict, comments, dropped };
 }
 
-async function createReviewProposal(
-  ctx: FlowContext,
-  pr: PrSummary,
-  runId: string,
-  resultText: string,
-  diffText: string,
-  context: string
-): Promise<void> {
-  const store = useRepoStore.getState();
-  const parsed = parseReviewOutput(resultText, diffText);
-  // suggestions fold into the comment body for GitHub submission
-  const comments: ProposedInlineComment[] = parsed.comments.map((c) => ({
+/** Suggestions fold into the comment body for GitHub submission. */
+const toProposedComments = (parsed: ParsedReviewComment[]): ProposedInlineComment[] =>
+  parsed.map((c) => ({
     key: uid("ic-"),
     path: c.path,
     line: c.line,
@@ -219,6 +210,18 @@ async function createReviewProposal(
     confidence: c.confidence,
     included: true,
   }));
+
+async function createReviewProposal(
+  ctx: FlowContext,
+  pr: PrSummary,
+  runId: string,
+  resultText: string,
+  diffText: string,
+  context: string
+): Promise<void> {
+  const store = useRepoStore.getState();
+  const parsed = parseReviewOutput(resultText, diffText);
+  const comments = toProposedComments(parsed.comments);
 
   const summary = parsed.summary;
   const dropped = parsed.dropped;
@@ -287,19 +290,68 @@ export async function runFixFlow(
   });
 }
 
+/**
+ * Append a line-scoped review's findings to the pending review proposal (or
+ * start one) instead of replacing it — used when the user selects a range on
+ * a teammate PR and asks for review feedback on just those lines.
+ */
+async function mergeIntoReviewProposal(
+  ctx: FlowContext,
+  pr: PrSummary,
+  runId: string,
+  resultText: string,
+  diffText: string
+): Promise<void> {
+  const store = useRepoStore.getState();
+  const parsed = parseReviewOutput(resultText, diffText);
+  const comments = toProposedComments(parsed.comments);
+  const existing = store.proposals.find(
+    (p) => p.type === "review" && p.prNumber === pr.number && p.status === "pending"
+  );
+  if (existing && existing.type === "review") {
+    await store.upsertProposal({ ...existing, comments: [...existing.comments, ...comments] });
+    return;
+  }
+  await store.upsertProposal({
+    id: uid("prop-"),
+    type: "review",
+    repo: ctx.repo,
+    prNumber: pr.number,
+    prTitle: pr.title,
+    body: parsed.summary,
+    verdict: "COMMENT",
+    comments,
+    context: "line-scoped review",
+    createdAt: Date.now(),
+    status: "pending",
+    agentRunId: runId,
+  });
+}
+
 /** Review flow: diff + skills → agent → review proposal with inline comments. */
 export async function runReviewFlow(
   ctx: FlowContext,
   pr: PrSummary,
   task: string,
-  model?: string
+  model?: string,
+  selection?: LineSelection | null
 ): Promise<string> {
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   const diff = truncate(diffText, MAX_DIFF_CHARS, "\n…[diff truncated — review what is shown]");
+  const scopeBlock = selection
+    ? `\nSCOPE: review ONLY this selected region — ${selection.path} lines ${selection.startLine}–${selection.endLine} (${
+        selection.side === "RIGHT" ? "new" : "old"
+      } side):
+\`\`\`
+${selection.snippet}
+\`\`\`
+Every comment must be about code in (or directly broken by) this region; anchor comments to lines within it.\n`
+    : "";
   const base = `You are PR Copilot's review agent. Review PR #${pr.number} ("${pr.title}") by ${pr.author} in ${ctx.repo}.
 
 TASK:
 ${task}
+${scopeBlock}
 
 Reviewer guidance configured for this repo:
 ${ctx.config.reviewFilters.criteria}
@@ -317,7 +369,9 @@ ${REVIEW_CONTRACT}`;
   const prompt = applySkills(base, ctx.skills, ctx.config.skills.review);
   return startAgent({
     kind: "review",
-    relation: "review",
+    relation: selection
+      ? `review (${selection.path}:${selection.startLine}–${selection.endLine})`
+      : "review",
     repo: ctx.repo,
     prNumber: pr.number,
     prTitle: pr.title,
@@ -326,7 +380,9 @@ ${REVIEW_CONTRACT}`;
     binary: ctx.global.cursorBinary,
     mode: "ask", // read-only: a review must never touch code or GitHub
     onDone: (run) =>
-      createReviewProposal(ctx, pr, run.id, run.resultText, diffText, "automated self-review"),
+      selection
+        ? mergeIntoReviewProposal(ctx, pr, run.id, run.resultText, diffText)
+        : createReviewProposal(ctx, pr, run.id, run.resultText, diffText, "automated self-review"),
   });
 }
 

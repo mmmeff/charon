@@ -7,6 +7,15 @@ import { loadSkills } from "../lib/skills";
 import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore } from "../lib/store";
 import { native } from "../lib/tauri";
 import { timeAgo, useNow } from "./common";
+import {
+  IconActivity,
+  IconDrafts,
+  IconOpen,
+  IconRefresh,
+  IconRepos,
+  IconReview,
+  IconSettings,
+} from "./icons";
 import { ActivityView } from "./views/ActivityView";
 import { BabysitView } from "./views/BabysitView";
 import { DraftsView } from "./views/DraftsView";
@@ -92,75 +101,90 @@ export function RepoApp({ repo }: { repo: string }) {
   ).length;
   const pendingProposals = repoStore.proposals.filter((p) => p.status === "pending").length;
 
-  const tabs: { id: Tab; label: string; count?: number; hot?: boolean }[] = [
-    { id: "drafts", label: "Drafts", count: prData.myDrafts.length },
-    { id: "open", label: "Open", count: prData.myOpen.length },
-    { id: "review", label: "Review", count: prData.reviewQueue.length },
-    { id: "activity", label: "Activity Feed", count: activeAgents, hot: activeAgents > 0 },
-    { id: "settings", label: "Settings" },
+  const tabs: { id: Tab; label: string; icon: () => JSX.Element; count?: number; hot?: boolean }[] = [
+    { id: "drafts", label: "Drafts", icon: IconDrafts, count: prData.myDrafts.length },
+    { id: "open", label: "Open PRs", icon: IconOpen, count: prData.myOpen.length },
+    { id: "review", label: "Review", icon: IconReview, count: prData.reviewQueue.length },
+    { id: "activity", label: "Activity Feed", icon: IconActivity, count: activeAgents, hot: activeAgents > 0 },
+    { id: "settings", label: "Settings", icon: IconSettings },
   ];
 
   return (
     <FlowCtx.Provider value={{ ctx: ctxRef.current, poller }}>
       <div className="app">
-        <div className="tabbar">
-          <span className="title">
-            <span className="brand">SWITCHYARD</span>
-            <span className="dim">facility: {repo}</span>
-          </span>
-          <button
-            className="small"
-            title="Switch repository"
-            style={{ marginRight: 8 }}
-            onClick={() => void native.openLauncherWindow()}
-          >
-            repos
-          </button>
+        <nav className="rail">
+          <div className="rail-brand" title="Switchyard">
+            ▙
+          </div>
           {tabs.map((t) => (
             <button
               key={t.id}
-              className={`tab ${tab === t.id ? "active" : ""}`}
+              className={`rail-btn ${tab === t.id ? "active" : ""}`}
+              title={t.label + (t.count ? ` (${t.count})` : "")}
               onClick={() => setTab(t.id)}
             >
-              {t.label}
+              <t.icon />
               {t.count !== undefined && t.count > 0 && (
-                <span className={`count ${t.hot ? "hot" : ""}`}>{t.count}</span>
+                <span className={`rail-count ${t.hot ? "hot" : ""}`}>
+                  {t.count > 99 ? "99" : t.count}
+                </span>
               )}
             </button>
           ))}
-          <span className="spacer" />
-          {pendingProposals > 0 && (
-            <span className="badge yellow" style={{ marginRight: 10 }}>
-              {pendingProposals} pending approval{pendingProposals > 1 ? "s" : ""}
-            </span>
-          )}
-          <span
-            className={`pollstatus ${prData.pollError ? "err" : ""}`}
-            title={
-              prData.pollError ??
-              (prData.lastPollAt ? `last synced ${timeAgo(prData.lastPollAt)}` : "")
-            }
+          <div className="rail-spacer" />
+          <button
+            className="rail-btn"
+            title="Switch repository"
+            onClick={() => void native.openLauncherWindow()}
           >
-            {prData.polling ? (
-              <span className="cursor-blink">syncing</span>
-            ) : prData.pollError ? (
-              "sync error"
-            ) : prData.nextPollAt ? (
-              `sync t-${Math.max(0, Math.ceil((prData.nextPollAt - Date.now()) / 1000))}s`
-            ) : (
-              <span className="cursor-blink">starting</span>
-            )}
-          </span>
-          <button className="small" onClick={() => poller.refresh()} disabled={prData.polling}>
-            ↻
+            <IconRepos />
           </button>
-        </div>
+        </nav>
 
-        {tab === "drafts" && <DraftsView />}
-        {tab === "open" && <BabysitView />}
-        {tab === "review" && <ReviewView />}
-        {tab === "activity" && <ActivityView />}
-        {tab === "settings" && <SettingsView />}
+        <div className="app-col">
+          <div className="topstrip">
+            <span className="brand">SWITCHYARD</span>
+            <span className="dim">/ facility: {repo}</span>
+            <span className="spacer" />
+            {pendingProposals > 0 && (
+              <span className="badge yellow">
+                {pendingProposals} pending approval{pendingProposals > 1 ? "s" : ""}
+              </span>
+            )}
+            <span
+              className={`pollstatus ${prData.pollError ? "err" : ""}`}
+              title={
+                prData.pollError ??
+                (prData.lastPollAt ? `last synced ${timeAgo(prData.lastPollAt)}` : "")
+              }
+            >
+              {prData.polling ? (
+                <span className="cursor-blink">syncing</span>
+              ) : prData.pollError ? (
+                "sync error"
+              ) : prData.nextPollAt ? (
+                `sync t-${Math.max(0, Math.ceil((prData.nextPollAt - Date.now()) / 1000))}s`
+              ) : (
+                <span className="cursor-blink">starting</span>
+              )}
+            </span>
+            <button
+              className="rail-btn"
+              style={{ width: 26, height: 26 }}
+              onClick={() => poller.refresh()}
+              disabled={prData.polling}
+              title="Sync now"
+            >
+              <IconRefresh />
+            </button>
+          </div>
+
+          {tab === "drafts" && <DraftsView />}
+          {tab === "open" && <BabysitView />}
+          {tab === "review" && <ReviewView />}
+          {tab === "activity" && <ActivityView />}
+          {tab === "settings" && <SettingsView />}
+        </div>
       </div>
     </FlowCtx.Provider>
   );
