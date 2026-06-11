@@ -109,6 +109,21 @@ export function RepoApp({ repo }: { repo: string }) {
     { id: "settings", label: "Settings", icon: IconSettings },
   ];
 
+  // ⌘1–⌘5 (ctrl on other platforms) jumps between tabs
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= tabs.length) {
+        e.preventDefault();
+        setTab(tabs[n - 1].id);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <FlowCtx.Provider value={{ ctx: ctxRef.current, poller }}>
       <div className="app">
@@ -116,11 +131,11 @@ export function RepoApp({ repo }: { repo: string }) {
           <div className="rail-brand" title="Switchyard">
             ▙
           </div>
-          {tabs.map((t) => (
+          {tabs.map((t, i) => (
             <button
               key={t.id}
               className={`rail-btn ${tab === t.id ? "active" : ""}`}
-              data-tip={t.label + (t.count ? ` — ${t.count}` : "")}
+              data-tip={`${t.label}${t.count ? ` — ${t.count}` : ""} · ⌘${i + 1}`}
               onClick={() => setTab(t.id)}
             >
               <t.icon />
