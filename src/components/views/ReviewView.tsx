@@ -11,7 +11,7 @@ import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
 import { groupCommentThreads } from "../../lib/threads";
 import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
-import { InlineCommentEditor, ProposalCard } from "../ProposalCard";
+import { InlineCommentEditor, ReviewStrip } from "../ProposalCard";
 import { useFlow } from "../flow";
 
 /**
@@ -74,7 +74,7 @@ export function ReviewView() {
 }
 
 function ReviewWorkspace({ pr }: { pr: PrSummary }) {
-  const { ctx } = useFlow();
+  const { ctx, poller } = useFlow();
   const proposals = useRepoStore((s) => s.proposals);
   const upsert = useRepoStore((s) => s.upsertProposal);
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
@@ -134,6 +134,24 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
                   comments: reviewProposal.comments.filter((x) => x.key !== c.key),
                 })
               }
+              onSubmitOne={async () => {
+                // post this single comment on its line, as the user, right now
+                await ctx.gh.createReviewComment(
+                  ctx.repo,
+                  pr.number,
+                  pr.headSha,
+                  c.path,
+                  c.line,
+                  c.side,
+                  c.startLine,
+                  c.body
+                );
+                await upsert({
+                  ...reviewProposal,
+                  comments: reviewProposal.comments.filter((x) => x.key !== c.key),
+                });
+                poller.refresh(); // the posted comment returns as a GitHub thread
+              }}
             />
           ),
         }))
@@ -178,10 +196,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
 
       {reviewProposal && (
         <Section label="Proposed review">
-          <div className="subtle" style={{ marginBottom: 8 }}>
-            Proposed comments are anchored on the diff below — tweak, toggle, or rewrite each one, then submit.
-          </div>
-          <ProposalCard proposal={reviewProposal} />
+          <ReviewStrip proposal={reviewProposal} />
         </Section>
       )}
 

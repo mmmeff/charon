@@ -135,6 +135,103 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Slim control strip for a pending teammate review. The comments themselves
+ * live inline on the diff (where they're actually judgeable); this strip is
+ * the batch path — verdict, editable summary, and one submit for everything
+ * still included. Individual comments can also be posted one-by-one from
+ * their diff anchors.
+ */
+export function ReviewStrip({ proposal }: { proposal: Extract<Proposal, { type: "review" }> }) {
+  const { ctx, poller } = useFlow();
+  const upsert = useRepoStore((s) => s.upsertProposal);
+  const remove = useRepoStore((s) => s.removeProposal);
+  const [showSummary, setShowSummary] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const included = proposal.comments.filter((c) => c.included).length;
+
+  const send = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await sendProposal(ctx, proposal);
+      poller.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (proposal.status === "sent") {
+    return (
+      <div className="card" style={{ padding: "8px 14px" }}>
+        <div className="row">
+          <Badge color="green">review sent</Badge>
+          <span className="subtle">{timeAgo(proposal.createdAt)}</span>
+          <span style={{ flex: 1 }} />
+          <button className="small" onClick={() => void remove(proposal.id)}>
+            clear
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card" style={{ padding: "8px 14px" }}>
+      <div className="row">
+        <span className="origin-chip local" title="Drafted locally — nothing is on GitHub until you submit">
+          Local only
+        </span>
+        <span className="subtle">
+          {proposal.comments.length === 0
+            ? "no inline comments left —"
+            : `${proposal.comments.length} comment${proposal.comments.length > 1 ? "s" : ""} on the diff below · ${included} included —`}{" "}
+          tweak or post each inline, or submit as one review:
+        </span>
+        <span style={{ flex: 1 }} />
+        <select
+          value={proposal.verdict}
+          onChange={(e) => void upsert({ ...proposal, verdict: e.target.value as any })}
+          title="Review verdict"
+        >
+          <option value="COMMENT">Comment</option>
+          <option value="APPROVE">Approve</option>
+          <option value="REQUEST_CHANGES">Request changes</option>
+        </select>
+        <button className="small primary" disabled={busy} onClick={() => void send()}>
+          {busy ? <Spinner /> : null} Submit review{included > 0 ? ` (${included})` : ""}
+        </button>
+      </div>
+      <div className="row" style={{ marginTop: 4 }}>
+        <button className="link small" onClick={() => setShowSummary(!showSummary)}>
+          {showSummary ? "▾" : "▸"} review summary
+        </button>
+        <button className="link small danger-link" disabled={busy} onClick={() => void remove(proposal.id)}>
+          dismiss all
+        </button>
+        {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
+      </div>
+      {showSummary && (
+        <div style={{ marginTop: 6 }}>
+          <EditableText
+            label="Review summary (sent with the batch submit)"
+            value={proposal.body}
+            onChange={(body) => void upsert({ ...proposal, body })}
+            prNumber={proposal.prNumber}
+            prTitle={proposal.prTitle}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 /** Textarea with the regenerate-by-prompt and humanize affordances. */
 export function EditableText({
   label,
@@ -211,6 +308,7 @@ export function InlineCommentEditor({
   comment,
   onChange,
   onDelete,
+  onSubmitOne,
   prNumber,
   prTitle,
   compact = false,
@@ -218,10 +316,27 @@ export function InlineCommentEditor({
   comment: ProposedInlineComment;
   onChange: (c: ProposedInlineComment) => void;
   onDelete?: () => void;
+  /** post just this comment to GitHub now (caller removes it from the draft) */
+  onSubmitOne?: () => Promise<void>;
   prNumber: number;
   prTitle: string;
   compact?: boolean;
 }) {
+  const [posting, setPosting] = useState(false);
+  const [postErr, setPostErr] = useState("");
+
+  const postNow = async () => {
+    if (!onSubmitOne) return;
+    setPosting(true);
+    setPostErr("");
+    try {
+      await onSubmitOne();
+    } catch (e) {
+      setPostErr(e instanceof Error ? e.message : String(e));
+      setPosting(false);
+    }
+  };
+
   return (
     <div
       className="event-row"
@@ -229,7 +344,7 @@ export function InlineCommentEditor({
     >
       <div className="row between">
         <div className="row">
-          <label className="switch" title="Include this comment in the submitted review">
+          <label className="switch" title="Include this comment in the batch-submitted review">
             <input
               type="checkbox"
               checked={comment.included}
@@ -255,6 +370,16 @@ export function InlineCommentEditor({
               </option>
             ))}
           </select>
+          {onSubmitOne && (
+            <button
+              className="small primary"
+              disabled={posting}
+              title="Post just this comment to GitHub now, on this line"
+              onClick={() => void postNow()}
+            >
+              {posting ? <Spinner /> : "↗"} Post now
+            </button>
+          )}
           {onDelete && (
             <button
               className="link small danger-link"
@@ -266,6 +391,7 @@ export function InlineCommentEditor({
           )}
         </div>
       </div>
+      {postErr && <div style={{ color: "var(--red)", fontSize: 11.5, marginTop: 4 }}>{postErr}</div>}
       <div style={{ marginTop: 6 }}>
         <EditableText
           value={comment.body}
