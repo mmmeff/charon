@@ -302,37 +302,40 @@ export function SettingsView() {
           Every AI-driven flow, with what you can steer at launch. Set a per-flow default to route a
           flow to a different model without touching the launch forms.
         </p>
-        {FLOW_MODEL_CATALOG.map((f) => (
-          <label key={f.kind} className="field flow-model-row">
-            <span>
-              {f.label} <em className="flow-cap">{f.capability}</em>
-            </span>
-            <select
-              value={global.modelOverrides?.[f.kind] ?? ""}
-              onChange={(e) => {
-                const next = { ...(global.modelOverrides ?? {}) };
-                if (e.target.value) next[f.kind] = e.target.value;
-                else delete next[f.kind];
-                void saveGlobal({ ...global, modelOverrides: next });
-              }}
-            >
-              <option value="">
-                global default ({global.modelLabels[global.defaultModel] ?? global.defaultModel})
-              </option>
-              {global.models
-                .filter(
-                  (m) =>
-                    !(global.disabledModels ?? []).includes(m) ||
-                    m === global.modelOverrides?.[f.kind]
-                )
-                .map((m) => (
+        {FLOW_MODEL_CATALOG.map((f) => {
+          const current = global.modelOverrides?.[f.kind] ?? "";
+          const options = global.models.filter(
+            (m) => !(global.disabledModels ?? []).includes(m) || m === current
+          );
+          // keep a configured id listed even when the CLI doesn't know it
+          // (install defaults / pre-refresh) so the select reports truthfully
+          if (current && !options.includes(current)) options.push(current);
+          return (
+            <label key={f.kind} className="field flow-model-row">
+              <span>
+                {f.label} <em className="flow-cap">{f.capability}</em>
+              </span>
+              <select
+                value={current}
+                onChange={(e) => {
+                  const next = { ...(global.modelOverrides ?? {}) };
+                  if (e.target.value) next[f.kind] = e.target.value;
+                  else delete next[f.kind];
+                  void saveGlobal({ ...global, modelOverrides: next });
+                }}
+              >
+                <option value="">
+                  global default ({global.modelLabels[global.defaultModel] ?? global.defaultModel})
+                </option>
+                {options.map((m) => (
                   <option key={m} value={m}>
                     {global.modelLabels[m] ?? m}
                   </option>
                 ))}
-            </select>
-          </label>
-        ))}
+              </select>
+            </label>
+          );
+        })}
       </div>
 
       <div className="settings-section" id="s-models">

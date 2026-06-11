@@ -331,6 +331,23 @@ export function defaultRepoConfig(): RepoConfig {
 export const DEFAULT_MODEL_ID = "composer-2.5-fast";
 
 /**
+ * Out-of-the-box per-flow defaults: thinking-heavy models where judgment
+ * matters (reviews, Q&A), a strong long-context coder for CI/branch work,
+ * a writing-tuned model for prose, fast default for the rest. Ids the
+ * user's CLI doesn't list are ignored at resolve time (falls through to
+ * the global default).
+ */
+export const DEFAULT_MODEL_OVERRIDES: Record<string, string> = {
+  draft_question: "claude-opus-4-8-thinking-high",
+  review: "claude-opus-4-8-thinking-high",
+  ci_fix: "gpt-5.5-high",
+  conflict_fix: "gpt-5.5-high",
+  rewrite: "claude-4.6-sonnet-medium",
+  draft_edit: DEFAULT_MODEL_ID,
+  feedback_fix: DEFAULT_MODEL_ID,
+};
+
+/**
  * Every AI-prompt-driven flow, keyed by its AgentKind, with what the user can
  * steer at launch time. Drives the Default-models settings table; overrides
  * land in GlobalConfig.modelOverrides.
@@ -374,7 +391,7 @@ export function defaultGlobalConfig(): GlobalConfig {
     modelLabels: { auto: "Auto", [DEFAULT_MODEL_ID]: "Composer 2.5 Fast" },
     disabledModels: [],
     defaultModel: DEFAULT_MODEL_ID,
-    modelOverrides: {},
+    modelOverrides: { ...DEFAULT_MODEL_OVERRIDES },
     repos: [],
     lastRepo: "",
     extraSkillDirs: [],

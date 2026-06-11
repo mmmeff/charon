@@ -31,13 +31,17 @@ const MAX_DIFF_CHARS = 90_000;
 /**
  * Model resolution, most specific wins:
  * explicit pick at launch > per-flow override > repo default > global default.
+ * Configured ids the CLI doesn't list are skipped (install defaults may
+ * reference models a given Cursor setup doesn't have).
  */
 export function resolveModel(ctx: FlowContext, explicit?: string, kind?: string): string {
+  const known = (m?: string) =>
+    m && (ctx.global.models.length === 0 || ctx.global.models.includes(m)) ? m : "";
   return (
     explicit ||
-    (kind ? ctx.global.modelOverrides?.[kind] : "") ||
-    ctx.config.model ||
-    ctx.global.defaultModel ||
+    known(kind ? ctx.global.modelOverrides?.[kind] : "") ||
+    known(ctx.config.model) ||
+    known(ctx.global.defaultModel) ||
     "auto"
   );
 }
