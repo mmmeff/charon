@@ -457,6 +457,13 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .ws-section-label::before { content: "▚"; color: var(--orange); opacity: 0.7; font-size: 8px; }
 .ws-section-label::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
 
+/* settings: model enable/disable list */
+.model-list {
+  max-height: var(--capped-panel); overflow-y: auto;
+  border: 1px solid var(--border-subtle); padding: 8px 10px;
+  background: var(--bg-inset);
+}
+
 /* ⋯ overflow menu — tertiary PR actions */
 .overflow-menu { position: relative; }
 .overflow-pop {

@@ -283,24 +283,43 @@ export function SettingsView() {
           <code>cursor-agent models</code> on startup; newly discovered models arrive enabled. Default
           models keep working even if hidden here.
         </p>
-        {global.models.map((m) => {
-          const off = (global.disabledModels ?? []).includes(m);
-          return (
-            <label key={m} className="switch" style={{ display: "flex", marginBottom: 5 }}>
-              <input
-                type="checkbox"
-                checked={!off}
-                onChange={(e) => {
-                  const next = new Set(global.disabledModels ?? []);
-                  if (e.target.checked) next.delete(m);
-                  else next.add(m);
-                  void saveGlobal({ ...global, disabledModels: [...next] });
-                }}
-              />
-              {global.modelLabels[m] ?? m} <span className="subtle">({m})</span>
-            </label>
-          );
-        })}
+        <div className="row" style={{ marginBottom: 8 }}>
+          <button
+            className="small"
+            onClick={() => void saveGlobal({ ...global, disabledModels: [] })}
+          >
+            Select all
+          </button>
+          <button
+            className="small"
+            onClick={() => void saveGlobal({ ...global, disabledModels: [...global.models] })}
+          >
+            Deselect all
+          </button>
+          <span className="subtle">
+            {global.models.length - (global.disabledModels ?? []).length}/{global.models.length} enabled
+          </span>
+        </div>
+        <div className="model-list">
+          {global.models.map((m) => {
+            const off = (global.disabledModels ?? []).includes(m);
+            return (
+              <label key={m} className="switch" style={{ display: "flex", marginBottom: 5 }}>
+                <input
+                  type="checkbox"
+                  checked={!off}
+                  onChange={(e) => {
+                    const next = new Set(global.disabledModels ?? []);
+                    if (e.target.checked) next.delete(m);
+                    else next.add(m);
+                    void saveGlobal({ ...global, disabledModels: [...next] });
+                  }}
+                />
+                {global.modelLabels[m] ?? m} <span className="subtle">({m})</span>
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       <div className="settings-section" id="s-conn">
