@@ -1,9 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import { killAgent } from "../lib/agents";
 import { useGlobalConfig } from "../lib/store";
-import type { AgentRun } from "../types";
+import type { AgentLine, AgentRun } from "../types";
 import { timeAgo, useNow } from "../lib/ui";
 import { Badge, Spinner } from "./common";
+import { Markdown } from "./Markdown";
+
+/** One typed stream entry: assistant prose as markdown, the rest as chrome. */
+function StreamLine({ line }: { line: AgentLine }) {
+  switch (line.kind) {
+    case "text":
+      return (
+        <div className="agent-msg">
+          <Markdown text={line.text} className="compact" />
+        </div>
+      );
+    case "thinking":
+      return <div className="agent-thinking">{line.text}</div>;
+    case "tool":
+      return (
+        <div className="agent-tool" title={line.text}>
+          <span className="agent-tool-glyph">⚙</span>
+          <span className="agent-tool-text">{line.text}</span>
+        </div>
+      );
+    case "system":
+      return <div className="agent-sys">{line.text}</div>;
+    default:
+      // stderr + legacy persisted stdout/info lines
+      return <div className={`agent-line ${line.kind === "stderr" ? "stderr" : ""}`}>{line.text}</div>;
+  }
+}
 
 const statusColor = (s: AgentRun["status"]) =>
   s === "running" || s === "starting" ? "blue" : s === "done" ? "green" : s === "killed" ? "gray" : "red";
@@ -18,12 +45,13 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
   const active = run.status === "running" || run.status === "starting";
   useNow(active ? 1000 : 0); // tick the elapsed counter while running
 
-  // follow the live stream
+  // follow the live stream (depends on the array identity, not its length —
+  // chunk merges grow the last entry without adding lines)
   useEffect(() => {
     if (open && active && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [run.lines.length, open, active]);
+  }, [run.lines, open, active]);
 
   const elapsed = Math.round(((run.endedAt ?? Date.now()) - run.startedAt) / 1000);
 
@@ -65,9 +93,7 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
           <div className="agent-log" ref={logRef}>
             {run.lines.length === 0 && <span className="subtle">waiting for output…</span>}
             {run.lines.map((l, i) => (
-              <div key={i} className={`agent-line ${l.kind === "stderr" ? "stderr" : ""}`}>
-                {l.text}
-              </div>
+              <StreamLine key={i} line={l} />
             ))}
           </div>
         </>

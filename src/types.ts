@@ -243,7 +243,8 @@ export interface AgentRun {
 }
 
 export interface AgentLine {
-  kind: "stdout" | "stderr" | "info";
+  /** text/thinking stream-merge across chunks; stdout/info are legacy raw lines */
+  kind: "stdout" | "stderr" | "info" | "text" | "thinking" | "tool" | "system";
   text: string;
   at: number;
 }

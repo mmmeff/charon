@@ -206,6 +206,8 @@ interface AgentState {
   register(run: AgentRun): void;
   update(id: string, patch: Partial<AgentRun>): void;
   appendLine(id: string, line: AgentLine): void;
+  /** Append a stream piece; consecutive text/thinking chunks merge into one entry. */
+  appendStream(id: string, kind: AgentLine["kind"], text: string): void;
   appendResultText(id: string, text: string): void;
   /** restore persisted history (app start) — keeps newest-first order */
   hydrate(history: AgentRun[]): void;
@@ -231,6 +233,22 @@ export const useAgentStore = create<AgentState>((set) => ({
     set((s) => {
       const run = s.runs[id];
       if (!run) return s;
+      const lines =
+        run.lines.length >= MAX_LINES ? [...run.lines.slice(-MAX_LINES + 1), line] : [...run.lines, line];
+      return { runs: { ...s.runs, [id]: { ...run, lines } } };
+    });
+  },
+  appendStream(id, kind, text) {
+    set((s) => {
+      const run = s.runs[id];
+      if (!run) return s;
+      const last = run.lines[run.lines.length - 1];
+      // chunks of one streamed message arrive as separate events — merge them
+      if (last && last.kind === kind && (kind === "text" || kind === "thinking")) {
+        const lines = [...run.lines.slice(0, -1), { ...last, text: last.text + text }];
+        return { runs: { ...s.runs, [id]: { ...run, lines } } };
+      }
+      const line: AgentLine = { kind, text, at: Date.now() };
       const lines =
         run.lines.length >= MAX_LINES ? [...run.lines.slice(-MAX_LINES + 1), line] : [...run.lines, line];
       return { runs: { ...s.runs, [id]: { ...run, lines } } };

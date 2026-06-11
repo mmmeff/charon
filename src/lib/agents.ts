@@ -42,14 +42,21 @@ function handleStreamEvent(ev: AgentStreamEvent) {
   if (!run) return;
 
   if (ev.kind === "stdout" && ev.line) {
-    const { display, assistantText } = parseStreamLine(ev.line);
-    if (display) store.appendLine(ev.id, { kind: "stdout", text: display, at: Date.now() });
-    if (assistantText) store.appendResultText(ev.id, assistantText);
+    const parsed = parseStreamLine(ev.line);
+    for (const p of parsed.pieces) store.appendStream(ev.id, p.kind, p.text);
+    if (parsed.assistantText) store.appendResultText(ev.id, parsed.assistantText);
+    if (parsed.finalResult) {
+      // the final result usually repeats the streamed text — only display it
+      // when nothing streamed (short runs sometimes emit result-only)
+      const cur = useAgentStore.getState().runs[ev.id];
+      if (cur && !cur.resultText.trim()) store.appendStream(ev.id, "text", parsed.finalResult);
+      store.appendResultText(ev.id, "\n" + parsed.finalResult);
+    }
     if (run.status === "starting") store.update(ev.id, { status: "running" });
     return;
   }
   if (ev.kind === "stderr" && ev.line) {
-    store.appendLine(ev.id, { kind: "stderr", text: ev.line, at: Date.now() });
+    store.appendStream(ev.id, "stderr", ev.line);
     return;
   }
   if (ev.kind === "spawn-error") {
@@ -95,20 +102,53 @@ function handleStreamEvent(ev: AgentStreamEvent) {
   }
 }
 
+interface StreamPiece {
+  kind: "text" | "thinking" | "tool" | "system" | "stderr";
+  text: string;
+}
+
+interface ParsedStreamLine {
+  pieces: StreamPiece[];
+  assistantText: string | null;
+  /** authoritative full text from a `result` event (often repeats the stream) */
+  finalResult: string | null;
+}
+
+const NOTHING: ParsedStreamLine = { pieces: [], assistantText: null, finalResult: null };
+
+/** The most human-meaningful bit of a tool call's arguments. */
+function toolSummary(name: string, rawArgs: any): string {
+  const args = rawArgs && typeof rawArgs === "object" ? rawArgs : {};
+  const interesting =
+    args.command ??
+    args.cmd ??
+    args.path ??
+    args.file_path ??
+    args.filePath ??
+    args.pattern ??
+    args.query ??
+    args.url ??
+    Object.values(args).find((v) => typeof v === "string" && v.trim());
+  const detail = (
+    typeof interesting === "string" ? interesting : JSON.stringify(rawArgs ?? {})
+  ).replace(/\s+/g, " ").trim();
+  return `${name}  ${detail.length > 180 ? detail.slice(0, 180) + "…" : detail}`.trim();
+}
+
 /**
- * Parse one NDJSON line of `cursor-agent --output-format stream-json`.
- * The schema is treated defensively: we extract assistant text wherever it
- * lives and render a compact human-readable display line for everything else.
+ * Parse one NDJSON line of `cursor-agent --output-format stream-json` into
+ * typed display pieces. The schema is treated defensively: assistant text is
+ * extracted wherever it lives; chunk merging happens in the store.
  */
-function parseStreamLine(line: string): { display: string | null; assistantText: string | null } {
+function parseStreamLine(line: string): ParsedStreamLine {
   const trimmed = line.trim();
-  if (!trimmed) return { display: null, assistantText: null };
+  if (!trimmed) return NOTHING;
   let obj: any;
   try {
     obj = JSON.parse(trimmed);
   } catch {
     // plain-text output (e.g. --output-format text fallback)
-    return { display: trimmed, assistantText: trimmed + "\n" };
+    return { pieces: [{ kind: "text", text: trimmed + "\n" }], assistantText: trimmed + "\n", finalResult: null };
   }
 
   const collectText = (content: any): string => {
@@ -122,44 +162,44 @@ function parseStreamLine(line: string): { display: string | null; assistantText:
   };
 
   switch (obj?.type) {
-    case "system":
-      return { display: `[system] ${obj.subtype ?? ""} ${obj.model ?? ""}`.trim(), assistantText: null };
+    case "system": {
+      const text = `${obj.subtype ?? "session"} ${obj.model ?? ""}`.trim();
+      return { pieces: [{ kind: "system", text }], assistantText: null, finalResult: null };
+    }
     case "user":
-      return { display: null, assistantText: null };
+      return NOTHING;
     case "assistant": {
       const text = collectText(obj.message?.content ?? obj.content ?? obj.text);
-      return { display: text || null, assistantText: text || null };
+      if (!text) return NOTHING;
+      return { pieces: [{ kind: "text", text }], assistantText: text, finalResult: null };
     }
-    case "thinking":
-      return { display: obj.text ? `[thinking] ${obj.text}` : null, assistantText: null };
+    case "thinking": {
+      const text = obj.text ?? collectText(obj.message?.content ?? obj.content);
+      if (!text) return NOTHING;
+      return { pieces: [{ kind: "thinking", text }], assistantText: null, finalResult: null };
+    }
     case "tool_call": {
       const name =
         obj.tool_call?.name ?? obj.name ?? obj.subtype ?? Object.keys(obj.tool_call ?? {})[0] ?? "tool";
-      const args = JSON.stringify(obj.tool_call?.args ?? obj.args ?? obj.tool_call ?? {});
+      const args = obj.tool_call?.args ?? obj.args ?? obj.tool_call;
       return {
-        display: `[tool] ${name} ${args.length > 220 ? args.slice(0, 220) + "…" : args}`,
+        pieces: [{ kind: "tool", text: toolSummary(String(name), args) }],
         assistantText: null,
+        finalResult: null,
       };
     }
     case "tool_result":
-      return { display: `[tool done]`, assistantText: null };
+      return NOTHING; // completion is implied by the next event; "[tool done]" was noise
     case "result": {
       const text = typeof obj.result === "string" ? obj.result : collectText(obj.result);
-      // final result usually repeats accumulated assistant text; keep it as
-      // authoritative by replacing nothing but appending a marker-free copy
-      return { display: text ? `[result] ${firstLine(text)}` : "[result]", assistantText: text ? "\n" + text : null };
+      return { pieces: [], assistantText: null, finalResult: text || null };
     }
     default: {
       const text = collectText(obj?.message?.content ?? obj?.text);
-      if (text) return { display: text, assistantText: text };
-      return { display: null, assistantText: null };
+      if (text) return { pieces: [{ kind: "text", text }], assistantText: text, finalResult: null };
+      return NOTHING;
     }
   }
-}
-
-function firstLine(s: string): string {
-  const l = s.split("\n").find((x) => x.trim());
-  return l ? (l.length > 160 ? l.slice(0, 160) + "…" : l) : "";
 }
 
 export async function startAgent(opts: StartAgentOptions): Promise<string> {
