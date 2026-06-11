@@ -85,6 +85,22 @@ export function RepoApp({ repo }: { repo: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoStore.loaded, gh]);
 
+  // ⌘1–⌘5 (ctrl on other platforms) jumps between tabs.
+  // Must live above the loading early-returns: hooks can't come after them.
+  useEffect(() => {
+    const ids: Tab[] = ["drafts", "open", "review", "activity", "settings"];
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= ids.length) {
+        e.preventDefault();
+        setTab(ids[n - 1]);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   if (!global || !gh) {
     return <div className="empty">Configure the GitHub connection in the launcher window first.</div>;
   }
@@ -108,21 +124,6 @@ export function RepoApp({ repo }: { repo: string }) {
     { id: "activity", label: "Activity Feed", icon: IconActivity, count: activeAgents, hot: activeAgents > 0 },
     { id: "settings", label: "Settings", icon: IconSettings },
   ];
-
-  // ⌘1–⌘5 (ctrl on other platforms) jumps between tabs
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-      const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= tabs.length) {
-        e.preventDefault();
-        setTab(tabs[n - 1].id);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <FlowCtx.Provider value={{ ctx: ctxRef.current, poller }}>
