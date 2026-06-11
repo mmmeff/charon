@@ -353,6 +353,7 @@ h3, h4 {
   border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 2;
   display: flex; gap: 8px; align-items: center;
 }
+.diff-scroll { overflow-x: auto; }
 .diff-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; line-height: 20px; }
 .diff-table td { padding: 0; vertical-align: top; }
 .diff-num {
@@ -360,7 +361,8 @@ h3, h4 {
   color: var(--fg-subtle); user-select: none; cursor: pointer; white-space: nowrap;
 }
 .diff-num:hover { color: var(--orange); }
-.diff-text { white-space: pre-wrap; word-break: break-all; padding: 0 10px !important; width: 100%; }
+/* no wrapping — long lines extend the table and the container scrolls */
+.diff-text { white-space: pre; padding: 0 10px !important; width: 100%; }
 tr.add { background: var(--diff-add-bg); }
 tr.add .diff-num { background: var(--diff-add-num-bg); }
 tr.del { background: var(--diff-del-bg); }
@@ -372,7 +374,8 @@ tr.sel { background: var(--diff-select-bg) !important; }
   background: var(--bg-raised);
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
 }
-.inline-comment-box { padding: 10px 12px; max-width: 860px; }
+/* sticky so the box stays in view while the diff is scrolled horizontally */
+.inline-comment-box { padding: 10px 12px; max-width: 860px; position: sticky; left: 8px; }
 
 /* GitHub-synced vs local-only — instantly distinguishable:
    solid bone edge = published on GitHub; dashed orange = only in this app */
@@ -390,11 +393,10 @@ tr.sel { background: var(--diff-select-bg) !important; }
     rgba(255, 79, 0, 0.04);
 }
 
-/* side-by-side */
-.diff-table.split { table-layout: fixed; }
+/* side-by-side (auto layout: content can extend the table; container scrolls) */
 .diff-table.split col.col-num { width: 52px; }
 .diff-table.split col.col-text { width: calc(50% - 52px); }
-.diff-table.split .diff-num { min-width: 0; }
+.diff-table.split .diff-num { min-width: 42px; }
 .diff-text.half { width: 50%; }
 td.cell-del { background: var(--diff-del-bg); }
 td.cell-add { background: var(--diff-add-bg); }

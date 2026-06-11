@@ -324,6 +324,7 @@ function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: 
   const lang = useMemo(() => langForPath(path), [path]);
   const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
   return (
+    <div className="diff-scroll">
     <table className="diff-table">
       <tbody>
         {file.lines.map((line, i) => {
@@ -365,6 +366,7 @@ function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: 
         })}
       </tbody>
     </table>
+    </div>
   );
 }
 
@@ -373,9 +375,9 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
   const lang = useMemo(() => langForPath(path), [path]);
   const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
   return (
+    <div className="diff-scroll">
     <table className="diff-table split">
-      {/* explicit column widths: the first row is a colspan-4 hunk header, so
-          fixed table layout would otherwise fall back to four equal columns */}
+      {/* width hints for the four columns (first row is a colspan-4 hunk header) */}
       <colgroup>
         <col className="col-num" />
         <col className="col-text" />
@@ -450,5 +452,6 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
         })}
       </tbody>
     </table>
+    </div>
   );
 }
