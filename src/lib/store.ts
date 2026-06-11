@@ -239,15 +239,29 @@ export const useAgentStore = create<AgentState>((set) => ({
 // switches (views unmount when hidden, so this can't live in component state)
 // ---------------------------------------------------------------------------
 
+export interface DiffScrollTarget {
+  path: string;
+  side: "LEFT" | "RIGHT";
+  line: number;
+  /** changes every request so repeat clicks on the same line still fire */
+  nonce: number;
+}
+
 interface UiState {
   focusedPr: Record<string, number | null>;
   setFocusedPr(tab: string, prNumber: number): void;
+  diffScrollTarget: DiffScrollTarget | null;
+  requestDiffScroll(path: string, side: "LEFT" | "RIGHT", line: number): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
   focusedPr: {},
   setFocusedPr(tab, prNumber) {
     set((s) => ({ focusedPr: { ...s.focusedPr, [tab]: prNumber } }));
+  },
+  diffScrollTarget: null,
+  requestDiffScroll(path, side, line) {
+    set({ diffScrollTarget: { path, side, line, nonce: Date.now() } });
   },
 }));
 

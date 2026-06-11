@@ -298,6 +298,9 @@ export interface ReviewFinding {
   body: string;
   /** concrete replacement code, when the reviewer could produce one */
   suggestion?: string;
+  /** text of the anchored diff line at review time — used for content-based
+   * re-anchoring after the branch moves */
+  anchorText?: string;
   status: "open" | "applying" | "applied" | "dismissed";
   createdAt: number;
 }

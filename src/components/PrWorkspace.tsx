@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cleanResultText } from "../lib/agents";
 import { eventDef } from "../lib/defaults";
-import { parseUnifiedDiff } from "../lib/diff";
+import { findLineByText, parseUnifiedDiff } from "../lib/diff";
 import { resolveHandler, usePrData } from "../lib/events";
 import { runDraftEdit, runDraftQuestion, runFixFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
@@ -52,6 +52,22 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     void loadDiff();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pr.number, pr.headSha]);
+
+  // Content-based re-anchoring: when the branch moved since a finding's
+  // review ran, relocate it by its recorded line text in the fresh diff.
+  useEffect(() => {
+    if (!files) return;
+    const store = useRepoStore.getState();
+    for (const f of store.findings) {
+      if (f.prNumber !== pr.number || f.status !== "open" || f.headSha === pr.headSha) continue;
+      if (!f.anchorText) continue;
+      const hit = findLineByText(files, f.path, f.side, f.anchorText, f.line);
+      if (hit) {
+        void store.updateFinding(f.key, { line: hit.line, side: hit.side, headSha: pr.headSha });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, pr.headSha]);
 
   const myRuns = order
     .map((id) => runs[id])

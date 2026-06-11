@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { buildSplitRows, hideWhitespaceChanges, snippetFor } from "../lib/diff";
 import { highlightFileLines, langForPath } from "../lib/highlight";
+import { useUiStore } from "../lib/store";
 import type { FileDiff, LineSelection } from "../types";
 import { Badge } from "./common";
+import { FileTree } from "./FileTree";
+
+const slug = (p: string) => encodeURIComponent(p);
+/** DOM id of a diff line's number cell — the target for scroll-to-line. */
+export const lineDomId = (path: string, side: "LEFT" | "RIGHT", num: number) =>
+  `dl-${slug(path)}-${side}-${num}`;
+const fileDomId = (path: string) => `df-${slug(path)}`;
 
 export interface DiffAnchor {
   path: string;
@@ -59,6 +67,61 @@ export function DiffViewer({
   );
 
   const keyOf = (f: FileDiff) => f.newPath || f.oldPath;
+
+  // ---- file tree + scroll spy ----
+  const [treeOpen, setTreeOpenState] = useState(() => localStorage.getItem("prc-diff-tree") === "on");
+  const setTreeOpen = (v: boolean) => {
+    localStorage.setItem("prc-diff-tree", v ? "on" : "off");
+    setTreeOpenState(v);
+  };
+  const fileEls = useRef(new Map<string, HTMLElement>());
+  const visibleFiles = useRef(new Set<string>());
+  const [activePath, setActivePath] = useState<string | null>(null);
+  useEffect(() => {
+    visibleFiles.current.clear();
+    const order = files.map(keyOf);
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const p = (e.target as HTMLElement).dataset.path;
+          if (!p) continue;
+          if (e.isIntersecting) visibleFiles.current.add(p);
+          else visibleFiles.current.delete(p);
+        }
+        const first = order.find((p) => visibleFiles.current.has(p));
+        if (first) setActivePath(first);
+      },
+      // a file is "current" while it intersects the upper band of the viewport
+      { rootMargin: "-5% 0px -55% 0px" }
+    );
+    for (const el of fileEls.current.values()) io.observe(el);
+    return () => io.disconnect();
+  }, [files, mode, hideWs]);
+
+  const jumpToFile = (path: string) => {
+    setCollapsed((c) => ({ ...c, [path]: false }));
+    requestAnimationFrame(() =>
+      document.getElementById(fileDomId(path))?.scrollIntoView({ behavior: "smooth", block: "start" })
+    );
+  };
+
+  // ---- scroll-to-line requests (activity stream "on file:line" links) ----
+  const scrollTarget = useUiStore((s) => s.diffScrollTarget);
+  useEffect(() => {
+    if (!scrollTarget) return;
+    setCollapsed((c) => ({ ...c, [scrollTarget.path]: false }));
+    const t = setTimeout(() => {
+      const el =
+        document.getElementById(lineDomId(scrollTarget.path, scrollTarget.side, scrollTarget.line)) ??
+        document.getElementById(fileDomId(scrollTarget.path));
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const row = el.closest("tr") ?? el;
+      row.classList.add("flash");
+      setTimeout(() => row.classList.remove("flash"), 1800);
+    }, 80);
+    return () => clearTimeout(t);
+  }, [scrollTarget]);
 
   useEffect(() => {
     if (!drag) return;
@@ -139,6 +202,9 @@ export function DiffViewer({
     <div onMouseLeave={() => drag && setDrag(null)}>
       {rawFiles.length > 0 && (
         <div className="row" style={{ marginBottom: 8 }}>
+          <button className={`small ${treeOpen ? "primary" : ""}`} onClick={() => setTreeOpen(!treeOpen)}>
+            ☰ Files
+          </button>
           <div className="seg">
             <button className={`small ${mode === "unified" ? "primary" : ""}`} onClick={() => setMode("unified")}>
               Unified
@@ -153,12 +219,28 @@ export function DiffViewer({
           </label>
         </div>
       )}
+      <FileTree
+        files={files}
+        activePath={activePath}
+        open={treeOpen}
+        onClose={() => setTreeOpen(false)}
+        onSelect={jumpToFile}
+      />
       {files.map((file) => {
         const path = keyOf(file);
         const isCollapsed = collapsed[path];
         const wsOnly = hideWs && !file.isBinary && file.lines.every((l) => l.type === "context");
         return (
-          <div className="diff-file" key={path}>
+          <div
+            className="diff-file"
+            key={path}
+            id={fileDomId(path)}
+            data-path={path}
+            ref={(el) => {
+              if (el) fileEls.current.set(path, el);
+              else fileEls.current.delete(path);
+            }}
+          >
             <div className="diff-file-header">
               <button className="link small" onClick={() => setCollapsed({ ...collapsed, [path]: !isCollapsed })}>
                 {isCollapsed ? "▸" : "▾"}
@@ -238,10 +320,19 @@ function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: 
           const handlers = numCellHandlers(path, side, num);
           return [
             <tr key={i} className={`${line.type} commentable ${hl ? "sel" : ""}`}>
-              <td className="diff-num" {...handlers} title="Click or drag to select lines">
+              <td
+                className="diff-num"
+                id={line.oldNum !== null ? lineDomId(path, "LEFT", line.oldNum) : undefined}
+                {...handlers}
+                title="Click or drag to select lines"
+              >
                 {line.oldNum ?? ""}
               </td>
-              <td className="diff-num" {...handlers}>
+              <td
+                className="diff-num"
+                id={line.newNum !== null ? lineDomId(path, "RIGHT", line.newNum) : undefined}
+                {...handlers}
+              >
                 {line.newNum ?? ""}
               </td>
               <td className="diff-text">
@@ -284,6 +375,7 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
             <tr key={i} className="commentable">
               <td
                 className={`diff-num num-${lKind} ${lHl ? "cell-sel" : ""}`}
+                id={lNum !== null ? lineDomId(path, "LEFT", lNum) : undefined}
                 {...numCellHandlers(path, "LEFT", lNum)}
                 title="Click or drag to select lines"
               >
@@ -301,6 +393,7 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
               </td>
               <td
                 className={`diff-num num-${rKind} ${rHl ? "cell-sel" : ""}`}
+                id={rNum !== null ? lineDomId(path, "RIGHT", rNum) : undefined}
                 {...numCellHandlers(path, "RIGHT", rNum)}
                 title="Click or drag to select lines"
               >

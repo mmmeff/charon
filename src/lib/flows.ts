@@ -10,7 +10,7 @@ import type {
   Skill,
 } from "../types";
 import { cleanResultText, extractProposalJson, startAgent } from "./agents";
-import { lineInDiff, nearestDiffLine, parseUnifiedDiff } from "./diff";
+import { lineInDiff, lineTextAt, nearestDiffLine, parseUnifiedDiff } from "./diff";
 import type { GitHubClient } from "./github";
 import { applySkills } from "./skills";
 import { interpolate, prVars, truncate, uid } from "./template";
@@ -359,6 +359,7 @@ ${REVIEW_CONTRACT}`;
     mode: "ask",
     onDone: async (run) => {
       const parsed = parseReviewOutput(run.resultText, diffText);
+      const diffFiles = parseUnifiedDiff(diffText);
       const findings: ReviewFinding[] = parsed.comments.map((c) => ({
         key: uid("find-"),
         prNumber: pr.number,
@@ -371,6 +372,7 @@ ${REVIEW_CONTRACT}`;
         confidence: c.confidence,
         body: c.body,
         suggestion: c.suggestion,
+        anchorText: lineTextAt(diffFiles, c.path, c.side, c.line) ?? undefined,
         status: "open",
         createdAt: Date.now(),
       }));

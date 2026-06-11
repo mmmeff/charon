@@ -199,6 +199,50 @@ export function lineInDiff(
   return file.lines.some((l) => (side === "RIGHT" ? l.newNum : l.oldNum) === line);
 }
 
+/** Text of the line at (path, side, line), or null if not in the diff. */
+export function lineTextAt(
+  files: FileDiff[],
+  path: string,
+  side: "LEFT" | "RIGHT",
+  line: number
+): string | null {
+  const file = files.find((f) => f.newPath === path || f.oldPath === path);
+  if (!file) return null;
+  const hit = file.lines.find((l) => (side === "RIGHT" ? l.newNum : l.oldNum) === line);
+  return hit ? hit.text : null;
+}
+
+/**
+ * Content-based re-anchor: find the line in the (new) diff whose text matches
+ * `anchorText`, preferring the candidate nearest the original line number.
+ * Trimmed comparison so whitespace-only churn doesn't break the match; very
+ * short anchors ("}", "end") are rejected as too ambiguous.
+ */
+export function findLineByText(
+  files: FileDiff[],
+  path: string,
+  side: "LEFT" | "RIGHT",
+  anchorText: string,
+  nearLine: number
+): { line: number; side: "LEFT" | "RIGHT" } | null {
+  const needle = anchorText.trim();
+  if (needle.length < 4) return null;
+  const file = files.find((f) => f.newPath === path || f.oldPath === path);
+  if (!file) return null;
+  let best: { line: number; side: "LEFT" | "RIGHT"; dist: number } | null = null;
+  for (const l of file.lines) {
+    if (l.type === "hunk" || l.text.trim() !== needle) continue;
+    const num = side === "RIGHT" ? l.newNum : l.oldNum;
+    const fallback = l.newNum ?? l.oldNum;
+    const n = num ?? fallback;
+    if (n === null) continue;
+    const s: "LEFT" | "RIGHT" = num !== null ? side : l.newNum !== null ? "RIGHT" : "LEFT";
+    const dist = Math.abs(n - nearLine);
+    if (!best || dist < best.dist) best = { line: n, side: s, dist };
+  }
+  return best ? { line: best.line, side: best.side } : null;
+}
+
 /** Best-effort re-anchor for an LLM comment whose line is slightly off. */
 export function nearestDiffLine(
   files: FileDiff[],
