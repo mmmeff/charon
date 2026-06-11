@@ -4,7 +4,8 @@ import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { age, sortPrs, useScrolledPrTitle, type SortKey } from "../../lib/ui";
-import { Badge, BranchBadge, EmptyState, LoadingField, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
+import { Badge, BranchBadge, CiBadge, EmptyState, LoadingField, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
+import { ChecksPanel } from "../ChecksPanel";
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
@@ -77,6 +78,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   const proposals = useRepoStore((s) => s.proposals);
   const upsert = useRepoStore((s) => s.upsertProposal);
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
+  const checks = usePrData((s) => s.checks[pr.number] ?? []);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [error, setError] = useState("");
   const mainRef = useRef<HTMLDivElement>(null);
@@ -150,6 +152,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
         </h2>
         <div className="row" style={{ marginBottom: 12 }}>
           <Badge color="purple">review requested</Badge>
+          <CiBadge checks={checks} />
           <BranchBadge head={pr.headRef} base={pr.baseRef} />
           <PrLabels pr={pr} />
           <span className="subtle">
@@ -158,6 +161,13 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
         </div>
         <PrDescription pr={pr} />
       </Section>
+
+      {/* ── CI state (read-only: logs + retry, no fix agents on others' branches) ── */}
+      {checks.some((c) => c.conclusion !== "skipped") && (
+        <Section label="Status">
+          <ChecksPanel pr={pr} />
+        </Section>
+      )}
 
       {/* ── drive the review agent ── */}
       <Section label="Console">

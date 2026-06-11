@@ -182,7 +182,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
                   retry failed: {retryState}
                 </div>
               )}
-              {failed && fixOpen[c.name] && (
+              {failed && mine && fixOpen[c.name] && (
                 <AgentLaunchForm
                   label={`Fix ${c.name}`}
                   flowKind="ci_fix"
