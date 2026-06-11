@@ -354,6 +354,8 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   100% { background-color: transparent; }
 }
 
+.pr-description { max-height: calc(20 * 1.55em); overflow-y: auto; }
+
 /* ---- rendered markdown ---- */
 .md { line-height: 1.55; word-break: break-word; }
 .md > :first-child { margin-top: 0; }

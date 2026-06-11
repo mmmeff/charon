@@ -20,19 +20,12 @@ export function PrLabels({ pr }: { pr: PrSummary }) {
   );
 }
 
-/** PR description, rendered as markdown; collapsible when long. */
+/** PR description, rendered as markdown; capped height, scrolls inside. */
 export function PrDescription({ pr }: { pr: PrSummary }) {
-  const long = (pr.body ?? "").length > 700;
-  const [open, setOpen] = useState(!long);
   if (!pr.body?.trim()) return null;
   return (
-    <div className="card">
-      <Markdown text={open ? pr.body : pr.body.slice(0, 700) + "\n\n…"} />
-      {long && (
-        <button className="link small" onClick={() => setOpen(!open)}>
-          {open ? "show less" : "show full description"}
-        </button>
-      )}
+    <div className="card pr-description">
+      <Markdown text={pr.body} />
     </div>
   );
 }
