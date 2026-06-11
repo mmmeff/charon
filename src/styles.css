@@ -491,6 +491,17 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .agent-embedded { margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); }
 .agent-pr-link { font-size: 12px; padding: 0; }
 
+/* branch ops — merge state, merge/automerge controls, working agents:
+   grouped at the top of the activity panel on own PRs */
+.branch-ops {
+  margin-bottom: 10px; padding: 9px 10px;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-left: 2px solid var(--orange);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.branch-ops .row { gap: 6px; }
+.branch-ops select { max-width: 100%; }
+
 /* approve control — dedicated strip above the activity comment box */
 .approve-box {
   margin-bottom: 10px; padding: 8px 10px;

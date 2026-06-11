@@ -1,19 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { eventDef } from "../lib/defaults";
 import { findLineByText, parseUnifiedDiff } from "../lib/diff";
-import { resolveHandler, usePrData } from "../lib/events";
-import { runFixFlow } from "../lib/flows";
-import { interpolate, prVars } from "../lib/template";
-import { useAgentStore, useRepoStore } from "../lib/store";
+import { usePrData } from "../lib/events";
+import { useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
 import { timeAgo, useScrolledPrTitle } from "../lib/ui";
-import { Badge, BranchBadge, CiBadge, LoadingField, MergeBadge, Section, Spinner } from "./common";
+import { Badge, BranchBadge, CiBadge, LoadingField, MergeBadge, Section } from "./common";
 import { ChecksPanel } from "./ChecksPanel";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
 import { groupCommentThreads } from "../lib/threads";
-import { MergeControl } from "./MergeControl";
 import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels, PrTitle } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
 import { PrOverflowMenu } from "./PrOverflowMenu";
@@ -27,16 +23,13 @@ import { useFlow } from "./flow";
  * review comments and local findings anchor inline on the diff.
  */
 export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" | "babysit" }) {
-  const { ctx, poller } = useFlow();
+  const { ctx } = useFlow();
   const checks = usePrData((s) => s.checks[pr.number] ?? []);
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
   const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
   const proposals = useRepoStore((s) => s.proposals);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [diffErr, setDiffErr] = useState("");
-  const [error, setError] = useState("");
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
   const mainRef = useRef<HTMLDivElement>(null);
   useScrolledPrTitle(mainRef, pr);
 
@@ -69,44 +62,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, pr.headSha]);
 
-  const activeRuns = order
-    .map((id) => runs[id])
-    .filter((r) => r && r.prNumber === pr.number && (r.status === "running" || r.status === "starting"));
   const prProposals = proposals.filter((p) => p.prNumber === pr.number && p.status !== "dismissed");
-
-  const failing = checks.filter((c) => c.conclusion === "failure" || c.conclusion === "error");
   const approvals = new Set(reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)).size;
-
-  const manualFix = async (eventId: string, kind: "ci_fix" | "conflict_fix") => {
-    setError("");
-    try {
-      const handler = resolveHandler(ctx.config.events, eventId);
-      const extra: Record<string, string> =
-        kind === "ci_fix" && failing.length > 0
-          ? { "check-name": failing[0].name, "check-url": failing[0].url }
-          : {};
-      const prompt = interpolate(handler.prompt, { ...prVars(pr), repo: ctx.repo, ...extra });
-      await runFixFlow(ctx, pr, prompt, eventDef(eventId)?.label ?? eventId, kind);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  // merge base into the branch: instant server-side update when it merges
-  // cleanly; hand off to the branch-maintenance agent when it doesn't
-  const [updatingBranch, setUpdatingBranch] = useState(false);
-  const updateFromBase = async () => {
-    setUpdatingBranch(true);
-    setError("");
-    try {
-      await ctx.gh.updateBranch(ctx.repo, pr.number);
-      poller.refresh();
-    } catch {
-      await manualFix("base_branch_updated", "conflict_fix");
-    } finally {
-      setUpdatingBranch(false);
-    }
-  };
 
   // review-comment threads (bug-bots and humans) anchored onto the diff,
   // each with inline reply
@@ -175,48 +132,16 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         <PrDescription pr={pr} />
       </Section>
 
-      {/* ── what needs attention: CI, branch health, pending approvals ── */}
-      <Section label="Status">
-        <ChecksPanel pr={pr} />
-        <div className="card" style={{ padding: "8px 14px" }}>
-          <div className="row">
-            <MergeBadge state={pr.mergeableState} />
-            {pr.mergeableState === "dirty" ? (
-              <button
-                className="small"
-                onClick={() => void manualFix("merge_conflict_detected", "conflict_fix")}
-              >
-                Resolve conflicts now
-              </button>
-            ) : (
-              <button
-                className="small"
-                disabled={updatingBranch}
-                title={`Merge the latest ${pr.baseRef} into ${pr.headRef} — server-side when clean, agent if it conflicts`}
-                onClick={() => void updateFromBase()}
-              >
-                {updatingBranch ? <Spinner /> : "⇡"} Update from {pr.baseRef}
-              </button>
-            )}
-            {variant === "babysit" && !pr.draft && (
-              <>
-                <span style={{ flex: 1 }} />
-                <MergeControl pr={pr} />
-              </>
-            )}
-            {activeRuns.length > 0 && (
-              <span className="subtle">
-                <Spinner /> {activeRuns.length} agent{activeRuns.length > 1 ? "s" : ""} working —
-                see Agents
-              </span>
-            )}
-            {error && <span style={{ color: "var(--red)" }}>{error}</span>}
-          </div>
-        </div>
-        {prProposals.map((p) => (
-          <ProposalCard key={p.id} proposal={p} />
-        ))}
-      </Section>
+      {/* ── what needs attention: CI + pending approvals (branch ops moved
+            to the BranchOps block atop the activity panel) ── */}
+      {(checks.some((c) => c.conclusion !== "skipped") || prProposals.length > 0) && (
+        <Section label="Status">
+          <ChecksPanel pr={pr} />
+          {prProposals.map((p) => (
+            <ProposalCard key={p.id} proposal={p} />
+          ))}
+        </Section>
+      )}
 
       {/* ── drive agents: ask / change / review + their output ── */}
       <Section label="Console">

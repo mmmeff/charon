@@ -6,6 +6,7 @@ import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
 import { AgentLaunchForm } from "./AgentLaunchForm";
+import { BranchOps } from "./BranchOps";
 import { age } from "../lib/ui";
 import { Badge, Spinner } from "./common";
 import { IconDrafts, IconExpand } from "./icons";
@@ -514,6 +515,7 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
     <div className="ws-activity" style={{ width }}>
       {handle}
       <div className="ws-activity-inner">
+      <BranchOps pr={pr} />
       <ApprovePrControl pr={pr} />
       <div className="subtle" style={{ marginBottom: 8, fontWeight: 600 }}>
         Activity ({count})
