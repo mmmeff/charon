@@ -232,6 +232,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           files={files}
           selectable
           anchors={anchors}
+          viewedKey={variant === "draft" ? `prc-viewed-${ctx.repo}-${pr.number}` : undefined}
           renderCommentForm={(sel, close) => (
             <Composer
               pr={pr}

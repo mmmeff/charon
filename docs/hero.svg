@@ -18,12 +18,21 @@
   <path d="M14 30 V14 H30" fill="none" stroke="#ff4f00" stroke-width="3"/>
   <path d="M1266 270 V286 H1250" fill="none" stroke="#ff4f00" stroke-width="3"/>
 
-  <!-- obol mark: a coin (the fare) with a ferry prow notched out -->
-  <g transform="translate(60,74)">
-    <circle cx="23" cy="32" r="23" fill="#ff4f00"/>
-    <circle cx="23" cy="32" r="23" fill="none" stroke="#0e0d0a" stroke-width="3" stroke-dasharray="3 4"/>
-    <path d="M9 28 H37 L30 40 H16 Z" fill="#0e0d0a"/>
-    <rect x="20" y="12" width="6" height="12" fill="#cff24d"/>
+  <!-- moon mark: Charon — bone disk, dusty red cap, equatorial chasm -->
+  <g transform="translate(60,82)">
+    <defs>
+      <clipPath id="moonmark">
+        <circle cx="24" cy="24" r="24"/>
+      </clipPath>
+    </defs>
+    <circle cx="24" cy="24" r="24" fill="#cfc9ba"/>
+    <g clip-path="url(#moonmark)">
+      <ellipse cx="26" cy="4" rx="23" ry="14" fill="#9c4a22"/>
+      <path d="M0 26 q12 -4 24 0 t24 -1.5" fill="none" stroke="#5d5749" stroke-width="2.4" opacity="0.6"/>
+      <circle cx="16" cy="36" r="3.4" fill="#5d5749" opacity="0.35"/>
+      <circle cx="33" cy="33" r="2.2" fill="#5d5749" opacity="0.3"/>
+    </g>
+    <circle cx="24" cy="24" r="24" fill="none" stroke="#0e0d0a" stroke-width="3" opacity="0.5"/>
   </g>
 
   <!-- wordmark -->

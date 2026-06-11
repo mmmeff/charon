@@ -11,6 +11,7 @@ import { timeAgo, useNow } from "../lib/ui";
 import { FlowCtx } from "./flow";
 import {
   IconActivity,
+  IconCharonMoon,
   IconDrafts,
   IconOpen,
   IconRefresh,
@@ -183,7 +184,7 @@ export function RepoApp({ repo }: { repo: string }) {
       <div className="app">
         <nav className="rail">
           <div className="rail-brand" title="Charon">
-            ◉
+            <IconCharonMoon size={22} id="rail" />
           </div>
           {tabs.map((t, i) => (
             <button

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listCursorModels, refreshModels } from "../lib/agents";
 import { AsciiField } from "./AsciiField";
+import { IconCharonMoon } from "./icons";
 import { defaultGlobalConfig } from "../lib/defaults";
 import { GitHubClient } from "../lib/github";
 import { native } from "../lib/tauri";
@@ -75,7 +76,9 @@ function Onboarding({
       <div className="hero">
         <AsciiField height={120} opacity={0.45} />
         <div className="hero-text">
-          <h1>CHARON</h1>
+          <h1>
+            <IconCharonMoon size={26} id="connect" /> CHARON
+          </h1>
           <div className="sub">the ferryman for your pull requests</div>
         </div>
       </div>
@@ -193,7 +196,9 @@ function RepoList({
       <div className="hero">
         <AsciiField height={120} opacity={0.45} />
         <div className="hero-text">
-          <h1>CHARON</h1>
+          <h1>
+            <IconCharonMoon size={26} id="picker" /> CHARON
+          </h1>
           <div className="sub">select a crossing — each repo runs in its own window</div>
         </div>
       </div>

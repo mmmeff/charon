@@ -42,16 +42,40 @@ export function DiffViewer({
   files: rawFiles,
   selectable = false,
   anchors = [],
+  viewedKey,
   renderCommentForm,
 }: {
   files: FileDiff[];
   selectable?: boolean;
   anchors?: DiffAnchor[];
+  /** enables per-file "viewed" checkboxes; state persists under this key */
+  viewedKey?: string;
   renderCommentForm?: (sel: LineSelection, close: () => void) => ReactNode;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [sel, setSel] = useState<LineSelection | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  // ---- per-file "viewed" state (path → content hash, persisted) ----
+  // keyed by a hash of the file's diff so a file that changes after being
+  // marked comes back as unviewed, GitHub-style
+  const [viewed, setViewed] = useState<Record<string, string>>(() => {
+    if (!viewedKey) return {};
+    try {
+      return JSON.parse(localStorage.getItem(viewedKey) ?? "{}");
+    } catch {
+      return {};
+    }
+  });
+  const setFileViewed = (path: string, hash: string | null) => {
+    setViewed((v) => {
+      const next = { ...v };
+      if (hash) next[path] = hash;
+      else delete next[path];
+      if (viewedKey) localStorage.setItem(viewedKey, JSON.stringify(next));
+      return next;
+    });
+  };
   const [hideWs, setHideWsState] = useState(() => localStorage.getItem("prc-diff-ws") !== "off");
   const [mode, setModeState] = useState<ViewMode>(
     () => (localStorage.getItem("prc-diff-mode") as ViewMode) || "unified"
@@ -71,6 +95,22 @@ export function DiffViewer({
   );
 
   const keyOf = (f: FileDiff) => f.newPath || f.oldPath;
+
+  // cheap content hash per file (djb2 over diff lines) for viewed-tracking
+  const fileHashes = useMemo(() => {
+    if (!viewedKey) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const f of files) {
+      let h = 5381;
+      for (const l of f.lines) {
+        for (let i = 0; i < l.text.length; i++) h = ((h << 5) + h + l.text.charCodeAt(i)) | 0;
+        h = ((h << 5) + h + (l.type === "add" ? 43 : l.type === "del" ? 45 : 32)) | 0;
+      }
+      map.set(keyOf(f), String(h >>> 0));
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, viewedKey]);
 
   // ---- file tree + scroll spy ----
   const [treeOpen, setTreeOpenState] = useState(() => localStorage.getItem("prc-diff-tree") === "on");
@@ -303,6 +343,12 @@ export function DiffViewer({
             <input type="checkbox" checked={hideWs} onChange={(e) => setHideWs(e.target.checked)} />
             Hide whitespace changes
           </label>
+          {viewedKey && (
+            <span className="subtle">
+              {files.filter((f) => viewed[keyOf(f)] === fileHashes.get(keyOf(f))).length}/{files.length}{" "}
+              viewed
+            </span>
+          )}
         </div>
       )}
       <div className="diff-area">
@@ -317,7 +363,11 @@ export function DiffViewer({
         <div className="diff-list">
       {files.map((file) => {
         const path = keyOf(file);
-        const isCollapsed = collapsed[path];
+        const hash = fileHashes.get(path) ?? "";
+        const isViewed = !!viewedKey && viewed[path] === hash;
+        // viewed files collapse by default; an explicit expand overrides
+        // without clearing the viewed mark
+        const isCollapsed = collapsed[path] ?? isViewed;
         const wsOnly = hideWs && !file.isBinary && file.lines.every((l) => l.type === "context");
         return (
           <div
@@ -340,6 +390,24 @@ export function DiffViewer({
               {file.isDeleted && <Badge color="red">deleted</Badge>}
               {file.isBinary && <Badge color="gray">binary</Badge>}
               {wsOnly && <Badge color="gray">whitespace-only changes</Badge>}
+              {viewedKey && (
+                <label className="viewed-toggle" title="Mark as read — collapses the file; it stays read if you re-expand">
+                  <input
+                    type="checkbox"
+                    checked={isViewed}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setFileViewed(path, hash);
+                        setCollapsed((c) => ({ ...c, [path]: true }));
+                      } else {
+                        setFileViewed(path, null);
+                        setCollapsed((c) => ({ ...c, [path]: false }));
+                      }
+                    }}
+                  />
+                  viewed
+                </label>
+              )}
             </div>
             {!isCollapsed &&
               !file.isBinary &&
