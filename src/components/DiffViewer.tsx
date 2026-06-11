@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { snippetFor } from "../lib/diff";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { hideWhitespaceChanges, snippetFor } from "../lib/diff";
 import type { FileDiff, LineSelection } from "../types";
 import { Badge } from "./common";
 
@@ -23,7 +23,7 @@ interface DragState {
  * renders a comment form below the selection.
  */
 export function DiffViewer({
-  files,
+  files: rawFiles,
   selectable = false,
   anchors = [],
   renderCommentForm,
@@ -36,6 +36,11 @@ export function DiffViewer({
   const [drag, setDrag] = useState<DragState | null>(null);
   const [sel, setSel] = useState<LineSelection | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [hideWs, setHideWs] = useState(true);
+  const files = useMemo(
+    () => (hideWs ? hideWhitespaceChanges(rawFiles) : rawFiles),
+    [rawFiles, hideWs]
+  );
 
   useEffect(() => {
     if (!drag) return;
@@ -62,9 +67,18 @@ export function DiffViewer({
 
   return (
     <div onMouseLeave={() => drag && setDrag(null)}>
+      {rawFiles.length > 0 && (
+        <div className="row" style={{ marginBottom: 8 }}>
+          <label className="switch subtle">
+            <input type="checkbox" checked={hideWs} onChange={(e) => setHideWs(e.target.checked)} />
+            Hide whitespace changes
+          </label>
+        </div>
+      )}
       {files.map((file) => {
         const path = keyOf(file);
         const isCollapsed = collapsed[path];
+        const wsOnly = hideWs && !file.isBinary && file.lines.every((l) => l.type === "context");
         return (
           <div className="diff-file" key={path}>
             <div className="diff-file-header">
@@ -76,8 +90,9 @@ export function DiffViewer({
               {file.isNew && <Badge color="green">new</Badge>}
               {file.isDeleted && <Badge color="red">deleted</Badge>}
               {file.isBinary && <Badge color="gray">binary</Badge>}
+              {wsOnly && <Badge color="gray">whitespace-only changes</Badge>}
             </div>
-            {!isCollapsed && !file.isBinary && (
+            {!isCollapsed && !file.isBinary && !wsOnly && (
               <table className="diff-table">
                 <tbody>
                   {file.lines.map((line, i) => {

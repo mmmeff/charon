@@ -1,4 +1,4 @@
-import type { FileDiff } from "../types";
+import type { DiffLine, FileDiff } from "../types";
 
 /** Parse a unified diff (GitHub `application/vnd.github.v3.diff`). */
 export function parseUnifiedDiff(text: string): FileDiff[] {
@@ -74,6 +74,60 @@ export function parseUnifiedDiff(text: string): FileDiff[] {
   }
   push();
   return files;
+}
+
+const stripWs = (s: string) => s.replace(/\s+/g, "");
+
+/**
+ * GitHub-style "hide whitespace": del/add runs whose lines differ only in
+ * whitespace are folded back into context lines (keeping both line numbers,
+ * so comment anchoring and selection still work), then hunks and files left
+ * with no real changes are dropped/emptied. Runs are folded all-or-nothing to
+ * preserve line ordering; mixed runs stay as-is.
+ */
+export function hideWhitespaceChanges(files: FileDiff[]): FileDiff[] {
+  return files.map((f) => {
+    if (f.isBinary) return f;
+    const folded: DiffLine[] = [];
+    const lines = f.lines;
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i].type !== "del") {
+        folded.push(lines[i]);
+        i++;
+        continue;
+      }
+      const dels: DiffLine[] = [];
+      while (i < lines.length && lines[i].type === "del") dels.push(lines[i++]);
+      const adds: DiffLine[] = [];
+      while (i < lines.length && lines[i].type === "add") adds.push(lines[i++]);
+      if (dels.length === adds.length && dels.every((d, x) => stripWs(d.text) === stripWs(adds[x].text))) {
+        for (let x = 0; x < dels.length; x++) {
+          folded.push({ type: "context", oldNum: dels[x].oldNum, newNum: adds[x].newNum, text: adds[x].text });
+        }
+      } else {
+        folded.push(...dels, ...adds);
+      }
+    }
+    // drop hunks that no longer contain any change
+    const cleaned: DiffLine[] = [];
+    for (let x = 0; x < folded.length; x++) {
+      if (folded[x].type === "hunk") {
+        let y = x + 1;
+        let hasChange = false;
+        while (y < folded.length && folded[y].type !== "hunk") {
+          if (folded[y].type !== "context") hasChange = true;
+          y++;
+        }
+        if (!hasChange) {
+          x = y - 1;
+          continue;
+        }
+      }
+      cleaned.push(folded[x]);
+    }
+    return { ...f, lines: cleaned };
+  });
 }
 
 /** Extract the text of lines in [startLine, endLine] on `side` of a file diff. */
