@@ -134,15 +134,21 @@ export function RepoApp({ repo }: { repo: string }) {
               {pendingProposals} pending approval{pendingProposals > 1 ? "s" : ""}
             </span>
           )}
-          <span className={`pollstatus ${prData.pollError ? "err" : ""}`} title={prData.pollError ?? ""}>
+          <span
+            className={`pollstatus ${prData.pollError ? "err" : ""}`}
+            title={
+              prData.pollError ??
+              (prData.lastPollAt ? `last synced ${timeAgo(prData.lastPollAt)}` : "")
+            }
+          >
             {prData.polling ? (
               <>
-                <span className="spin" /> polling…
+                <span className="spin" /> syncing…
               </>
             ) : prData.pollError ? (
-              "poll error"
-            ) : prData.lastPollAt ? (
-              `synced ${timeAgo(prData.lastPollAt)}`
+              "sync error"
+            ) : prData.nextPollAt ? (
+              `next sync in ${Math.max(0, Math.ceil((prData.nextPollAt - Date.now()) / 1000))}s`
             ) : (
               "starting…"
             )}

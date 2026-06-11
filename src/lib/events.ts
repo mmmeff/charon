@@ -27,6 +27,8 @@ interface PrDataState {
   reviews: Record<number, ReviewInfo[]>;
   polling: boolean;
   lastPollAt: number | null;
+  /** when the next poll is scheduled to fire */
+  nextPollAt: number | null;
   pollError: string | null;
   patch(p: Partial<PrDataState>): void;
 }
@@ -40,6 +42,7 @@ export const usePrData = create<PrDataState>((set) => ({
   reviews: {},
   polling: false,
   lastPollAt: null,
+  nextPollAt: null,
   pollError: null,
   patch: (p) => set(p),
 }));
@@ -330,6 +333,7 @@ export class RepoPoller {
   private schedule() {
     if (this.stopped) return;
     const sec = Math.max(20, this.getCtx().config.pollIntervalSec || 60);
+    usePrData.getState().patch({ nextPollAt: Date.now() + sec * 1000 });
     this.timer = setTimeout(() => void this.tick(), sec * 1000);
   }
 
