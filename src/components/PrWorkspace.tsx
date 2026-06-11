@@ -7,7 +7,7 @@ import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
 import { timeAgo, useScrolledPrTitle } from "../lib/ui";
-import { Badge, CiBadge, MergeBadge, Spinner } from "./common";
+import { Badge, CiBadge, MergeBadge, Section, Spinner } from "./common";
 import { ChecksPanel } from "./ChecksPanel";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
@@ -121,70 +121,86 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     ),
   ];
 
+  const hasStatus =
+    checks.length > 0 ||
+    pr.mergeableState === "dirty" ||
+    activeRuns.length > 0 ||
+    prProposals.length > 0;
+
   return (
     <div className="workspace">
       <div className="ws-main" ref={mainRef}>
-      <PrTitle pr={pr} />
-      <div className="row" style={{ marginBottom: 12 }}>
-        {pr.draft && <Badge color="gray">draft</Badge>}
-        {variant === "babysit" && (
-          <>
-            <CiBadge checks={checks} />
-            <MergeBadge state={pr.mergeableState} />
-            <Badge color={approvals >= ctx.config.requiredApprovals ? "green" : "gray"}>
-              {approvals}/{ctx.config.requiredApprovals} approvals
-            </Badge>
-          </>
-        )}
-        <Badge color="gray">
-          {pr.headRef} → {pr.baseRef}
-        </Badge>
-        <PrLabels pr={pr} />
-        <span className="subtle">
-          +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
-        </span>
-        {variant === "draft" && pr.draft && (
-          <>
-            <span style={{ flex: 1 }} />
-            <SubmitForReview pr={pr} />
-          </>
-        )}
-      </div>
 
-      <PrDescription pr={pr} />
-
-      <ChecksPanel pr={pr} />
-
-      {(pr.mergeableState === "dirty" || activeRuns.length > 0) && (
-        <div className="card" style={{ padding: "8px 14px" }}>
-          <div className="row">
-            {pr.mergeableState === "dirty" && (
-              <button className="small" onClick={() => void manualFix("merge_conflict_detected", "conflict_fix")}>
-                Resolve conflicts now
-              </button>
-            )}
-            {activeRuns.length > 0 && (
-              <span className="subtle">
-                <Spinner /> {activeRuns.length} agent{activeRuns.length > 1 ? "s" : ""} working — see Activity Feed
-              </span>
-            )}
-            {error && <span style={{ color: "var(--red)" }}>{error}</span>}
-          </div>
+      {/* ── the PR itself: title, state, description ── */}
+      <Section>
+        <PrTitle pr={pr} />
+        <div className="row" style={{ marginBottom: 12 }}>
+          {pr.draft && <Badge color="gray">draft</Badge>}
+          {variant === "babysit" && (
+            <>
+              <CiBadge checks={checks} />
+              <MergeBadge state={pr.mergeableState} />
+              <Badge color={approvals >= ctx.config.requiredApprovals ? "green" : "gray"}>
+                {approvals}/{ctx.config.requiredApprovals} approvals
+              </Badge>
+            </>
+          )}
+          <Badge color="gray">
+            {pr.headRef} → {pr.baseRef}
+          </Badge>
+          <PrLabels pr={pr} />
+          <span className="subtle">
+            +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
+          </span>
+          {variant === "draft" && pr.draft && (
+            <>
+              <span style={{ flex: 1 }} />
+              <SubmitForReview pr={pr} />
+            </>
+          )}
         </div>
-      )}
+        <PrDescription pr={pr} />
+      </Section>
 
-      {prProposals.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
+      {/* ── what needs attention: CI, branch health, pending approvals ── */}
+      {hasStatus && (
+        <Section label="Status">
+          <ChecksPanel pr={pr} />
+          {(pr.mergeableState === "dirty" || activeRuns.length > 0) && (
+            <div className="card" style={{ padding: "8px 14px" }}>
+              <div className="row">
+                {pr.mergeableState === "dirty" && (
+                  <button
+                    className="small"
+                    onClick={() => void manualFix("merge_conflict_detected", "conflict_fix")}
+                  >
+                    Resolve conflicts now
+                  </button>
+                )}
+                {activeRuns.length > 0 && (
+                  <span className="subtle">
+                    <Spinner /> {activeRuns.length} agent{activeRuns.length > 1 ? "s" : ""} working —
+                    see Activity Feed
+                  </span>
+                )}
+                {error && <span style={{ color: "var(--red)" }}>{error}</span>}
+              </div>
+            </div>
+          )}
           {prProposals.map((p) => (
             <ProposalCard key={p.id} proposal={p} />
           ))}
-        </div>
+        </Section>
       )}
 
-      <Composer pr={pr} modes={["ask", "edit", "review"]} reviewKind="self" />
-      <FindingsStrip pr={pr} />
-      <RunResults pr={pr} onReloadDiff={() => void loadDiff()} />
+      {/* ── drive agents: ask / change / review + their output ── */}
+      <Section label="Console">
+        <Composer pr={pr} modes={["ask", "edit", "review"]} reviewKind="self" />
+        <FindingsStrip pr={pr} />
+        <RunResults pr={pr} onReloadDiff={() => void loadDiff()} />
+      </Section>
 
+      <Section label="Diff">
       {diffErr && <p style={{ color: "var(--red)" }}>{diffErr}</p>}
       {!files && !diffErr && (
         <p className="subtle">
@@ -208,6 +224,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           )}
         />
       )}
+      </Section>
       </div>
       <PrActivityPanel pr={pr} />
     </div>

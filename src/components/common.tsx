@@ -25,6 +25,23 @@ export function RunningAgentsChip({ prNumber }: { prNumber: number }) {
   );
 }
 
+/**
+ * Workspace section: a logical grouping with breathing room and an optional
+ * schematic-style micro-label rule above it.
+ */
+export function Section({ label, children }: { label?: string; children: ReactNode }) {
+  return (
+    <section className="ws-section">
+      {label && (
+        <div className="ws-section-label">
+          <span>{label}</span>
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
 /** Empty-state block: ASCII flow-field texture + tracked uppercase title. */
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (

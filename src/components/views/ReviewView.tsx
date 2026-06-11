@@ -4,7 +4,7 @@ import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { age, sortPrs, useScrolledPrTitle, type SortKey } from "../../lib/ui";
-import { Badge, EmptyState, RunningAgentsChip, SortPicker, Spinner } from "../common";
+import { Badge, EmptyState, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
@@ -141,34 +141,40 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   return (
     <div className="workspace">
       <div className="ws-main" ref={mainRef}>
-      <h2 className="viewtitle">
-        <a href={pr.url} title="Open on GitHub">
-          #{pr.number} {pr.title} <span className="ext">↗</span>
-        </a>
-      </h2>
-      <div className="row" style={{ marginBottom: 12 }}>
-        <Badge color="purple">review requested</Badge>
-        <PrLabels pr={pr} />
-        <span className="subtle">
-          by {pr.author} · {pr.headRef} → {pr.baseRef} · {pr.changedFiles} files
-        </span>
-      </div>
+      {/* ── the PR itself: title, state, description ── */}
+      <Section>
+        <h2 className="viewtitle">
+          <a href={pr.url} title="Open on GitHub">
+            #{pr.number} {pr.title} <span className="ext">↗</span>
+          </a>
+        </h2>
+        <div className="row" style={{ marginBottom: 12 }}>
+          <Badge color="purple">review requested</Badge>
+          <PrLabels pr={pr} />
+          <span className="subtle">
+            by {pr.author} · {pr.headRef} → {pr.baseRef} · {pr.changedFiles} files
+          </span>
+        </div>
+        <PrDescription pr={pr} />
+      </Section>
 
-      <PrDescription pr={pr} />
-
-      <Composer pr={pr} modes={["review", "ask"]} reviewKind="teammate" />
-      <RunResults pr={pr} />
-      {error && <p style={{ color: "var(--red)" }}>{error}</p>}
+      {/* ── drive the review agent ── */}
+      <Section label="Console">
+        <Composer pr={pr} modes={["review", "ask"]} reviewKind="teammate" />
+        <RunResults pr={pr} />
+        {error && <p style={{ color: "var(--red)" }}>{error}</p>}
+      </Section>
 
       {reviewProposal && (
-        <>
-          <div className="subtle" style={{ margin: "8px 0" }}>
+        <Section label="Proposed review">
+          <div className="subtle" style={{ marginBottom: 8 }}>
             Proposed comments are anchored on the diff below — tweak, toggle, or rewrite each one, then submit.
           </div>
           <ProposalCard proposal={reviewProposal} />
-        </>
+        </Section>
       )}
 
+      <Section label="Diff">
       {!files && !error && (
         <p className="subtle">
           <Spinner /> loading diff…
@@ -191,6 +197,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
           )}
         />
       )}
+      </Section>
       </div>
       <PrActivityPanel pr={pr} />
     </div>
