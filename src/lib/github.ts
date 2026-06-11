@@ -362,67 +362,75 @@ export class GitHubClient {
       const actor = e.actor?.login ?? e.author?.name ?? "";
       const at =
         Date.parse(e.created_at ?? e.committer?.date ?? e.author?.date ?? "") || 0;
-      const push = (verb: string, color: TimelineEventInfo["color"], detail?: string, url?: string) =>
+      const push = (
+        verb: string,
+        color: TimelineEventInfo["color"],
+        text: string,
+        sub?: string,
+        url?: string
+      ) =>
         out.push({
           id: `${e.event}-${e.id ?? e.sha ?? at}-${out.length}`,
           at,
           actor,
           verb,
-          detail,
+          text,
+          sub,
           color,
           url,
         });
+      const reviewee = e.requested_reviewer?.login ?? e.requested_team?.name ?? "someone";
       switch (e.event) {
         case "committed":
-          push("pushed", "blue", `${firstLine(e.message)} (${(e.sha ?? "").slice(0, 7)})`, e.html_url);
+          push("pushed", "blue", `pushed ${(e.sha ?? "").slice(0, 7)}`, firstLine(e.message), e.html_url);
           break;
         case "merged":
-          push("merged", "purple", e.commit_id ? `(${e.commit_id.slice(0, 7)})` : undefined);
+          push("merged", "purple", `merged this PR${e.commit_id ? ` as ${e.commit_id.slice(0, 7)}` : ""}`);
           break;
         case "closed":
-          push("closed", "red");
+          push("closed", "red", "closed this PR");
           break;
         case "reopened":
-          push("reopened", "green");
+          push("reopened", "green", "reopened this PR");
           break;
         case "head_ref_force_pushed":
-          push("force-pushed", "yellow");
+          push("force-push", "yellow", "force-pushed the branch");
           break;
         case "head_ref_deleted":
-          push("deleted branch", "gray");
+          push("branch", "gray", "deleted the head branch");
           break;
         case "head_ref_restored":
-          push("restored branch", "gray");
+          push("branch", "gray", "restored the head branch");
           break;
         case "review_requested":
-          push("requested review", "purple", e.requested_reviewer?.login ?? e.requested_team?.name);
+          push("review req", "purple", `requested a review from ${reviewee}`);
           break;
         case "review_request_removed":
-          push("removed review request", "gray", e.requested_reviewer?.login ?? e.requested_team?.name);
+          push("review req", "gray", `removed the review request for ${reviewee}`);
           break;
         case "labeled":
-          push("labeled", "gray", e.label?.name);
+          push("label", "gray", `added the “${e.label?.name}” label`);
           break;
         case "unlabeled":
-          push("unlabeled", "gray", e.label?.name);
+          push("label", "gray", `removed the “${e.label?.name}” label`);
           break;
         case "ready_for_review":
-          push("marked ready", "green");
+          push("ready", "green", "marked this PR ready for review");
           break;
         case "convert_to_draft":
-          push("converted to draft", "gray");
+          push("draft", "gray", "converted this PR to a draft");
           break;
         case "renamed":
-          push("renamed", "gray", `“${e.rename?.from}” → “${e.rename?.to}”`);
+          push("renamed", "gray", `renamed this PR to “${e.rename?.to}”`);
           break;
         case "base_ref_changed":
-          push("changed base", "yellow");
+          push("base", "yellow", "changed the base branch");
           break;
         case "assigned":
-          push("assigned", "gray", e.assignee?.login);
+          push("assigned", "gray", `assigned ${e.assignee?.login ?? "someone"}`);
           break;
         case "unassigned":
-          push("unassigned", "gray", e.assignee?.login);
+          push("assigned", "gray", `unassigned ${e.assignee?.login ?? "someone"}`);
           break;
         default:
           break; // comments/reviews come from their own streams

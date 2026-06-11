@@ -594,6 +594,8 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
   min-width: 0;
 }
 .act-event:last-child { border-bottom: none; }
+.act-sentence { line-height: 1.45; color: var(--fg-muted); }
+.act-sentence strong { color: var(--fg); }
 .act-event-detail {
   display: block;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

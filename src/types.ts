@@ -169,8 +169,12 @@ export interface TimelineEventInfo {
   id: string;
   at: number;
   actor: string;
+  /** short badge label, e.g. "pushed", "merged" */
   verb: string;
-  detail?: string;
+  /** sentence completing "<actor> …", e.g. "requested a review from jsnelling" */
+  text: string;
+  /** optional secondary line (commit message) */
+  sub?: string;
   color: "gray" | "green" | "red" | "yellow" | "blue" | "purple";
   url?: string;
 }

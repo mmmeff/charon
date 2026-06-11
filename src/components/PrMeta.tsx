@@ -206,16 +206,16 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
                 <span style={{ flex: 1 }} />
                 <span className="subtle">{age(ev.at)}</span>
               </div>
-              <div>
-                <strong>{ev.actor}</strong>
+              <div className="act-sentence">
+                <strong>{ev.actor}</strong> {ev.text}
               </div>
-              {ev.detail &&
+              {ev.sub &&
                 (ev.url ? (
                   <a href={ev.url} target="_blank" rel="noreferrer" className="act-event-detail">
-                    {ev.detail}
+                    {ev.sub}
                   </a>
                 ) : (
-                  <div className="act-event-detail subtle">{ev.detail}</div>
+                  <div className="act-event-detail subtle">{ev.sub}</div>
                 ))}
             </div>
           );
