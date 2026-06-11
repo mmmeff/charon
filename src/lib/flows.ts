@@ -489,7 +489,8 @@ export async function applyFindings(
   ctx: FlowContext,
   pr: PrSummary,
   findings: ReviewFinding[],
-  model?: string
+  model?: string,
+  guidance?: string
 ): Promise<string> {
   const store = useRepoStore.getState();
   for (const f of findings) await store.updateFinding(f.key, { status: "applying" });
@@ -498,7 +499,11 @@ export async function applyFindings(
 of this PR. Treat each as a strong recommendation: verify it is correct in context, then implement the fix.
 If a finding is wrong, skip it and say why in the proposal.
 
-${findings.map(findingInstruction).join("\n\n")}`;
+${findings.map(findingInstruction).join("\n\n")}${
+    guidance?.trim()
+      ? `\n\nADDITIONAL GUIDANCE FROM THE USER (takes precedence):\n${guidance.trim()}`
+      : ""
+  }`;
 
   try {
     const wt = await createWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);

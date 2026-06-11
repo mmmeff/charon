@@ -4,7 +4,71 @@ import { useRepoStore, useUiStore } from "../lib/store";
 import type { PrSummary, ReviewFinding } from "../types";
 import { Badge, ConfidenceBadge, SeverityBadge, Spinner, timeAgo } from "./common";
 import { Markdown } from "./Markdown";
+import { ModelPicker } from "./ModelPicker";
+import { PromptInput } from "./PromptInput";
 import { useFlow } from "./RepoApp";
+
+/**
+ * Launch form for applying findings: optional guidance for the agent plus
+ * model choice, so the user can steer the work before it starts.
+ */
+function ApplyForm({
+  pr,
+  findings,
+  onClose,
+  label,
+}: {
+  pr: PrSummary;
+  findings: ReviewFinding[];
+  onClose: () => void;
+  label: string;
+}) {
+  const { ctx } = useFlow();
+  const model = useUiStore((s) => s.composerModel);
+  const setModel = useUiStore((s) => s.setComposerModel);
+  const [guidance, setGuidance] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const run = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await applyFindings(ctx, pr, findings, model || undefined, guidance);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="apply-form">
+      <PromptInput
+        autoFocus
+        rows={2}
+        placeholder="Optional: anything the agent should know or do differently?  ( / for skills )"
+        value={guidance}
+        onChange={setGuidance}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !busy) void run();
+          if (e.key === "Escape") onClose();
+        }}
+      />
+      <div className="row" style={{ marginTop: 6 }}>
+        <button className="small primary" disabled={busy} onClick={() => void run()}>
+          {busy ? <Spinner /> : null} {label}
+        </button>
+        <ModelPicker value={model} onChange={setModel} />
+        <button className="small" onClick={onClose}>
+          Cancel
+        </button>
+        {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Slim status strip for a PR's local self-review findings: counts, apply-all,
@@ -12,27 +76,16 @@ import { useFlow } from "./RepoApp";
  * exist; the review itself is launched from the composer.
  */
 export function FindingsStrip({ pr }: { pr: PrSummary }) {
-  const { ctx } = useFlow();
   const findings = useRepoStore((s) => s.findings).filter((f) => f.prNumber === pr.number);
   const summary = useRepoStore((s) => s.reviewSummaries[pr.number]);
   const clearFindings = useRepoStore((s) => s.clearFindings);
-  const model = useUiStore((s) => s.composerModel);
-  const [error, setError] = useState("");
   const [showSummary, setShowSummary] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
 
   if (findings.length === 0) return null;
   const open = findings.filter((f) => f.status === "open");
   const applying = findings.some((f) => f.status === "applying");
   const applied = findings.filter((f) => f.status === "applied").length;
-
-  const applyAll = async () => {
-    setError("");
-    try {
-      await applyFindings(ctx, pr, open, model || undefined);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
 
   return (
     <div className="card" style={{ padding: "8px 14px" }}>
@@ -41,7 +94,7 @@ export function FindingsStrip({ pr }: { pr: PrSummary }) {
           {open.length} finding{open.length === 1 ? "" : "s"} open · {applied} applied
         </Badge>
         {open.length > 0 && (
-          <button className="small" disabled={applying} onClick={() => void applyAll()}>
+          <button className="small" disabled={applying} onClick={() => setApplyOpen(!applyOpen)}>
             {applying ? <Spinner /> : null} Apply all open
           </button>
         )}
@@ -53,8 +106,15 @@ export function FindingsStrip({ pr }: { pr: PrSummary }) {
         <button className="link small" onClick={() => void clearFindings(pr.number)}>
           clear all
         </button>
-        {error && <span style={{ color: "var(--red)" }}>{error}</span>}
       </div>
+      {applyOpen && (
+        <ApplyForm
+          pr={pr}
+          findings={open}
+          label={`Apply ${open.length} finding${open.length === 1 ? "" : "s"}`}
+          onClose={() => setApplyOpen(false)}
+        />
+      )}
       {showSummary && summary && (
         <div style={{ marginTop: 6 }}>
           <Markdown text={summary.text} className="compact" />
@@ -66,23 +126,13 @@ export function FindingsStrip({ pr }: { pr: PrSummary }) {
 
 /** One local finding, anchored inline on the diff. */
 export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSummary }) {
-  const { ctx } = useFlow();
   const updateFinding = useRepoStore((s) => s.updateFinding);
   const anyApplying = useRepoStore((s) =>
     s.findings.some((f) => f.prNumber === pr.number && f.status === "applying")
   );
   const [editing, setEditing] = useState(false);
-  const [error, setError] = useState("");
+  const [applyOpen, setApplyOpen] = useState(false);
   const stale = finding.headSha !== pr.headSha;
-
-  const apply = async () => {
-    setError("");
-    try {
-      await applyFindings(ctx, pr, [finding]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
 
   return (
     <div style={{ opacity: finding.status === "applied" ? 0.55 : 1 }}>
@@ -137,7 +187,11 @@ export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSum
       <div className="row" style={{ marginTop: 8 }}>
         {finding.status === "open" && (
           <>
-            <button className="small primary" disabled={anyApplying} onClick={() => void apply()}>
+            <button
+              className={`small ${applyOpen ? "" : "primary"}`}
+              disabled={anyApplying}
+              onClick={() => setApplyOpen(!applyOpen)}
+            >
               Apply
             </button>
             <button className="small" onClick={() => setEditing(!editing)}>
@@ -168,8 +222,15 @@ export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSum
             reopen
           </button>
         )}
-        {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
       </div>
+      {applyOpen && finding.status === "open" && (
+        <ApplyForm
+          pr={pr}
+          findings={[finding]}
+          label="Run apply"
+          onClose={() => setApplyOpen(false)}
+        />
+      )}
     </div>
   );
 }
