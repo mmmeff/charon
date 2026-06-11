@@ -336,6 +336,7 @@ export function defaultGlobalConfig(): GlobalConfig {
     // placeholder until `cursor-agent models` is queried on startup
     models: ["auto"],
     modelLabels: { auto: "Auto" },
+    disabledModels: [],
     defaultModel: "auto",
     repos: [],
     lastRepo: "",

@@ -13,6 +13,7 @@ const NAV_SECTIONS = [
   { id: "s-review", label: "Teammate · filters" },
   { id: "s-events", label: "Events" },
   { id: "s-skills", label: "Skills" },
+  { id: "s-models", label: "Models" },
   { id: "s-conn", label: "Connection" },
 ];
 
@@ -113,11 +114,13 @@ export function SettingsView() {
           <span>Default model for this repo</span>
           <select value={config.model} onChange={(e) => update({ model: e.target.value })}>
             <option value="">global default ({global.defaultModel})</option>
-            {global.models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
+            {global.models
+              .filter((m) => !(global.disabledModels ?? []).includes(m) || m === config.model)
+              .map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
           </select>
         </label>
         <label className="field">
@@ -273,6 +276,33 @@ export function SettingsView() {
         </label>
       </div>
 
+      <div className="settings-section" id="s-models">
+        <h3>Models (global)</h3>
+        <p className="subtle" style={{ maxWidth: "72ch" }}>
+          Untick a model to hide it from every model picker, in all repos. The list refreshes from{" "}
+          <code>cursor-agent models</code> on startup; newly discovered models arrive enabled. Default
+          models keep working even if hidden here.
+        </p>
+        {global.models.map((m) => {
+          const off = (global.disabledModels ?? []).includes(m);
+          return (
+            <label key={m} className="switch" style={{ display: "flex", marginBottom: 5 }}>
+              <input
+                type="checkbox"
+                checked={!off}
+                onChange={(e) => {
+                  const next = new Set(global.disabledModels ?? []);
+                  if (e.target.checked) next.delete(m);
+                  else next.add(m);
+                  void saveGlobal({ ...global, disabledModels: [...next] });
+                }}
+              />
+              {global.modelLabels[m] ?? m} <span className="subtle">({m})</span>
+            </label>
+          );
+        })}
+      </div>
+
       <div className="settings-section" id="s-conn">
         <h3>Connection (global)</h3>
         <p className="subtle">
@@ -285,11 +315,13 @@ export function SettingsView() {
             value={global.defaultModel}
             onChange={(e) => void saveGlobal({ ...global, defaultModel: e.target.value })}
           >
-            {global.models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
+            {global.models
+              .filter((m) => !(global.disabledModels ?? []).includes(m) || m === global.defaultModel)
+              .map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
           </select>
         </label>
       </div>

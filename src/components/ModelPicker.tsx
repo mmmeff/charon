@@ -13,7 +13,11 @@ export function ModelPicker({
 }) {
   const global = useGlobalConfig((s) => s.config);
   const repoModel = useRepoStore((s) => s.config.model);
-  const models = global?.models ?? [];
+  const disabled = global?.disabledModels ?? [];
+  const models = (global?.models ?? []).filter((m) => !disabled.includes(m));
+  // a previously-chosen but now-disabled model stays listed so the select
+  // doesn't silently misreport the current value
+  if (value && !models.includes(value)) models.push(value);
   const labels = global?.modelLabels ?? {};
   const def = repoModel || global?.defaultModel || "auto";
   return (

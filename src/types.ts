@@ -17,6 +17,8 @@ export interface GlobalConfig {
   models: string[];
   /** Display labels keyed by model id */
   modelLabels: Record<string, string>;
+  /** Model ids hidden from every model picker (managed in Settings) */
+  disabledModels: string[];
   defaultModel: string;
   /** Repos the user has added, "owner/name" */
   repos: string[];
