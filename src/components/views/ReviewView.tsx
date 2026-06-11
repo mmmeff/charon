@@ -7,7 +7,7 @@ import { Badge, EmptyState, SortPicker, Spinner, age, sortPrs, type SortKey } fr
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
-import { PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
+import { DiffCommentThread, groupCommentThreads, PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
 import { InlineCommentEditor, ProposalCard } from "../ProposalCard";
 import { useFlow } from "../RepoApp";
 
@@ -73,6 +73,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   const { ctx } = useFlow();
   const proposals = useRepoStore((s) => s.proposals);
   const upsert = useRepoStore((s) => s.upsertProposal);
+  const comments = usePrData((s) => s.comments[pr.number] ?? []);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [error, setError] = useState("");
 
@@ -89,8 +90,17 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
       p.type === "review" && p.prNumber === pr.number && p.status === "pending"
   );
 
+  // existing GitHub comment threads, with inline reply
+  const threadAnchors: DiffAnchor[] = groupCommentThreads(comments).map(({ root, replies }) => ({
+    path: root.path!,
+    line: root.line!,
+    side: root.side ?? "RIGHT",
+    tone: "github" as const,
+    node: <DiffCommentThread pr={pr} root={root} replies={replies} />,
+  }));
+
   // anchor proposed comments onto the diff
-  const anchors: DiffAnchor[] =
+  const proposalAnchors: DiffAnchor[] =
     reviewProposal && files
       ? reviewProposal.comments.map((c) => ({
           path: c.path,
@@ -118,6 +128,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
           ),
         }))
       : [];
+  const anchors = [...threadAnchors, ...proposalAnchors];
 
   return (
     <div className="workspace">

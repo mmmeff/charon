@@ -5,12 +5,12 @@ import { resolveHandler, usePrData } from "../lib/events";
 import { runFixFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useRepoStore } from "../lib/store";
-import type { CommentInfo, FileDiff, PrSummary } from "../types";
-import { Badge, CiBadge, MergeBadge, Spinner, age, timeAgo } from "./common";
+import type { FileDiff, PrSummary } from "../types";
+import { Badge, CiBadge, MergeBadge, Spinner, timeAgo } from "./common";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
-import { CommentBody, PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
+import { DiffCommentThread, groupCommentThreads, PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
 import { useFlow } from "./RepoApp";
 
@@ -84,19 +84,20 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     }
   };
 
-  // review comments (bug-bots and humans) anchored onto the diff
-  const inlineComments = comments.filter((c) => c.kind === "review_comment" && c.path && c.line);
+  // review-comment threads (bug-bots and humans) anchored onto the diff,
+  // each with inline reply
+  const threads = groupCommentThreads(comments);
   const findings = useRepoStore((s) => s.findings).filter(
     (f) => f.prNumber === pr.number && f.status !== "dismissed"
   );
   const anchors: DiffAnchor[] = [
-    ...inlineComments.map(
-      (c): DiffAnchor => ({
-        path: c.path!,
-        line: c.line!,
-        side: c.side ?? "RIGHT",
+    ...threads.map(
+      ({ root, replies }): DiffAnchor => ({
+        path: root.path!,
+        line: root.line!,
+        side: root.side ?? "RIGHT",
         tone: "github",
-        node: <ExistingComment comment={c} pr={pr} />,
+        node: <DiffCommentThread pr={pr} root={root} replies={replies} />,
       })
     ),
     // local-only self-review findings, inline next to the code they're about
@@ -208,22 +209,3 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   );
 }
 
-/** A review comment that already exists on GitHub, shown in place on the diff. */
-function ExistingComment({ comment, pr }: { comment: CommentInfo; pr: PrSummary }) {
-  return (
-    <div>
-      <div className="row" style={{ marginBottom: 4 }}>
-        <span className="origin-chip github" title="This comment is on GitHub — everyone can see it">
-          GitHub
-        </span>
-        <strong>{comment.author}</strong>
-        {comment.authorIsBot && <Badge color="purple">bot</Badge>}
-        <span className="subtle">{age(comment.createdAt)}</span>
-        <a href={comment.url} target="_blank" rel="noreferrer" className="subtle">
-          view ↗
-        </a>
-      </div>
-      <CommentBody pr={pr} comment={comment} />
-    </div>
-  );
-}

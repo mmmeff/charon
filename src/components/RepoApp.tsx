@@ -120,7 +120,7 @@ export function RepoApp({ repo }: { repo: string }) {
             <button
               key={t.id}
               className={`rail-btn ${tab === t.id ? "active" : ""}`}
-              title={t.label + (t.count ? ` (${t.count})` : "")}
+              data-tip={t.label + (t.count ? ` — ${t.count}` : "")}
               onClick={() => setTab(t.id)}
             >
               <t.icon />
@@ -134,7 +134,7 @@ export function RepoApp({ repo }: { repo: string }) {
           <div className="rail-spacer" />
           <button
             className="rail-btn"
-            title="Switch repository"
+            data-tip="Switch repository"
             onClick={() => void native.openLauncherWindow()}
           >
             <IconRepos />
@@ -144,7 +144,7 @@ export function RepoApp({ repo }: { repo: string }) {
         <div className="app-col">
           <div className="topstrip">
             <span className="brand">SWITCHYARD</span>
-            <span className="dim">/ facility: {repo}</span>
+            <span className="dim">/ {repo}</span>
             <span className="spacer" />
             {pendingProposals > 0 && (
               <span className="badge yellow">

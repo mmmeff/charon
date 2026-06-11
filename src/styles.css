@@ -196,6 +196,36 @@ h3, h4 {
 .rail-count.hot { background: var(--acid); border-color: var(--acid); color: #0e0d0a; }
 .rail-spacer { flex: 1; }
 
+/* ---- animated rail tooltips ---- */
+.rail { position: relative; z-index: 40; }
+[data-tip] { position: relative; }
+[data-tip]::before {
+  content: "";
+  position: absolute; left: calc(100% + 5px); top: 50%;
+  width: 6px; height: 6px;
+  background: var(--orange);
+  transform: translateY(-50%) translateX(-6px) rotate(45deg);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.14s ease 0.3s, transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.3s;
+  z-index: 101;
+}
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; left: calc(100% + 10px); top: 50%;
+  transform: translateY(-50%) translateX(-8px);
+  background: var(--bg-raised);
+  border: 1px solid var(--border); border-left: 2px solid var(--orange);
+  padding: 5px 10px;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg);
+  white-space: nowrap; opacity: 0; pointer-events: none;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+  transition: opacity 0.14s ease 0.3s, transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.3s;
+  z-index: 100;
+}
+[data-tip]:hover::before { opacity: 1; transform: translateY(-50%) translateX(0) rotate(45deg); }
+[data-tip]:hover::after { opacity: 1; transform: translateY(-50%) translateX(0); }
+
 .topstrip {
   display: flex; align-items: center; gap: 8px;
   min-height: 36px; padding: 0 12px;

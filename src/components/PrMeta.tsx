@@ -230,6 +230,76 @@ export function CommentBody({ pr, comment }: { pr: PrSummary; comment: CommentIn
   );
 }
 
+/**
+ * A GitHub inline-comment thread rendered in place on the diff: root comment,
+ * nested replies, and a reply box that posts to the thread as the user.
+ * Used by both the own-PR workspace and the teammate Review diff.
+ */
+export function DiffCommentThread({
+  pr,
+  root,
+  replies,
+}: {
+  pr: PrSummary;
+  root: CommentInfo;
+  replies: CommentInfo[];
+}) {
+  const [replying, setReplying] = useState(false);
+  return (
+    <div>
+      <div className="row" style={{ marginBottom: 4 }}>
+        <span className="origin-chip github" title="This comment is on GitHub — everyone can see it">
+          GitHub
+        </span>
+        <strong>{root.author}</strong>
+        {root.authorIsBot && <Badge color="purple">bot</Badge>}
+        <span className="subtle">{age(root.createdAt)}</span>
+        <a href={root.url} target="_blank" rel="noreferrer" className="subtle">
+          view ↗
+        </a>
+      </div>
+      <CommentBody pr={pr} comment={root} />
+      {replies.map((c) => (
+        <div key={c.id} className="act-reply">
+          <ActHeader author={c.author} isBot={c.authorIsBot} at={Date.parse(c.createdAt) || 0} url={c.url} />
+          <CommentBody pr={pr} comment={c} />
+        </div>
+      ))}
+      <div style={{ marginTop: 4 }}>
+        {replying ? (
+          <SendBox
+            pr={pr}
+            placeholder="Reply to this thread…"
+            autoFocus
+            onSent={() => setReplying(false)}
+            send={(ctx, text) => ctx.gh.replyToReviewComment(ctx.repo, pr.number, root.id, text)}
+          />
+        ) : (
+          <button className="link small" onClick={() => setReplying(true)}>
+            ↳ reply
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Group inline review comments into (root, replies) threads. */
+export function groupCommentThreads(
+  comments: CommentInfo[]
+): { root: CommentInfo; replies: CommentInfo[] }[] {
+  const inline = comments.filter((c) => c.kind === "review_comment" && c.path && c.line);
+  const ids = new Set(inline.map((c) => c.id));
+  return inline
+    .filter((c) => !c.inReplyTo || !ids.has(c.inReplyTo))
+    .map((root) => ({
+      root,
+      replies: inline
+        .filter((c) => c.inReplyTo === root.id)
+        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+    }));
+}
+
 function ActHeader({
   author,
   isBot,
