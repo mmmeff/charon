@@ -177,6 +177,22 @@ tr.del .diff-num { background: var(--diff-del-num-bg); }
 tr.hunk { background: var(--accent-bg); color: var(--fg-muted); }
 tr.hunk td { padding: 2px 10px !important; }
 tr.sel { background: var(--diff-select-bg) !important; }
+
+/* side-by-side */
+.diff-table.split { table-layout: fixed; }
+.diff-table.split .diff-num { width: 46px; }
+.diff-text.half { width: 50%; }
+td.cell-del { background: var(--diff-del-bg); }
+td.cell-add { background: var(--diff-add-bg); }
+td.cell-empty { background: var(--bg-raised); }
+td.num-del { background: var(--diff-del-num-bg); }
+td.num-add { background: var(--diff-add-num-bg); }
+td.num-empty { background: var(--bg-raised); cursor: default; }
+td.cell-sel { background: var(--diff-select-bg) !important; }
+.seg { display: inline-flex; gap: 0; }
+.seg button { border-radius: 0; }
+.seg button:first-child { border-radius: 6px 0 0 6px; }
+.seg button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
 tr.commentable .diff-num { position: relative; }
 .comment-anchor-row td { background: var(--bg-raised); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .inline-comment-box { padding: 10px 12px; max-width: 860px; }
