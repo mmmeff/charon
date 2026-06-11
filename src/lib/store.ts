@@ -74,6 +74,8 @@ interface RepoState {
   logEvent(e: FiredEvent): Promise<void>;
   /** replace all findings for a PR with a fresh review's output */
   setFindings(prNumber: number, list: ReviewFinding[], summary: string): Promise<void>;
+  /** append findings (line-scoped reviews) without touching existing ones */
+  mergeFindings(prNumber: number, list: ReviewFinding[]): Promise<void>;
   updateFinding(key: string, patch: Partial<ReviewFinding>): Promise<void>;
   clearFindings(prNumber: number): Promise<void>;
 }
@@ -155,6 +157,13 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     const summaries = { ...reviewSummaries, [prNumber]: { text: summary, at: Date.now() } };
     set({ findings: next, reviewSummaries: summaries });
     await persistFindings(repo, next, summaries);
+  },
+
+  async mergeFindings(prNumber, list) {
+    const { repo, findings, reviewSummaries } = get();
+    const next = [...findings, ...list];
+    set({ findings: next });
+    await persistFindings(repo, next, reviewSummaries);
   },
 
   async updateFinding(key, patch) {

@@ -65,6 +65,9 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
   return (
     <div className="proposal">
       <div className="proposal-header">
+        <span className="origin-chip local" title="Drafted locally — nothing is on GitHub until you approve">
+          Local only
+        </span>
         <Badge color="yellow">needs approval</Badge>
         <strong>{typeLabel}</strong>
         <span className="subtle">

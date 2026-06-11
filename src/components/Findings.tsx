@@ -87,7 +87,9 @@ export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSum
   return (
     <div style={{ opacity: finding.status === "applied" ? 0.55 : 1 }}>
       <div className="row" style={{ marginBottom: 4 }}>
-        <Badge color="yellow">local finding</Badge>
+        <span className="origin-chip local" title="Only in this app — not on GitHub">
+          Local only
+        </span>
         <SeverityBadge severity={finding.severity} />
         <ConfidenceBadge confidence={finding.confidence} />
         {finding.status === "applied" && <Badge color="green">applied</Badge>}

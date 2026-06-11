@@ -277,6 +277,28 @@ export class GitHubClient {
     return res.html_url ?? "";
   }
 
+  /** A standalone inline comment on specific diff lines (user-authored). */
+  async createReviewComment(
+    repo: string,
+    number: number,
+    commitSha: string,
+    path: string,
+    line: number,
+    side: "LEFT" | "RIGHT",
+    startLine: number | undefined,
+    body: string
+  ): Promise<string> {
+    const res = await this.json<any>("POST", `/repos/${repo}/pulls/${number}/comments`, {
+      body,
+      commit_id: commitSha,
+      path,
+      line,
+      side,
+      ...(startLine && startLine !== line ? { start_line: startLine, start_side: side } : {}),
+    });
+    return res.html_url ?? "";
+  }
+
   async replyToReviewComment(
     repo: string,
     number: number,

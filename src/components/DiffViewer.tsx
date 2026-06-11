@@ -17,6 +17,8 @@ export interface DiffAnchor {
   line: number;
   side: "LEFT" | "RIGHT";
   node: ReactNode;
+  /** github = synced/on GitHub; local = app-only, not (yet) on GitHub */
+  tone?: "github" | "local";
 }
 
 interface DragState {
@@ -180,7 +182,7 @@ export function DiffViewer({
           out.push(
             <tr key={`a-${e.side}-${e.num}-${j}`} className="comment-anchor-row">
               <td colSpan={colSpan}>
-                <div className="inline-comment-box">{a.node}</div>
+                <div className={`inline-comment-box ${a.tone ?? ""}`}>{a.node}</div>
               </td>
             </tr>
           )

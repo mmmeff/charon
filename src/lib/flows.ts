@@ -339,13 +339,23 @@ export async function runSelfReviewFlow(
   ctx: FlowContext,
   pr: PrSummary,
   model?: string,
-  focus?: string
+  focus?: string,
+  selection?: LineSelection | null
 ): Promise<string> {
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   const diff = truncate(diffText, MAX_DIFF_CHARS, "\n…[diff truncated — review what is shown]");
+  const scopeBlock = selection
+    ? `\nSCOPE: review ONLY this selected region — ${selection.path} lines ${selection.startLine}–${selection.endLine} (${
+        selection.side === "RIGHT" ? "new" : "old"
+      } side):
+\`\`\`
+${selection.snippet}
+\`\`\`
+Every finding must be about code in (or directly broken by) this region; anchor findings to lines within it.\n`
+    : "";
   const base = `You are PR Copilot's review agent. The user wants a critical self-review of THEIR OWN PR #${pr.number}
 ("${pr.title}") in ${ctx.repo} before others see it. Find real problems they should fix.
-${focus?.trim() ? `\nThe user asked this review to focus on: ${focus.trim()}\n` : ""}
+${scopeBlock}${focus?.trim() ? `\nThe user asked this review to focus on: ${focus.trim()}\n` : ""}
 Reviewer guidance configured for this repo:
 ${ctx.config.reviewFilters.criteria}
 
@@ -361,7 +371,9 @@ ${REVIEW_CONTRACT}`;
   const prompt = applySkills(base, ctx.skills, ctx.config.skills.review);
   return startAgent({
     kind: "review",
-    relation: "self-review",
+    relation: selection
+      ? `self-review (${selection.path}:${selection.startLine}–${selection.endLine})`
+      : "self-review",
     repo: ctx.repo,
     prNumber: pr.number,
     prTitle: pr.title,
@@ -391,7 +403,12 @@ ${REVIEW_CONTRACT}`;
       const note = parsed.dropped.length
         ? ` (${parsed.dropped.length} unanchorable finding(s) dropped: ${parsed.dropped.join(", ")})`
         : "";
-      await useRepoStore.getState().setFindings(pr.number, findings, parsed.summary + note);
+      // scoped reviews merge into existing findings; full reviews replace them
+      if (selection) {
+        await useRepoStore.getState().mergeFindings(pr.number, findings);
+      } else {
+        await useRepoStore.getState().setFindings(pr.number, findings, parsed.summary + note);
+      }
     },
   });
 }

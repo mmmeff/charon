@@ -210,6 +210,28 @@ tr.commentable .diff-num { position: relative; }
 .comment-anchor-row td { background: var(--bg-raised); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .inline-comment-box { padding: 10px 12px; max-width: 860px; }
 
+/* GitHub-synced vs local-only — instantly distinguishable:
+   solid blue edge = on GitHub; dashed amber = only in this app */
+.inline-comment-box.github {
+  border-left: 3px solid var(--accent);
+  margin: 4px 8px;
+  background: var(--bg-raised);
+}
+.inline-comment-box.local {
+  border: 1px dashed var(--yellow);
+  border-left-width: 3px;
+  border-radius: 8px;
+  margin: 6px 8px;
+  background: rgba(210, 153, 34, 0.05);
+}
+.origin-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  border-radius: 4px; padding: 1px 6px;
+}
+.origin-chip.github { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent); }
+.origin-chip.local { background: var(--yellow-bg); color: var(--yellow); border: 1px dashed var(--yellow); }
+
 /* ---- proposals ---- */
 .proposal { border: 1px solid var(--yellow); border-radius: 8px; background: var(--bg-raised); margin-bottom: 12px; }
 .proposal.sent { border-color: var(--green); opacity: 0.75; }

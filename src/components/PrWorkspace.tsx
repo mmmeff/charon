@@ -91,19 +91,25 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     (f) => f.prNumber === pr.number && f.status !== "dismissed"
   );
   const anchors: DiffAnchor[] = [
-    ...inlineComments.map((c) => ({
-      path: c.path!,
-      line: c.line!,
-      side: c.side ?? ("RIGHT" as const),
-      node: <ExistingComment comment={c} />,
-    })),
+    ...inlineComments.map(
+      (c): DiffAnchor => ({
+        path: c.path!,
+        line: c.line!,
+        side: c.side ?? "RIGHT",
+        tone: "github",
+        node: <ExistingComment comment={c} />,
+      })
+    ),
     // local-only self-review findings, inline next to the code they're about
-    ...findings.map((f) => ({
-      path: f.path,
-      line: f.line,
-      side: f.side,
-      node: <FindingCard finding={f} pr={pr} />,
-    })),
+    ...findings.map(
+      (f): DiffAnchor => ({
+        path: f.path,
+        line: f.line,
+        side: f.side,
+        tone: "local",
+        node: <FindingCard finding={f} pr={pr} />,
+      })
+    ),
   ];
 
   return (
@@ -171,7 +177,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         </div>
       )}
 
-      <Composer pr={pr} modes={["ask", "change", "review"]} reviewKind="self" />
+      <Composer pr={pr} modes={["ask", "edit", "review"]} reviewKind="self" />
       <FindingsStrip pr={pr} />
       <RunResults pr={pr} onReloadDiff={() => void loadDiff()} />
 
@@ -187,7 +193,14 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           selectable
           anchors={anchors}
           renderCommentForm={(sel, close) => (
-            <Composer pr={pr} modes={["change", "ask"]} reviewKind="self" compact selection={sel} onClose={close} />
+            <Composer
+              pr={pr}
+              modes={["edit", "comment", "review", "ask"]}
+              reviewKind="self"
+              compact
+              selection={sel}
+              onClose={close}
+            />
           )}
         />
       )}
@@ -202,6 +215,9 @@ function ExistingComment({ comment }: { comment: CommentInfo }) {
   return (
     <div>
       <div className="row" style={{ marginBottom: 4 }}>
+        <span className="origin-chip github" title="This comment is on GitHub — everyone can see it">
+          GitHub
+        </span>
         <strong>{comment.author}</strong>
         {comment.authorIsBot && <Badge color="purple">bot</Badge>}
         <span className="subtle">{age(comment.createdAt)}</span>

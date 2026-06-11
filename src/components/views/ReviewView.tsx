@@ -97,6 +97,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
           path: c.path,
           line: c.line,
           side: c.side,
+          tone: "local" as const,
           node: (
             <InlineCommentEditor
               comment={c}

@@ -11,31 +11,39 @@ import { ModelPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
 import { useFlow } from "./RepoApp";
 
-export type ComposerMode = "ask" | "change" | "review";
+export type ComposerMode = "ask" | "edit" | "comment" | "review";
 
 const MODE_META: Record<
   ComposerMode,
-  { label: string; submit: string; placeholder: string; hint: (own: boolean) => string }
+  { label: string; submit: string; placeholder: string; hint: (own: boolean, scoped: boolean) => string }
 > = {
   ask: {
     label: "Ask",
     submit: "Ask",
-    placeholder: "Ask anything about this diff…  ( / for skills )",
+    placeholder: "Ask anything…  ( / for skills )",
     hint: () => "Read-only — the answer appears below; nothing changes.",
   },
-  change: {
-    label: "Change",
-    submit: "Run change",
+  edit: {
+    label: "Edit",
+    submit: "Run edit",
     placeholder: "Describe the change to make…  ( / for skills )",
     hint: () => "An agent implements it and pushes to your branch.",
+  },
+  comment: {
+    label: "Comment",
+    submit: "Comment",
+    placeholder: "Write a comment for these lines…",
+    hint: () => "Your text, posted to GitHub on these lines immediately — no agent involved.",
   },
   review: {
     label: "Review",
     submit: "Review",
     placeholder: "Optional: anything the review should focus on?",
-    hint: (own) =>
+    hint: (own, scoped) =>
       own
-        ? "Agent review with local-only inline findings — apply or dismiss each; nothing is posted."
+        ? scoped
+          ? "Agent reviews just the selected lines — findings stay local until you act on them."
+          : "Agent review with local-only inline findings — apply or dismiss each; nothing is posted."
         : "Findings become a draft review you edit and approve before anything is sent.",
   },
 };
@@ -62,7 +70,7 @@ export function Composer({
   compact?: boolean;
   onClose?: () => void;
 }) {
-  const { ctx } = useFlow();
+  const { ctx, poller } = useFlow();
   const [mode, setMode] = useState<ComposerMode>(modes[0]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -92,10 +100,23 @@ export function Composer({
       const m = model || undefined;
       if (mode === "ask") {
         await runDraftQuestion(ctx, pr, text, selection, m);
-      } else if (mode === "change") {
+      } else if (mode === "edit") {
         await runDraftEdit(ctx, pr, selection, text, m);
+      } else if (mode === "comment") {
+        if (!selection) throw new Error("select lines to comment on");
+        await ctx.gh.createReviewComment(
+          ctx.repo,
+          pr.number,
+          pr.headSha,
+          selection.path,
+          selection.endLine,
+          selection.side,
+          selection.startLine,
+          text
+        );
+        poller.refresh();
       } else if (reviewKind === "self") {
-        await runSelfReviewFlow(ctx, pr, m, text);
+        await runSelfReviewFlow(ctx, pr, m, text, selection);
       } else {
         const handler = resolveHandler(ctx.config.events, "review_requested");
         let task = interpolate(handler.prompt, { ...prVars(pr), repo: ctx.repo });
@@ -133,7 +154,7 @@ export function Composer({
           ))}
         </div>
         <span className="subtle" style={{ fontSize: 12 }}>
-          {meta.hint(reviewKind === "self")}
+          {meta.hint(reviewKind === "self", !!selection)}
         </span>
       </div>
       <PromptInput
@@ -151,7 +172,7 @@ export function Composer({
           {busy || (mode === "review" && reviewing) ? <Spinner /> : null}{" "}
           {mode === "review" && reviewing ? "reviewing…" : meta.submit}
         </button>
-        <ModelPicker value={model} onChange={setModel} />
+        {mode !== "comment" && <ModelPicker value={model} onChange={setModel} />}
         {onClose && <button onClick={onClose}>Cancel</button>}
         {error && <span style={{ color: "var(--red)" }}>{error}</span>}
       </div>
