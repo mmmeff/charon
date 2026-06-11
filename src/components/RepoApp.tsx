@@ -215,6 +215,14 @@ export function RepoApp({ repo }: { repo: string }) {
                 <span className="cursor-blink">starting</span>
               )}
             </span>
+            <button
+              className="rail-btn"
+              style={{ width: 26, height: 26 }}
+              onClick={(e) => (e.shiftKey ? window.location.reload() : poller.refresh())}
+              title="Sync now (⇧-click: reload the app)"
+            >
+              <IconRefresh />
+            </button>
             {(tab === "drafts" || tab === "open" || tab === "review") && (
               <button
                 className={`rail-btn ${activityPanelOpen ? "active" : ""}`}
@@ -225,14 +233,6 @@ export function RepoApp({ repo }: { repo: string }) {
                 <IconSidePanel />
               </button>
             )}
-            <button
-              className="rail-btn"
-              style={{ width: 26, height: 26 }}
-              onClick={(e) => (e.shiftKey ? window.location.reload() : poller.refresh())}
-              title="Sync now (⇧-click: reload the app)"
-            >
-              <IconRefresh />
-            </button>
           </div>
 
           {tab === "drafts" && <DraftsView />}

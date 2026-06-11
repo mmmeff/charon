@@ -442,6 +442,9 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 /* width:100% lets the form wrap onto its own line when launched from inside a flex .row */
 .apply-form { width: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); }
 
+/* reviewer picker — wraps to its own full-width line inside the PR meta row */
+.submit-review { width: 100%; padding: 10px 12px; margin: 4px 0 0; }
+
 /* ---- CI checks panel ---- */
 .checks-panel { padding: 10px 14px; }
 .checks-title {

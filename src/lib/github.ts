@@ -513,6 +513,45 @@ export class GitHubClient {
     await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { body });
   }
 
+  /** Repo collaborators — the reviewer candidate pool. */
+  async listCollaborators(repo: string): Promise<string[]> {
+    const res = await this.json<any[]>("GET", `/repos/${repo}/collaborators?per_page=100`);
+    return res.map((u) => String(u.login));
+  }
+
+  /** Org teams (team review requests); empty for user-owned repos / no scope. */
+  async listOrgTeams(repo: string): Promise<{ slug: string; name: string }[]> {
+    const org = repo.split("/")[0];
+    try {
+      const res = await this.json<any[]>("GET", `/orgs/${org}/teams?per_page=100`);
+      return res.map((t) => ({ slug: String(t.slug), name: String(t.name) }));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Request reviews from users and/or teams (direct user-authored action). */
+  async requestReviewers(
+    repo: string,
+    number: number,
+    reviewers: string[],
+    teamReviewers: string[]
+  ): Promise<void> {
+    await this.json("POST", `/repos/${repo}/pulls/${number}/requested_reviewers`, {
+      reviewers,
+      team_reviewers: teamReviewers,
+    });
+  }
+
+  /** Flip a draft PR to "ready for review" — a GraphQL-only operation. */
+  async markReadyForReview(repo: string, number: number): Promise<void> {
+    const detail = await this.json<{ node_id: string }>("GET", `/repos/${repo}/pulls/${number}`);
+    await this.graphql(
+      `mutation($id:ID!){ markPullRequestReadyForReview(input:{pullRequestId:$id}){ pullRequest{ isDraft } } }`,
+      { id: detail.node_id }
+    );
+  }
+
   /** Edit/delete the user's own comments. `kind` matches CommentInfo.kind. */
   async updateComment(
     repo: string,

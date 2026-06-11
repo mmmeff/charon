@@ -73,7 +73,13 @@ Output your review as EXACTLY ONE proposal block at the very end:
 - An empty "comments" array with a short summary is a valid review of a clean diff.
 The block must be valid JSON on its own.`;
 
-function fixFlowWrapper(ctx: FlowContext, pr: PrSummary, wt: Worktree, task: string): string {
+function fixFlowWrapper(
+  ctx: FlowContext,
+  pr: PrSummary,
+  wt: Worktree,
+  task: string,
+  propose = true
+): string {
   return `You are PR Copilot's autonomous fix agent working on repository ${ctx.repo}, PR #${pr.number} ("${pr.title}").
 
 Your working directory is a dedicated git worktree at ${wt.path}, checked out from origin/${pr.headRef}
@@ -90,12 +96,20 @@ WORKFLOW:
    Other agents may be pushing fixes to this branch concurrently. If the push is rejected because
    the remote moved, run \`git pull --rebase origin ${pr.headRef}\`, resolve any conflicts in favor of
    keeping both fixes intact, and push again. NEVER force-push.
-3. If you determine no code change is needed, do not commit or push; explain why in the proposal.
+3. If you determine no code change is needed, do not commit or push; explain why in your ${
+    propose ? "proposal" : "final message"
+  }.
 
 DEPENDENCY & VALIDATION POLICY:
 ${ctx.config.fixPolicy}
 ${HITL_CONTRACT}
-${PROPOSAL_CONTRACT}`;
+${
+  propose
+    ? PROPOSAL_CONTRACT
+    : `
+This is routine branch maintenance — no PR comment is wanted. Do NOT emit a proposal block;
+end with a short summary of what you did for the activity log.`
+}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +121,9 @@ async function createProposalFromFixOutput(
   pr: PrSummary,
   runId: string,
   resultText: string,
-  context: string
+  context: string,
+  /** pin the proposal to this inline review comment id, whatever the agent emitted */
+  forceReplyTo?: number
 ): Promise<void> {
   const store = useRepoStore.getState();
   const obj = extractProposalJson(resultText);
@@ -115,15 +131,16 @@ async function createProposalFromFixOutput(
 
   if (obj?.type === "none") return;
 
-  if (obj?.type === "reply" && obj.in_reply_to) {
+  const replyTo = forceReplyTo ?? (obj?.type === "reply" && obj.in_reply_to ? Number(obj.in_reply_to) : null);
+  if (replyTo) {
     await store.upsertProposal({
       id: uid("prop-"),
       type: "comment_reply",
       repo: ctx.repo,
       prNumber: pr.number,
       prTitle: pr.title,
-      body: String(obj.body ?? fallbackBody),
-      inReplyToCommentId: Number(obj.in_reply_to),
+      body: String(obj?.body ?? fallbackBody),
+      inReplyToCommentId: replyTo,
       context,
       createdAt: Date.now(),
       status: "pending",
@@ -264,7 +281,10 @@ async function createReviewProposal(
 
 /**
  * Fix flow: worktree → agent implements/commits/pushes (automated) → PR-facing
- * response becomes a pending proposal (gated on approval).
+ * response becomes a pending proposal (gated on approval). Conflict/branch
+ * maintenance runs (kind "conflict_fix") skip the proposal entirely — merging
+ * main isn't worth a PR comment. opts.replyToCommentId pins the proposal to
+ * an inline review comment as a threaded reply.
  */
 export async function runFixFlow(
   ctx: FlowContext,
@@ -272,10 +292,16 @@ export async function runFixFlow(
   task: string,
   relation: string,
   kind: "ci_fix" | "conflict_fix" | "feedback_fix" | "event",
-  model?: string
+  model?: string,
+  opts?: { replyToCommentId?: number }
 ): Promise<string> {
+  const propose = kind !== "conflict_fix";
   const wt = await createWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);
-  const prompt = applySkills(fixFlowWrapper(ctx, pr, wt, task), ctx.skills, ctx.config.skills.fix);
+  const prompt = applySkills(
+    fixFlowWrapper(ctx, pr, wt, task, propose),
+    ctx.skills,
+    ctx.config.skills.fix
+  );
   try {
     return await startAgent({
       kind,
@@ -289,7 +315,16 @@ export async function runFixFlow(
       cwd: wt.path,
       onDone: async (run) => {
         try {
-          await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, relation);
+          if (propose) {
+            await createProposalFromFixOutput(
+              ctx,
+              pr,
+              run.id,
+              run.resultText,
+              relation,
+              opts?.replyToCommentId
+            );
+          }
         } finally {
           await releaseWorktree(wt);
         }
@@ -590,7 +625,10 @@ After the work, draft a response to the thread${
       : ""
   }`;
 
-  return runFixFlow(ctx, pr, task, `address comment by ${root.author}`, "feedback_fix", model);
+  return runFixFlow(ctx, pr, task, `address comment by ${root.author}`, "feedback_fix", model, {
+    // inline review comments get a threaded reply, never a root PR comment
+    replyToCommentId: isInline ? root.id : undefined,
+  });
 }
 
 /**

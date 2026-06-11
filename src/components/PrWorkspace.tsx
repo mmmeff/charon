@@ -15,6 +15,7 @@ import { FindingCard, FindingsStrip } from "./Findings";
 import { groupCommentThreads } from "../lib/threads";
 import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
+import { SubmitForReview } from "./SubmitForReview";
 import { useFlow } from "./flow";
 
 /**
@@ -130,6 +131,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
       </h2>
       <div className="row" style={{ marginBottom: 12 }}>
         {pr.draft && <Badge color="gray">draft</Badge>}
+        {variant === "draft" && pr.draft && <SubmitForReview pr={pr} />}
         {variant === "babysit" && (
           <>
             <CiBadge checks={checks} />

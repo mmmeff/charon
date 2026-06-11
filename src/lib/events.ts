@@ -305,10 +305,12 @@ export async function dispatchEvent(ctx: FlowContext, ev: FiredEvent, pr: PrSumm
     if (REVIEW_EVENTS.has(ev.id)) {
       await runReviewFlow(ctx, pr, prompt);
     } else if (FIX_EVENTS.has(ev.id) && pr.state === "open") {
+      // branch maintenance (conflicts, merging up base) — fix + push, no PR comment
+      const BRANCH_STATE = ["merge_conflict_detected", "base_branch_updated", "branch_out_of_date"];
       const kind =
         ev.id === "ci_failed"
           ? ("ci_fix" as const)
-          : ev.id === "merge_conflict_detected"
+          : BRANCH_STATE.includes(ev.id)
             ? ("conflict_fix" as const)
             : ("feedback_fix" as const);
       await runFixFlow(ctx, pr, prompt, label, kind);
