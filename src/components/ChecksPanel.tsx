@@ -3,6 +3,7 @@ import { resolveHandler, usePrData } from "../lib/events";
 import { runFixFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
 import type { CheckInfo, PrSummary } from "../types";
+import { AgentLaunchForm } from "./AgentLaunchForm";
 import { Badge, Spinner } from "./common";
 import { useFlow } from "./flow";
 
@@ -43,8 +44,7 @@ export function ChecksPanel({ pr }: { pr: PrSummary }) {
   const failing = checks.filter((c) => c.conclusion === "failure" || c.conclusion === "error");
   const [openOverride, setOpenOverride] = useState<boolean | null>(null);
   const [logs, setLogs] = useState<Record<string, { loading: boolean; text: string; open: boolean }>>({});
-  const [fixing, setFixing] = useState<Record<string, boolean>>({});
-  const [error, setError] = useState("");
+  const [fixOpen, setFixOpen] = useState<Record<string, boolean>>({});
 
   if (checks.length === 0) return null;
   const expanded = openOverride ?? failing.length > 0;
@@ -70,29 +70,24 @@ export function ChecksPanel({ pr }: { pr: PrSummary }) {
     }
   };
 
-  const fix = async (c: CheckInfo) => {
-    setFixing((f) => ({ ...f, [c.name]: true }));
-    setError("");
-    try {
-      const handler = resolveHandler(ctx.config.events, "ci_failed");
-      let task = interpolate(handler.prompt, {
-        ...prVars(pr),
-        repo: ctx.repo,
-        "check-name": c.name,
-        "check-url": c.url,
-      });
-      const log = await fetchLog(c);
-      task += `\n\nFAILING CHECK: ${c.name}${c.outputTitle ? ` — ${c.outputTitle}` : ""}
+  const fix = async (c: CheckInfo, model?: string, guidance?: string) => {
+    const handler = resolveHandler(ctx.config.events, "ci_failed");
+    let task = interpolate(handler.prompt, {
+      ...prVars(pr),
+      repo: ctx.repo,
+      "check-name": c.name,
+      "check-url": c.url,
+    });
+    const log = await fetchLog(c);
+    task += `\n\nFAILING CHECK: ${c.name}${c.outputTitle ? ` — ${c.outputTitle}` : ""}
 LOG TAIL:
 \`\`\`
 ${log.slice(-AGENT_LOG_TAIL)}
 \`\`\``;
-      await runFixFlow(ctx, pr, task, `CI fix (${c.name})`, "ci_fix");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setFixing((f) => ({ ...f, [c.name]: false }));
+    if (guidance?.trim()) {
+      task += `\n\nADDITIONAL GUIDANCE FROM THE USER (takes precedence):\n${guidance.trim()}`;
     }
+    await runFixFlow(ctx, pr, task, `CI fix (${c.name})`, "ci_fix", model);
   };
 
   return (
@@ -112,7 +107,6 @@ ${log.slice(-AGENT_LOG_TAIL)}
         <span className="subtle">
           {passed}/{checks.length} passed
         </span>
-        {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
       </div>
 
       {expanded &&
@@ -134,14 +128,25 @@ ${log.slice(-AGENT_LOG_TAIL)}
                   {log?.open ? "hide logs" : "logs"}
                 </button>
                 {failed && (
-                  <button className="small" disabled={!!fixing[c.name]} onClick={() => void fix(c)}>
-                    {fixing[c.name] ? <Spinner /> : null} Fix with agent
+                  <button
+                    className={`small ${fixOpen[c.name] ? "" : "primary"}`}
+                    onClick={() => setFixOpen((f) => ({ ...f, [c.name]: !f[c.name] }))}
+                  >
+                    Fix with agent
                   </button>
                 )}
                 <a href={c.url} target="_blank" rel="noreferrer" className="subtle">
                   ↗
                 </a>
               </div>
+              {failed && fixOpen[c.name] && (
+                <AgentLaunchForm
+                  label={`Fix ${c.name}`}
+                  placeholder="Optional: extra context — suspected cause, constraints, what not to touch  ( / for skills )"
+                  onRun={(model, guidance) => fix(c, model, guidance)}
+                  onClose={() => setFixOpen((f) => ({ ...f, [c.name]: false }))}
+                />
+              )}
               {log?.open && (
                 <div className="check-log">
                   {log.loading ? (
