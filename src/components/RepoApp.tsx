@@ -215,6 +215,11 @@ export function RepoApp({ repo }: { repo: string }) {
 
         <div className="app-col">
           <div className="topstrip">
+            {prData.polling && (
+              <div className="topstrip-field" aria-hidden>
+                <AsciiField height={36} color="255, 79, 0" opacity={0.22} speed={2.6} />
+              </div>
+            )}
             <button
               className="rail-btn navbtn"
               disabled={navIndex <= 0}

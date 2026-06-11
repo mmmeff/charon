@@ -241,7 +241,15 @@ h3, h4 {
   background-size: 7px 7px;
   border-bottom: 1px solid var(--border);
   user-select: none;
+  position: relative;
 }
+/* ambient flow field behind the strip while a sync is in flight */
+.topstrip-field {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  animation: field-in 0.5s ease;
+}
+.topstrip > :not(.topstrip-field) { position: relative; z-index: 1; }
+@keyframes field-in { from { opacity: 0; } to { opacity: 1; } }
 .topstrip .brand {
   font-family: var(--sans); font-weight: 800; font-size: 12.5px; letter-spacing: 0.02em;
   color: var(--fg);
