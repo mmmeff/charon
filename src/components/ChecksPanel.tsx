@@ -147,24 +147,29 @@ ${log.slice(-AGENT_LOG_TAIL)}
   const ignored = ctx.config.ignoredChecks ?? [];
   const analyses = useCiAnalysis((s) => s.map);
   const analysisKey = (c: CheckInfo) => `${pr.number}:${c.name}:${pr.headSha}`;
+  const analyze = (c: CheckInfo) => {
+    const key = analysisKey(c);
+    if (useCiAnalysis.getState().map[key]?.status === "running") return;
+    useCiAnalysis.getState().set(key, { status: "running", text: "" });
+    runCheckAnalysis(ctx, pr, c)
+      .then((text) => useCiAnalysis.getState().set(key, { status: "done", text }))
+      .catch((e) =>
+        useCiAnalysis.getState().set(key, {
+          status: "error",
+          text: e instanceof Error ? e.message : String(e),
+        })
+      );
+  };
+  // auto-run on the user's own PRs only — teammate PRs analyze on demand
   useEffect(() => {
-    if (!autoAnalysis) return;
+    if (!autoAnalysis || !mine) return;
     for (const c of failing) {
       if (ignored.includes(c.name)) continue;
-      const key = analysisKey(c);
-      if (useCiAnalysis.getState().map[key]) continue;
-      useCiAnalysis.getState().set(key, { status: "running", text: "" });
-      runCheckAnalysis(ctx, pr, c)
-        .then((text) => useCiAnalysis.getState().set(key, { status: "done", text }))
-        .catch((e) =>
-          useCiAnalysis.getState().set(key, {
-            status: "error",
-            text: e instanceof Error ? e.message : String(e),
-          })
-        );
+      if (useCiAnalysis.getState().map[analysisKey(c)]) continue;
+      analyze(c);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pr.number, pr.headSha, autoAnalysis, ignored.join("|"), failing.map((c) => c.name).join("|")]);
+  }, [pr.number, pr.headSha, autoAnalysis, mine, ignored.join("|"), failing.map((c) => c.name).join("|")]);
 
   const ignoreCheck = (name: string) => {
     void useRepoStore
@@ -242,6 +247,15 @@ ${log.slice(-AGENT_LOG_TAIL)}
                 <button className="link small" onClick={() => toggleLog(c)}>
                   {log?.open ? "hide logs" : "logs"}
                 </button>
+                {failed && !ignored.includes(c.name) && !analyses[analysisKey(c)] && (
+                  <button
+                    className="link small"
+                    title="Run a fast read-only agent to summarize this failure"
+                    onClick={() => analyze(c)}
+                  >
+                    ✦ analyze
+                  </button>
+                )}
                 {retryable &&
                   (retryState === "queued" ? (
                     <span className="subtle" style={{ fontSize: 10.5 }}>
