@@ -387,8 +387,32 @@ fn list_cursor_skills(extra_dirs: Vec<String>) -> Result<Vec<SkillFile>, String>
 }
 
 // ---------------------------------------------------------------------------
-// Windows: one window per repo
+// Windows: one window per repo, with remembered sizes
 // ---------------------------------------------------------------------------
+
+fn window_sizes_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("window-sizes.json"))
+}
+
+fn load_window_sizes(app: &tauri::AppHandle) -> HashMap<String, (f64, f64)> {
+    window_sizes_path(app)
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_window_size(app: &tauri::AppHandle, label: &str, w: f64, h: f64) {
+    let mut map = load_window_sizes(app);
+    map.insert(label.to_string(), (w, h));
+    if let Some(p) = window_sizes_path(app) {
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string(&map) {
+            let _ = std::fs::write(p, json);
+        }
+    }
+}
 
 #[tauri::command]
 fn open_repo_window(app: tauri::AppHandle, repo: String) -> Result<(), String> {
@@ -402,10 +426,14 @@ fn open_repo_window(app: tauri::AppHandle, repo: String) -> Result<(), String> {
         win.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
     }
+    let (w, h) = load_window_sizes(&app)
+        .get(&label)
+        .copied()
+        .unwrap_or((1380.0, 900.0));
     let url = format!("index.html?repo={}", urlencoding::encode(&repo));
     tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
         .title(format!("Switchyard — {repo}"))
-        .inner_size(1380.0, 900.0)
+        .inner_size(w, h)
         .min_inner_size(900.0, 600.0)
         .build()
         .map_err(|e| e.to_string())?;
@@ -461,6 +489,19 @@ fn open_url(url: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .on_window_event(|window, event| {
+            // remember per-repo window sizes (logical units) across launches
+            if let tauri::WindowEvent::Resized(size) = event {
+                if window.label().starts_with("repo-") {
+                    let scale = window.scale_factor().unwrap_or(1.0);
+                    let w = size.width as f64 / scale;
+                    let h = size.height as f64 / scale;
+                    if w > 200.0 && h > 200.0 {
+                        save_window_size(&window.app_handle().clone(), window.label(), w, h);
+                    }
+                }
+            }
+        })
         .manage(AgentRegistry::default())
         .invoke_handler(tauri::generate_handler![
             spawn_agent,
