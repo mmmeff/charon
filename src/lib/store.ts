@@ -314,12 +314,22 @@ interface UiState {
   /** right-hand GitHub activity panel visibility (persisted; topstrip toggle) */
   activityPanelOpen: boolean;
   setActivityPanelOpen(v: boolean): void;
+  /** browser-style location history: (tab, focused PR) pairs */
+  navHistory: { tab: string; pr: number | null }[];
+  navIndex: number;
+  /** true while back/forward is being applied — suppresses history pushes */
+  navApplying: boolean;
+  navPush(tab: string, pr: number | null): void;
+  /** step through history; returns the location to apply, or null at an edge */
+  navGo(delta: 1 | -1): { tab: string; pr: number | null } | null;
+  navApplied(): void;
 }
 
-export const useUiStore = create<UiState>((set) => ({
+export const useUiStore = create<UiState>((set, get) => ({
   focusedPr: {},
   setFocusedPr(tab, prNumber) {
     set((s) => ({ focusedPr: { ...s.focusedPr, [tab]: prNumber } }));
+    get().navPush(tab, prNumber);
   },
   diffScrollTarget: null,
   requestDiffScroll(path, side, line) {
@@ -337,6 +347,28 @@ export const useUiStore = create<UiState>((set) => ({
   setActivityPanelOpen(v) {
     localStorage.setItem("prc-activity-open", v ? "on" : "off");
     set({ activityPanelOpen: v });
+  },
+  navHistory: [],
+  navIndex: -1,
+  navApplying: false,
+  navPush(tab, pr) {
+    set((s) => {
+      if (s.navApplying) return s;
+      const cur = s.navHistory[s.navIndex];
+      if (cur && cur.tab === tab && cur.pr === pr) return s;
+      const navHistory = [...s.navHistory.slice(0, s.navIndex + 1), { tab, pr }].slice(-100);
+      return { navHistory, navIndex: navHistory.length - 1 };
+    });
+  },
+  navGo(delta) {
+    const s = get();
+    const i = s.navIndex + delta;
+    if (i < 0 || i >= s.navHistory.length) return null;
+    set({ navIndex: i, navApplying: true });
+    return s.navHistory[i];
+  },
+  navApplied() {
+    set({ navApplying: false });
   },
 }));
 

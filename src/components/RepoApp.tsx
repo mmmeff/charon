@@ -41,7 +41,28 @@ export function RepoApp({ repo }: { repo: string }) {
   const setTab = (t: Tab) => {
     localStorage.setItem(`prc-tab-${repo}`, t);
     setTabState(t);
+    const ui = useUiStore.getState();
+    ui.navPush(t, ui.focusedPr[t] ?? null);
   };
+
+  // back/forward across (tab, focused PR) locations
+  const navIndex = useUiStore((s) => s.navIndex);
+  const navLen = useUiStore((s) => s.navHistory.length);
+  const goHistory = (delta: 1 | -1) => {
+    const ui = useUiStore.getState();
+    const loc = ui.navGo(delta);
+    if (!loc) return;
+    localStorage.setItem(`prc-tab-${repo}`, loc.tab);
+    setTabState(loc.tab as Tab);
+    if (loc.pr != null) ui.setFocusedPr(loc.tab, loc.pr);
+    ui.navApplied();
+  };
+  // seed the history with the restored location
+  useEffect(() => {
+    const ui = useUiStore.getState();
+    ui.navPush(tab, ui.focusedPr[tab] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const prData = usePrData();
   const agentOrder = useAgentStore((s) => s.order);
   const runs = useAgentStore((s) => s.runs);
@@ -118,6 +139,11 @@ export function RepoApp({ repo }: { repo: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.key === "[" || e.key === "]") {
+        e.preventDefault();
+        goHistory(e.key === "[" ? -1 : 1);
+        return;
+      }
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= TABS.length) {
         e.preventDefault();
@@ -186,6 +212,22 @@ export function RepoApp({ repo }: { repo: string }) {
 
         <div className="app-col">
           <div className="topstrip">
+            <button
+              className="rail-btn navbtn"
+              disabled={navIndex <= 0}
+              title="Back (⌘[)"
+              onClick={() => goHistory(-1)}
+            >
+              ←
+            </button>
+            <button
+              className="rail-btn navbtn"
+              disabled={navIndex >= navLen - 1}
+              title="Forward (⌘])"
+              onClick={() => goHistory(1)}
+            >
+              →
+            </button>
             <span className="brand">CHARON</span>
             <span className="dim">/ {repo}</span>
             {crumb && (
