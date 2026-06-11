@@ -53,6 +53,10 @@ function handleStreamEvent(ev: AgentStreamEvent) {
     return;
   }
   if (ev.kind === "exit") {
+    if (run.status === "killed") {
+      doneCallbacks.delete(ev.id);
+      return;
+    }
     const ok = ev.code === 0;
     const wasKilled = ev.code === -9;
     store.update(ev.id, {
