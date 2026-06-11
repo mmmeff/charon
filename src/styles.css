@@ -746,7 +746,13 @@ a.act-event-detail:hover { color: var(--orange); }
 .md.compact { font-size: 12.5px; }
 .md.compact pre { font-size: 11px; }
 
-/* ---- reduced motion ---- */
+/* ---- reduced motion: silence the ambient/infinite loops only; short
+       functional micro-animations (breadcrumb, tooltips, panels) stay ---- */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  .card.agent-running::before,
+  .livedot,
+  .cursor-blink::after,
+  .spin {
+    animation: none !important;
+  }
 }

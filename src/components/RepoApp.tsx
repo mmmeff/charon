@@ -181,6 +181,7 @@ export function RepoApp({ repo }: { repo: string }) {
             <span className="dim">/ {repo}</span>
             {crumb && (
               <button
+                key={crumb.number}
                 className={`topstrip-pr ${crumbLeaving ? "out" : "in"}`}
                 title="Jump to top"
                 onClick={() =>
