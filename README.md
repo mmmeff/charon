@@ -58,3 +58,7 @@ rewrite) and `/skill-name` references inside event prompts expand to the skill's
   "your own PR branch".
 - Agents run via `cursor-agent --print --output-format stream-json`; fix/draft runs use `--force`,
   review/Q&A/rewrite runs use read-only `--mode ask`.
+
+## License
+
+[MIT](LICENSE) © Matt Frey
