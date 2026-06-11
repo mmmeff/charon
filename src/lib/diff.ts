@@ -76,6 +76,41 @@ export function parseUnifiedDiff(text: string): FileDiff[] {
   return files;
 }
 
+/** A side-by-side row: a paired left/right line, or a full-width hunk header. */
+export interface SplitRow {
+  kind: "hunk" | "pair";
+  text?: string;
+  left: DiffLine | null;
+  right: DiffLine | null;
+}
+
+/** Pair del/add runs into side-by-side rows (classic split-diff alignment). */
+export function buildSplitRows(lines: DiffLine[]): SplitRow[] {
+  const rows: SplitRow[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (l.type === "hunk") {
+      rows.push({ kind: "hunk", text: l.text, left: null, right: null });
+      i++;
+      continue;
+    }
+    if (l.type === "context") {
+      rows.push({ kind: "pair", left: l, right: l });
+      i++;
+      continue;
+    }
+    const dels: DiffLine[] = [];
+    while (i < lines.length && lines[i].type === "del") dels.push(lines[i++]);
+    const adds: DiffLine[] = [];
+    while (i < lines.length && lines[i].type === "add") adds.push(lines[i++]);
+    for (let x = 0; x < Math.max(dels.length, adds.length); x++) {
+      rows.push({ kind: "pair", left: dels[x] ?? null, right: adds[x] ?? null });
+    }
+  }
+  return rows;
+}
+
 const stripWs = (s: string) => s.replace(/\s+/g, "");
 
 /**

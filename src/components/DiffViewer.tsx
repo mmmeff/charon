@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { hideWhitespaceChanges, snippetFor } from "../lib/diff";
-import type { DiffLine, FileDiff, LineSelection } from "../types";
+import { buildSplitRows, hideWhitespaceChanges, snippetFor } from "../lib/diff";
+import type { FileDiff, LineSelection } from "../types";
 import { Badge } from "./common";
 
 export interface DiffAnchor {
@@ -18,40 +18,6 @@ interface DragState {
 }
 
 type ViewMode = "unified" | "split";
-
-/** A side-by-side row: a paired left/right line, or a full-width hunk header. */
-interface SplitRow {
-  kind: "hunk" | "pair";
-  text?: string;
-  left: DiffLine | null;
-  right: DiffLine | null;
-}
-
-function buildSplitRows(lines: DiffLine[]): SplitRow[] {
-  const rows: SplitRow[] = [];
-  let i = 0;
-  while (i < lines.length) {
-    const l = lines[i];
-    if (l.type === "hunk") {
-      rows.push({ kind: "hunk", text: l.text, left: null, right: null });
-      i++;
-      continue;
-    }
-    if (l.type === "context") {
-      rows.push({ kind: "pair", left: l, right: l });
-      i++;
-      continue;
-    }
-    const dels: DiffLine[] = [];
-    while (i < lines.length && lines[i].type === "del") dels.push(lines[i++]);
-    const adds: DiffLine[] = [];
-    while (i < lines.length && lines[i].type === "add") adds.push(lines[i++]);
-    for (let x = 0; x < Math.max(dels.length, adds.length); x++) {
-      rows.push({ kind: "pair", left: dels[x] ?? null, right: adds[x] ?? null });
-    }
-  }
-  return rows;
-}
 
 /**
  * Native diff renderer with GitHub-style line selection: click a line number
