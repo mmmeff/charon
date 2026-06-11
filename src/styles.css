@@ -319,6 +319,11 @@ tr.commentable .diff-num { position: relative; }
   margin: 6px 0 0 14px; padding-left: 10px; border-left: 2px solid var(--border);
 }
 
+/* own-comment edit/delete: hidden until hover to keep the stream quiet */
+.comment-controls { margin-top: 2px; opacity: 0; transition: opacity 0.12s; }
+.comment-body:hover .comment-controls { opacity: 1; }
+.danger-link { color: var(--red) !important; }
+
 /* ---- docked file tree ---- */
 .diff-area { display: flex; gap: 12px; align-items: flex-start; }
 .diff-list { flex: 1; min-width: 0; }

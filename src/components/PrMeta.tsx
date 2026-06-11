@@ -112,13 +112,120 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
               <ActHeader author={c.author} isBot={c.authorIsBot} at={e.at} url={c.url}>
                 <Badge color="gray">commented</Badge>
               </ActHeader>
-              {c.body?.trim() && <Markdown text={c.body} className="compact" />}
+              <CommentBody pr={pr} comment={c} />
             </div>
           );
         }
         return <Thread key={`t${e.root.id}`} pr={pr} root={e.root} replies={e.replies} />;
       })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A GitHub comment body. When it belongs to the signed-in user it gains
+ * edit/delete controls (direct user-authored writes — no approval gate).
+ * Edits update local state optimistically; the next poll reconciles.
+ */
+export function CommentBody({ pr, comment }: { pr: PrSummary; comment: CommentInfo }) {
+  const { ctx } = useFlow();
+  const mine = comment.author === ctx.gh.login;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(comment.body);
+  const [busy, setBusy] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [error, setError] = useState("");
+
+  const patchLocal = (body: string | null) => {
+    const data = usePrData.getState();
+    const list = data.comments[pr.number] ?? [];
+    data.patch({
+      comments: {
+        ...data.comments,
+        [pr.number]:
+          body === null
+            ? list.filter((c) => c.id !== comment.id)
+            : list.map((c) => (c.id === comment.id ? { ...c, body } : c)),
+      },
+    });
+  };
+
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await ctx.gh.updateComment(ctx.repo, comment.kind, comment.id, draft);
+      patchLocal(draft);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const del = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await ctx.gh.deleteComment(ctx.repo, comment.kind, comment.id);
+      patchLocal(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+      setConfirmDel(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div>
+        <textarea rows={3} value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
+        <div className="row" style={{ marginTop: 4 }}>
+          <button className="small primary" disabled={busy || !draft.trim()} onClick={() => void save()}>
+            {busy ? <Spinner /> : null} Save
+          </button>
+          <button
+            className="small"
+            onClick={() => {
+              setEditing(false);
+              setDraft(comment.body);
+            }}
+          >
+            Cancel
+          </button>
+          {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="comment-body">
+      {comment.body?.trim() && <Markdown text={comment.body} className="compact" />}
+      {mine && (
+        <div className="row comment-controls">
+          <button className="link small" onClick={() => setEditing(true)}>
+            edit
+          </button>
+          {confirmDel ? (
+            <>
+              <button className="link small danger-link" disabled={busy} onClick={() => void del()}>
+                {busy ? <Spinner /> : null} really delete?
+              </button>
+              <button className="link small" onClick={() => setConfirmDel(false)}>
+                keep
+              </button>
+            </>
+          ) : (
+            <button className="link small danger-link" onClick={() => setConfirmDel(true)}>
+              delete
+            </button>
+          )}
+          {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -171,11 +278,11 @@ function Thread({ pr, root, replies }: { pr: PrSummary; root: CommentInfo; repli
       <ActHeader author={root.author} isBot={root.authorIsBot} at={Date.parse(root.createdAt) || 0} url={root.url}>
         {lineLink || <Badge color="purple">on diff</Badge>}
       </ActHeader>
-      {root.body?.trim() && <Markdown text={root.body} className="compact" />}
+      <CommentBody pr={pr} comment={root} />
       {replies.map((c) => (
         <div key={c.id} className="act-reply">
           <ActHeader author={c.author} isBot={c.authorIsBot} at={Date.parse(c.createdAt) || 0} url={c.url} />
-          {c.body?.trim() && <Markdown text={c.body} className="compact" />}
+          <CommentBody pr={pr} comment={c} />
         </div>
       ))}
       <div style={{ marginTop: 4 }}>

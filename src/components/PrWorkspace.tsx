@@ -10,8 +10,7 @@ import { Badge, CiBadge, MergeBadge, Spinner, age, timeAgo } from "./common";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
-import { Markdown } from "./Markdown";
-import { PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
+import { CommentBody, PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
 import { useFlow } from "./RepoApp";
 
@@ -97,7 +96,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         line: c.line!,
         side: c.side ?? "RIGHT",
         tone: "github",
-        node: <ExistingComment comment={c} />,
+        node: <ExistingComment comment={c} pr={pr} />,
       })
     ),
     // local-only self-review findings, inline next to the code they're about
@@ -210,7 +209,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 }
 
 /** A review comment that already exists on GitHub, shown in place on the diff. */
-function ExistingComment({ comment }: { comment: CommentInfo }) {
+function ExistingComment({ comment, pr }: { comment: CommentInfo; pr: PrSummary }) {
   return (
     <div>
       <div className="row" style={{ marginBottom: 4 }}>
@@ -224,7 +223,7 @@ function ExistingComment({ comment }: { comment: CommentInfo }) {
           view ↗
         </a>
       </div>
-      <Markdown text={comment.body} className="compact" />
+      <CommentBody pr={pr} comment={comment} />
     </div>
   );
 }

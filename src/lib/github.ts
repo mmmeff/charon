@@ -313,6 +313,32 @@ export class GitHubClient {
     return res.html_url ?? "";
   }
 
+  /** Edit/delete the user's own comments. `kind` matches CommentInfo.kind. */
+  async updateComment(
+    repo: string,
+    kind: "issue" | "review_comment",
+    commentId: number,
+    body: string
+  ): Promise<void> {
+    const path =
+      kind === "issue"
+        ? `/repos/${repo}/issues/comments/${commentId}`
+        : `/repos/${repo}/pulls/comments/${commentId}`;
+    await this.json("PATCH", path, { body });
+  }
+
+  async deleteComment(
+    repo: string,
+    kind: "issue" | "review_comment",
+    commentId: number
+  ): Promise<void> {
+    const path =
+      kind === "issue"
+        ? `/repos/${repo}/issues/comments/${commentId}`
+        : `/repos/${repo}/pulls/comments/${commentId}`;
+    await this.raw("DELETE", path);
+  }
+
   async submitReview(
     repo: string,
     number: number,
