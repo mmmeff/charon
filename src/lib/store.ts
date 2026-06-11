@@ -264,6 +264,9 @@ interface UiState {
   /** model chosen in any composer — shared so one choice applies everywhere */
   composerModel: string;
   setComposerModel(m: string): void;
+  /** PR whose title scrolled out of view — shown as a topstrip breadcrumb */
+  scrolledPrTitle: { number: number; title: string } | null;
+  setScrolledPrTitle(v: { number: number; title: string } | null): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -278,6 +281,10 @@ export const useUiStore = create<UiState>((set) => ({
   composerModel: "",
   setComposerModel(m) {
     set({ composerModel: m });
+  },
+  scrolledPrTitle: null,
+  setScrolledPrTitle(v) {
+    set({ scrolledPrTitle: v });
   },
 }));
 

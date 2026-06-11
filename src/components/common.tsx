@@ -1,7 +1,38 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { useAgentStore } from "../lib/store";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import { useAgentStore, useUiStore } from "../lib/store";
 import type { PrSummary, Severity } from "../types";
 import { AsciiField } from "./AsciiField";
+
+/**
+ * Report when the workspace's PR title scrolls out of view so the topstrip
+ * can show a breadcrumb (`/ #1234 title`) that jumps back to the top.
+ */
+export function useScrolledPrTitle(
+  mainRef: RefObject<HTMLDivElement | null>,
+  pr: PrSummary
+): void {
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const update = () => {
+      const past = el.scrollTop > 64;
+      const ui = useUiStore.getState();
+      const cur = ui.scrolledPrTitle;
+      if (past && (cur?.number !== pr.number || cur?.title !== pr.title)) {
+        ui.setScrolledPrTitle({ number: pr.number, title: pr.title });
+      } else if (!past && cur) {
+        ui.setScrolledPrTitle(null);
+      }
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", update);
+      useUiStore.getState().setScrolledPrTitle(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pr.number, pr.title]);
+}
 
 /** Live indicator: how many agents are currently executing against a PR. */
 export function RunningAgentsChip({ prNumber }: { prNumber: number }) {

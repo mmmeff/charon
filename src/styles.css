@@ -247,6 +247,16 @@ h3, h4 {
   color: var(--fg-subtle);
 }
 .topstrip .spacer { flex: 1; }
+.topstrip-pr {
+  background: none; border: none; padding: 0 2px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: none;
+  color: var(--fg-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 38vw;
+  animation: tip-in 0.15s ease;
+}
+.topstrip-pr:hover { color: var(--orange); background: none; border: none; }
+@keyframes tip-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 .pollstatus {
   color: var(--fg-subtle); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
 }

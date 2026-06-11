@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
-import { Badge, EmptyState, RunningAgentsChip, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
+import { Badge, EmptyState, RunningAgentsChip, SortPicker, Spinner, age, sortPrs, useScrolledPrTitle, type SortKey } from "../common";
 import { Composer, RunResults } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
@@ -77,6 +77,8 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [error, setError] = useState("");
+  const mainRef = useRef<HTMLDivElement>(null);
+  useScrolledPrTitle(mainRef, pr);
 
   useEffect(() => {
     ctx.gh
@@ -133,7 +135,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
 
   return (
     <div className="workspace">
-      <div className="ws-main">
+      <div className="ws-main" ref={mainRef}>
       <h2 className="viewtitle">
         <a href={pr.url} title="Open on GitHub">
           #{pr.number} {pr.title} <span className="ext">↗</span>

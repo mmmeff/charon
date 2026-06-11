@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { eventDef } from "../lib/defaults";
 import { findLineByText, parseUnifiedDiff } from "../lib/diff";
 import { resolveHandler, usePrData } from "../lib/events";
@@ -6,7 +6,7 @@ import { runFixFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
-import { Badge, CiBadge, MergeBadge, Spinner, timeAgo } from "./common";
+import { Badge, CiBadge, MergeBadge, Spinner, timeAgo, useScrolledPrTitle } from "./common";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
@@ -31,6 +31,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   const [error, setError] = useState("");
   const runs = useAgentStore((s) => s.runs);
   const order = useAgentStore((s) => s.order);
+  const mainRef = useRef<HTMLDivElement>(null);
+  useScrolledPrTitle(mainRef, pr);
 
   const loadDiff = async () => {
     setDiffErr("");
@@ -114,7 +116,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
   return (
     <div className="workspace">
-      <div className="ws-main">
+      <div className="ws-main" ref={mainRef}>
       <h2 className="viewtitle">
         <a href={pr.url} title="Open on GitHub">
           #{pr.number} {pr.title} <span className="ext">↗</span>

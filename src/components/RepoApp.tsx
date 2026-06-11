@@ -4,7 +4,7 @@ import { GitHubClient } from "../lib/github";
 import { RepoPoller, usePrData } from "../lib/events";
 import type { FlowContext } from "../lib/flows";
 import { loadSkills } from "../lib/skills";
-import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore } from "../lib/store";
+import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore, useUiStore } from "../lib/store";
 import { native } from "../lib/tauri";
 import { timeAgo, useNow } from "./common";
 import {
@@ -41,6 +41,7 @@ export function RepoApp({ repo }: { repo: string }) {
   const prData = usePrData();
   const agentOrder = useAgentStore((s) => s.order);
   const runs = useAgentStore((s) => s.runs);
+  const scrolledPr = useUiStore((s) => s.scrolledPrTitle);
   useNow(); // keeps "synced Xs ago" ticking without interaction
 
   useEffect(() => {
@@ -161,6 +162,17 @@ export function RepoApp({ repo }: { repo: string }) {
           <div className="topstrip">
             <span className="brand">SWITCHYARD</span>
             <span className="dim">/ {repo}</span>
+            {scrolledPr && (
+              <button
+                className="topstrip-pr"
+                title="Jump to top"
+                onClick={() =>
+                  document.querySelector(".ws-main")?.scrollTo({ top: 0, behavior: "smooth" })
+                }
+              >
+                / #{scrolledPr.number} {scrolledPr.title}
+              </button>
+            )}
             <span className="spacer" />
             {pendingProposals > 0 && (
               <span className="badge yellow">
