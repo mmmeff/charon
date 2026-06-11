@@ -6,7 +6,7 @@ import type { FlowContext } from "../lib/flows";
 import { loadSkills } from "../lib/skills";
 import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore } from "../lib/store";
 import { native } from "../lib/tauri";
-import { timeAgo } from "./common";
+import { timeAgo, useNow } from "./common";
 import { ActivityView } from "./views/ActivityView";
 import { BabysitView } from "./views/BabysitView";
 import { DraftsView } from "./views/DraftsView";
@@ -32,6 +32,7 @@ export function RepoApp({ repo }: { repo: string }) {
   const prData = usePrData();
   const agentOrder = useAgentStore((s) => s.order);
   const runs = useAgentStore((s) => s.runs);
+  useNow(); // keeps "synced Xs ago" ticking without interaction
 
   useEffect(() => {
     void repoStore.init(repo);

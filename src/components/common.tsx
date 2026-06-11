@@ -1,5 +1,19 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { PrSummary, Severity } from "../types";
+
+/**
+ * Re-render ticker for relative timestamps ("synced 5s ago", elapsed
+ * counters). Pass 0 to disable the timer (e.g. for finished agents).
+ */
+export function useNow(intervalMs = 1000): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!intervalMs) return;
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}
 
 export function Badge({
   color,

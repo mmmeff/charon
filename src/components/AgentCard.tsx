@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { killAgent } from "../lib/agents";
 import type { AgentRun } from "../types";
-import { Badge, Spinner, timeAgo } from "./common";
+import { Badge, Spinner, timeAgo, useNow } from "./common";
 
 const statusColor = (s: AgentRun["status"]) =>
   s === "running" || s === "starting" ? "blue" : s === "done" ? "green" : s === "killed" ? "gray" : "red";
@@ -12,6 +12,7 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
   const [showPrompt, setShowPrompt] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const active = run.status === "running" || run.status === "starting";
+  useNow(active ? 1000 : 0); // tick the elapsed counter while running
 
   // follow the live stream
   useEffect(() => {
