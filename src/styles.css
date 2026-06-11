@@ -938,8 +938,8 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
 .act-top { margin-bottom: 3px; }
 
 /* compact non-comment timeline entries (pushed / merged / labeled …) */
-.act-event { padding: 6px 0; 
-  padding: 6px 0; font-size: 11.5px;
+.act-event {
+  padding: 9px 0; font-size: 11.5px;
   border-bottom: 1px solid var(--border-subtle);
   min-width: 0;
 }
