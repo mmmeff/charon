@@ -8,6 +8,14 @@ import type {
   ReviewInfo,
 } from "../types";
 
+export interface ReviewThreadInfo {
+  /** GraphQL node id — needed for resolve/unresolve mutations */
+  id: string;
+  isResolved: boolean;
+  /** REST databaseIds of the thread's comments */
+  commentIds: number[];
+}
+
 /**
  * Minimal GitHub REST v3 client working against github.com and GitHub
  * Enterprise. All requests go through the native HTTP command (no CORS,
@@ -86,6 +94,59 @@ export class GitHubClient {
     const user = await this.json<{ login: string }>("GET", "/user");
     this.login = user.login;
     return user.login;
+  }
+
+  // -- GraphQL (thread resolution is not exposed via REST) -------------------
+
+  private async graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+    const url =
+      this.apiBase === "https://api.github.com"
+        ? "https://api.github.com/graphql"
+        : `${this.webBase}/api/graphql`;
+    const resp = await native.httpRequest({
+      method: "POST",
+      url,
+      headers: [
+        ["Authorization", `Bearer ${this.token}`],
+        ["Content-Type", "application/json"],
+      ],
+      body: JSON.stringify({ query, variables }),
+      insecure: this.insecure,
+    });
+    if (resp.status >= 400) throw new Error(`GitHub GraphQL → ${resp.status}`);
+    const data = JSON.parse(resp.body);
+    if (data.errors?.length) throw new Error(data.errors[0].message ?? "GraphQL error");
+    return data.data as T;
+  }
+
+  /** Review threads with resolution state, mapped to REST comment ids. */
+  async listReviewThreads(repo: string, number: number): Promise<ReviewThreadInfo[]> {
+    const [owner, name] = repo.split("/");
+    const data = await this.graphql<any>(
+      `query($owner:String!,$name:String!,$number:Int!){
+        repository(owner:$owner,name:$name){
+          pullRequest(number:$number){
+            reviewThreads(first:100){
+              nodes{ id isResolved comments(first:100){ nodes{ databaseId } } }
+            }
+          }
+        }
+      }`,
+      { owner, name, number }
+    );
+    const nodes = data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+    return nodes.map((n: any) => ({
+      id: n.id,
+      isResolved: !!n.isResolved,
+      commentIds: (n.comments?.nodes ?? []).map((c: any) => c.databaseId).filter(Boolean),
+    }));
+  }
+
+  async setThreadResolved(threadId: string, resolved: boolean): Promise<void> {
+    const mutation = resolved
+      ? `mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ id } } }`
+      : `mutation($id:ID!){ unresolveReviewThread(input:{threadId:$id}){ thread{ id } } }`;
+    await this.graphql(mutation, { id: threadId });
   }
 
   async searchRepos(query: string): Promise<string[]> {

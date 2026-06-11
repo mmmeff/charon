@@ -1,11 +1,56 @@
 import { useState } from "react";
 import { usePrData } from "../lib/events";
+import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo } from "../types";
 import { Badge, Spinner, age } from "./common";
 import { Markdown } from "./Markdown";
 import { useResizablePanel } from "./Panels";
 import { useFlow } from "./RepoApp";
+
+/** The review thread (resolution state) containing a given comment. */
+function useThread(prNumber: number, commentId: number): ReviewThreadInfo | undefined {
+  return usePrData((s) => (s.threads[prNumber] ?? []).find((t) => t.commentIds.includes(commentId)));
+}
+
+/** Resolve/unresolve a thread as the user — optimistic, reconciled on next poll. */
+function ResolveButton({ pr, thread }: { pr: PrSummary; thread: ReviewThreadInfo }) {
+  const { ctx } = useFlow();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const toggle = async () => {
+    setBusy(true);
+    setError(false);
+    try {
+      await ctx.gh.setThreadResolved(thread.id, !thread.isResolved);
+      const d = usePrData.getState();
+      d.patch({
+        threads: {
+          ...d.threads,
+          [pr.number]: (d.threads[pr.number] ?? []).map((t) =>
+            t.id === thread.id ? { ...t, isResolved: !thread.isResolved } : t
+          ),
+        },
+      });
+    } catch (e) {
+      console.error("resolve toggle failed", e);
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      className="link small"
+      disabled={busy}
+      title={error ? "failed — try again" : thread.isResolved ? "Reopen this thread" : "Mark this thread resolved"}
+      style={error ? { color: "var(--red)" } : undefined}
+      onClick={() => void toggle()}
+    >
+      {busy ? <Spinner /> : thread.isResolved ? "unresolve" : "✓ resolve"}
+    </button>
+  );
+}
 
 export function PrLabels({ pr }: { pr: PrSummary }) {
   if (pr.labels.length === 0) return null;
@@ -245,12 +290,33 @@ export function DiffCommentThread({
   replies: CommentInfo[];
 }) {
   const [replying, setReplying] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const thread = useThread(pr.number, root.id);
+
+  // resolved threads collapse to a single quiet line
+  if (thread?.isResolved && !expanded) {
+    return (
+      <div className="row resolved-line">
+        <span className="origin-chip github">GitHub</span>
+        <Badge color="green">resolved</Badge>
+        <span className="subtle">
+          {root.author}: {firstLine(root.body)}
+        </span>
+        <button className="link small" onClick={() => setExpanded(true)}>
+          show
+        </button>
+        <ResolveButton pr={pr} thread={thread} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="row" style={{ marginBottom: 4 }}>
         <span className="origin-chip github" title="This comment is on GitHub — everyone can see it">
           GitHub
         </span>
+        {thread?.isResolved && <Badge color="green">resolved</Badge>}
         <strong>{root.author}</strong>
         {root.authorIsBot && <Badge color="purple">bot</Badge>}
         <span className="subtle">{age(root.createdAt)}</span>
@@ -265,7 +331,7 @@ export function DiffCommentThread({
           <CommentBody pr={pr} comment={c} />
         </div>
       ))}
-      <div style={{ marginTop: 4 }}>
+      <div className="row" style={{ marginTop: 4 }}>
         {replying ? (
           <SendBox
             pr={pr}
@@ -279,10 +345,21 @@ export function DiffCommentThread({
             ↳ reply
           </button>
         )}
+        {thread && !replying && <ResolveButton pr={pr} thread={thread} />}
+        {thread?.isResolved && expanded && (
+          <button className="link small" onClick={() => setExpanded(false)}>
+            collapse
+          </button>
+        )}
       </div>
     </div>
   );
 }
+
+const firstLine = (s: string) => {
+  const l = (s ?? "").split("\n").find((x) => x.trim()) ?? "";
+  return l.length > 72 ? l.slice(0, 72) + "…" : l;
+};
 
 /** Group inline review comments into (root, replies) threads. */
 export function groupCommentThreads(
@@ -332,6 +409,7 @@ function ActHeader({
 function Thread({ pr, root, replies }: { pr: PrSummary; root: CommentInfo; replies: CommentInfo[] }) {
   const requestDiffScroll = useUiStore((s) => s.requestDiffScroll);
   const [replying, setReplying] = useState(false);
+  const thread = useThread(pr.number, root.id);
 
   const lineLink = root.path && root.line && (
     <button
@@ -344,9 +422,10 @@ function Thread({ pr, root, replies }: { pr: PrSummary; root: CommentInfo; repli
   );
 
   return (
-    <div className="act-item">
+    <div className="act-item" style={thread?.isResolved ? { opacity: 0.55 } : undefined}>
       <ActHeader author={root.author} isBot={root.authorIsBot} at={Date.parse(root.createdAt) || 0} url={root.url}>
         {lineLink || <Badge color="purple">on diff</Badge>}
+        {thread?.isResolved && <Badge color="green">resolved</Badge>}
       </ActHeader>
       <CommentBody pr={pr} comment={root} />
       {replies.map((c) => (
@@ -355,7 +434,7 @@ function Thread({ pr, root, replies }: { pr: PrSummary; root: CommentInfo; repli
           <CommentBody pr={pr} comment={c} />
         </div>
       ))}
-      <div style={{ marginTop: 4 }}>
+      <div className="row" style={{ marginTop: 4 }}>
         {replying ? (
           <SendBox
             pr={pr}
@@ -369,6 +448,7 @@ function Thread({ pr, root, replies }: { pr: PrSummary; root: CommentInfo; repli
             ↳ reply
           </button>
         )}
+        {thread && !replying && <ResolveButton pr={pr} thread={thread} />}
       </div>
     </div>
   );
