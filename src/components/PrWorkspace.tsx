@@ -200,7 +200,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
             {activeRuns.length > 0 && (
               <span className="subtle">
                 <Spinner /> {activeRuns.length} agent{activeRuns.length > 1 ? "s" : ""} working —
-                see Activity Feed
+                see Agents
               </span>
             )}
             {error && <span style={{ color: "var(--red)" }}>{error}</span>}

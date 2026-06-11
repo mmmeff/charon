@@ -18,7 +18,7 @@ export function RunningAgentsChip({ prNumber }: { prNumber: number }) {
   );
   if (count === 0) return null;
   return (
-    <span className="badge green agents-live" title={`${count} agent${count > 1 ? "s" : ""} working on this PR — see Activity Feed`}>
+    <span className="badge green agents-live" title={`${count} agent${count > 1 ? "s" : ""} working on this PR — see the Agents tab`}>
       <span className="livedot" />
       {count} agent{count > 1 ? "s" : ""}
     </span>

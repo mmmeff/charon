@@ -177,7 +177,7 @@ export function RepoApp({ repo }: { repo: string }) {
     { id: "drafts", label: "Drafts", icon: IconDrafts, count: prData.myDrafts.length },
     { id: "open", label: "Open PRs", icon: IconOpen, count: prData.myOpen.length },
     { id: "review", label: "Review", icon: IconReview, count: prData.reviewQueue.length },
-    { id: "activity", label: "Activity Feed", icon: IconActivity, count: activeAgents, hot: activeAgents > 0 },
+    { id: "activity", label: "Agents", icon: IconActivity, count: activeAgents, hot: activeAgents > 0 },
     { id: "settings", label: "Settings", icon: IconSettings },
   ];
 
