@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { buildSplitRows, hideWhitespaceChanges, snippetFor } from "../lib/diff";
+import { highlightFileLines, langForPath } from "../lib/highlight";
 import type { FileDiff, LineSelection } from "../types";
 import { Badge } from "./common";
 
@@ -218,6 +219,8 @@ interface TableProps {
 }
 
 function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: TableProps) {
+  const lang = useMemo(() => langForPath(path), [path]);
+  const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
   return (
     <table className="diff-table">
       <tbody>
@@ -243,7 +246,7 @@ function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: 
               </td>
               <td className="diff-text">
                 {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
-                {line.text}
+                <span dangerouslySetInnerHTML={{ __html: html.get(line) ?? "" }} />
               </td>
             </tr>,
             ...afterRow(path, [{ side, num }], 3),
@@ -256,6 +259,8 @@ function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: 
 
 function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: TableProps) {
   const rows = useMemo(() => buildSplitRows(file.lines), [file]);
+  const lang = useMemo(() => langForPath(path), [path]);
+  const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
   return (
     <table className="diff-table split">
       <tbody>
@@ -285,7 +290,14 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
                 {lNum ?? ""}
               </td>
               <td className={`diff-text half cell-${lKind} ${lHl ? "cell-sel" : ""}`}>
-                {l ? (l.type === "del" ? "-" : " ") + l.text : ""}
+                {l ? (
+                  <>
+                    {l.type === "del" ? "-" : " "}
+                    <span dangerouslySetInnerHTML={{ __html: html.get(l) ?? "" }} />
+                  </>
+                ) : (
+                  ""
+                )}
               </td>
               <td
                 className={`diff-num num-${rKind} ${rHl ? "cell-sel" : ""}`}
@@ -295,7 +307,14 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
                 {rNum ?? ""}
               </td>
               <td className={`diff-text half cell-${rKind} ${rHl ? "cell-sel" : ""}`}>
-                {r ? (r.type === "add" ? "+" : " ") + r.text : ""}
+                {r ? (
+                  <>
+                    {r.type === "add" ? "+" : " "}
+                    <span dangerouslySetInnerHTML={{ __html: html.get(r) ?? "" }} />
+                  </>
+                ) : (
+                  ""
+                )}
               </td>
             </tr>,
             ...afterRow(
