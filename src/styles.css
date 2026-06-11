@@ -670,8 +670,11 @@ tr.flash > td { animation: line-flash 1.8s ease; }
 .agent-line { font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 .agent-line.stderr { color: var(--red); }
 .agent-log {
-  background: var(--bg-inset); border: 1px solid var(--border); border-radius: 0;
+  /* solid black + lifted above the running card's animated hazard overlay,
+     which otherwise paints across the stream and hurts readability */
+  background: #000; border: 1px solid var(--border); border-radius: 0;
   padding: 8px 12px; max-height: 380px; overflow-y: auto; margin-top: 8px;
+  position: relative; z-index: 1;
 }
 /* agent stream: assistant prose */
 .agent-msg { padding: 5px 0; font-size: 12.5px; }
