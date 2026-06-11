@@ -576,6 +576,11 @@ export class GitHubClient {
     });
   }
 
+  /** Server-side "Update branch": merge the base branch into the PR head. */
+  async updateBranch(repo: string, number: number): Promise<void> {
+    await this.json("PUT", `/repos/${repo}/pulls/${number}/update-branch`, {});
+  }
+
   /** Flip a draft PR to "ready for review" — a GraphQL-only operation. */
   async markReadyForReview(repo: string, number: number): Promise<void> {
     const detail = await this.json<{ node_id: string }>("GET", `/repos/${repo}/pulls/${number}`);

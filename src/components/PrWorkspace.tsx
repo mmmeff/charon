@@ -25,7 +25,7 @@ import { useFlow } from "./flow";
  * review comments and local findings anchor inline on the diff.
  */
 export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" | "babysit" }) {
-  const { ctx } = useFlow();
+  const { ctx, poller } = useFlow();
   const checks = usePrData((s) => s.checks[pr.number] ?? []);
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
   const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
@@ -90,6 +90,22 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     }
   };
 
+  // merge base into the branch: instant server-side update when it merges
+  // cleanly; hand off to the branch-maintenance agent when it doesn't
+  const [updatingBranch, setUpdatingBranch] = useState(false);
+  const updateFromBase = async () => {
+    setUpdatingBranch(true);
+    setError("");
+    try {
+      await ctx.gh.updateBranch(ctx.repo, pr.number);
+      poller.refresh();
+    } catch {
+      await manualFix("base_branch_updated", "conflict_fix");
+    } finally {
+      setUpdatingBranch(false);
+    }
+  };
+
   // review-comment threads (bug-bots and humans) anchored onto the diff,
   // each with inline reply
   const threads = groupCommentThreads(comments);
@@ -121,11 +137,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     ),
   ];
 
-  const hasStatus =
-    checks.length > 0 ||
-    pr.mergeableState === "dirty" ||
-    activeRuns.length > 0 ||
-    prProposals.length > 0;
 
   return (
     <div className="workspace">
@@ -163,35 +174,41 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
       </Section>
 
       {/* ── what needs attention: CI, branch health, pending approvals ── */}
-      {hasStatus && (
-        <Section label="Status">
-          <ChecksPanel pr={pr} />
-          {(pr.mergeableState === "dirty" || activeRuns.length > 0) && (
-            <div className="card" style={{ padding: "8px 14px" }}>
-              <div className="row">
-                {pr.mergeableState === "dirty" && (
-                  <button
-                    className="small"
-                    onClick={() => void manualFix("merge_conflict_detected", "conflict_fix")}
-                  >
-                    Resolve conflicts now
-                  </button>
-                )}
-                {activeRuns.length > 0 && (
-                  <span className="subtle">
-                    <Spinner /> {activeRuns.length} agent{activeRuns.length > 1 ? "s" : ""} working —
-                    see Activity Feed
-                  </span>
-                )}
-                {error && <span style={{ color: "var(--red)" }}>{error}</span>}
-              </div>
-            </div>
-          )}
-          {prProposals.map((p) => (
-            <ProposalCard key={p.id} proposal={p} />
-          ))}
-        </Section>
-      )}
+      <Section label="Status">
+        <ChecksPanel pr={pr} />
+        <div className="card" style={{ padding: "8px 14px" }}>
+          <div className="row">
+            <MergeBadge state={pr.mergeableState} />
+            {pr.mergeableState === "dirty" ? (
+              <button
+                className="small"
+                onClick={() => void manualFix("merge_conflict_detected", "conflict_fix")}
+              >
+                Resolve conflicts now
+              </button>
+            ) : (
+              <button
+                className="small"
+                disabled={updatingBranch}
+                title={`Merge the latest ${pr.baseRef} into ${pr.headRef} — server-side when clean, agent if it conflicts`}
+                onClick={() => void updateFromBase()}
+              >
+                {updatingBranch ? <Spinner /> : "⇡"} Update from {pr.baseRef}
+              </button>
+            )}
+            {activeRuns.length > 0 && (
+              <span className="subtle">
+                <Spinner /> {activeRuns.length} agent{activeRuns.length > 1 ? "s" : ""} working —
+                see Activity Feed
+              </span>
+            )}
+            {error && <span style={{ color: "var(--red)" }}>{error}</span>}
+          </div>
+        </div>
+        {prProposals.map((p) => (
+          <ProposalCard key={p.id} proposal={p} />
+        ))}
+      </Section>
 
       {/* ── drive agents: ask / change / review + their output ── */}
       <Section label="Console">
