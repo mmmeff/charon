@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { notify } from "../lib/notify";
 import type { PrSummary } from "../types";
 import { Spinner } from "./common";
@@ -9,11 +9,22 @@ interface Candidates {
   teams: { slug: string; name: string }[];
 }
 
+interface Reviewer {
+  kind: "user" | "team";
+  id: string;
+  sub?: string;
+}
+
+const label = (r: Reviewer) => (r.kind === "user" ? `@${r.id}` : `#${r.id}`);
+
 /**
- * One-shot "ship it for review" flow on the user's own draft PRs: pick
- * reviewers (users and/or teams), then a single action requests their review
- * and flips the draft to ready. Direct user-authored GitHub writes — the user
- * is choosing, no approval gate.
+ * One-shot "ship it for review" flow on the user's own draft PRs: a
+ * keyboard-first combobox picks reviewers (people and teams), then a single
+ * action requests their review and flips the draft to ready. Direct
+ * user-authored GitHub writes — the user is choosing, no approval gate.
+ *
+ * Keys: type to search · ↑↓ highlight · ⏎ add (clears + refocuses) ·
+ * ⌫ on empty removes last · ⌘⏎ submit · esc close.
  */
 export function SubmitForReview({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
@@ -22,10 +33,11 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
   const [query, setQuery] = useState("");
   const [remote, setRemote] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
-  const [users, setUsers] = useState<string[]>([]);
-  const [teams, setTeams] = useState<string[]>([]);
+  const [sel, setSel] = useState<Reviewer[]>([]);
+  const [hi, setHi] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open || cands) return;
@@ -36,10 +48,11 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // people autocomplete: debounced org-wide search instead of paginating
-  // the full collaborator list up front
+  // people autocomplete: debounced org-wide search; first-page collaborators
+  // give instant local suggestions while it runs
   useEffect(() => {
     const q = query.trim();
+    setHi(0);
     if (q.length < 2) {
       setRemote([]);
       return;
@@ -60,6 +73,8 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
     setBusy(true);
     setError("");
     try {
+      const users = sel.filter((r) => r.kind === "user").map((r) => r.id);
+      const teams = sel.filter((r) => r.kind === "team").map((r) => r.id);
       if (users.length || teams.length) {
         await ctx.gh.requestReviewers(ctx.repo, pr.number, users, teams);
       }
@@ -75,21 +90,53 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
   };
 
   const q = query.trim().toLowerCase();
-  // local first-page matches, then org-wide search results
+  const taken = new Set(sel.map((r) => `${r.kind}:${r.id}`));
   const userPool = [...(cands?.users ?? []), ...remote.filter((r) => !cands?.users.includes(r))];
-  const matchUsers = userPool
-    .filter(
-      (u) => u !== ctx.gh.login && !users.includes(u) && (!q || u.toLowerCase().includes(q))
-    )
-    .slice(0, 8);
-  const matchTeams = (cands?.teams ?? [])
-    .filter(
-      (t) =>
-        !teams.includes(t.slug) &&
-        (!q || t.slug.toLowerCase().includes(q) || t.name.toLowerCase().includes(q))
-    )
-    .slice(0, 8);
-  const picked = users.length + teams.length;
+  const matches: Reviewer[] = [
+    ...userPool
+      .filter((u) => u !== ctx.gh.login && !taken.has(`user:${u}`) && (!q || u.toLowerCase().includes(q)))
+      .map((u): Reviewer => ({ kind: "user", id: u })),
+    ...(cands?.teams ?? [])
+      .filter(
+        (t) =>
+          !taken.has(`team:${t.slug}`) &&
+          (!q || t.slug.toLowerCase().includes(q) || t.name.toLowerCase().includes(q))
+      )
+      .map((t): Reviewer => ({ kind: "team", id: t.slug, sub: t.name })),
+  ].slice(0, 9);
+
+  const pick = (r: Reviewer) => {
+    setSel((s) => [...s, r]);
+    setQuery("");
+    setHi(0);
+    inputRef.current?.focus();
+  };
+
+  const unpick = (r: Reviewer) => {
+    setSel((s) => s.filter((x) => !(x.kind === r.kind && x.id === r.id)));
+    inputRef.current?.focus();
+  };
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      if (!busy) void submit();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (matches[hi]) pick(matches[hi]);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHi((h) => (matches.length ? (h + 1) % matches.length : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHi((h) => (matches.length ? (h - 1 + matches.length) % matches.length : 0));
+    } else if (e.key === "Backspace" && query === "" && sel.length > 0) {
+      e.preventDefault();
+      setSel((s) => s.slice(0, -1));
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
 
   if (!open) {
     return (
@@ -105,70 +152,62 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
         ▾ Submit for review
       </button>
       <div className="card submit-review">
-        <div className="subtle" style={{ marginBottom: 6, fontWeight: 600 }}>
-          Open #{pr.number} for review
+        <div className="row" style={{ marginBottom: 6 }}>
+          <span className="subtle" style={{ fontWeight: 600 }}>
+            Open #{pr.number} for review
+          </span>
+          <span style={{ flex: 1 }} />
+          <span className="subtle picker-hint">
+            ↑↓ · ⏎ add · ⌫ remove · ⌘⏎ submit
+          </span>
         </div>
 
-        {picked > 0 && (
-          <div className="row" style={{ marginBottom: 6 }}>
-            {users.map((u) => (
-              <button
-                key={u}
-                className="small primary"
-                title="Remove"
-                onClick={() => setUsers(users.filter((x) => x !== u))}
-              >
-                @{u} ✕
-              </button>
-            ))}
-            {teams.map((t) => (
-              <button
-                key={t}
-                className="small primary"
-                title="Remove"
-                onClick={() => setTeams(teams.filter((x) => x !== t))}
-              >
-                #{t} ✕
-              </button>
-            ))}
-          </div>
-        )}
-
-        <input
-          type="text"
-          autoFocus
-          placeholder="Search reviewers — people and teams…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
-          }}
-          style={{ width: "100%", marginBottom: 6 }}
-        />
+        <div className="picker-box" onClick={() => inputRef.current?.focus()}>
+          {sel.map((r) => (
+            <button
+              key={`${r.kind}:${r.id}`}
+              className="small primary picker-chip"
+              title={r.sub ?? "Remove"}
+              onClick={() => unpick(r)}
+            >
+              {label(r)} ✕
+            </button>
+          ))}
+          <input
+            type="text"
+            ref={inputRef}
+            autoFocus
+            className="picker-input"
+            placeholder={sel.length ? "Add another…" : "Type to search people and teams…"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onKey}
+          />
+        </div>
 
         {!cands ? (
-          <div className="subtle">
-            <Spinner /> loading collaborators…
+          <div className="subtle" style={{ margin: "6px 0" }}>
+            <Spinner /> loading reviewers…
           </div>
         ) : (
-          <div className="row" style={{ marginBottom: 8 }}>
-            {matchUsers.map((u) => (
-              <button key={u} className="small" onClick={() => setUsers([...users, u])}>
-                + @{u}
-              </button>
-            ))}
-            {matchTeams.map((t) => (
-              <button
-                key={t.slug}
-                className="small"
-                title={t.name}
-                onClick={() => setTeams([...teams, t.slug])}
+          <div className="picker-list">
+            {matches.map((m, i) => (
+              <div
+                key={`${m.kind}:${m.id}`}
+                className={`picker-item ${i === hi ? "hi" : ""}`}
+                onMouseEnter={() => setHi(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // keep focus in the input
+                  pick(m);
+                }}
               >
-                + #{t.slug}
-              </button>
+                <span>{label(m)}</span>
+                {m.sub && <span className="subtle"> {m.sub}</span>}
+                {i === hi && <span className="picker-enter subtle">⏎</span>}
+              </div>
             ))}
-            {matchUsers.length === 0 && matchTeams.length === 0 && (
-              <span className="subtle">
+            {matches.length === 0 && (
+              <div className="picker-item subtle">
                 {searching ? (
                   <>
                     <Spinner /> searching…
@@ -176,16 +215,16 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
                 ) : (
                   <>no matches{q ? ` for “${query}”` : ""}</>
                 )}
-              </span>
+              </div>
             )}
           </div>
         )}
 
-        <div className="row">
+        <div className="row" style={{ marginTop: 8 }}>
           <button className="small primary" disabled={busy} onClick={() => void submit()}>
             {busy ? <Spinner /> : null}{" "}
-            {picked > 0
-              ? `Request ${picked} review${picked > 1 ? "s" : ""} & mark ready`
+            {sel.length > 0
+              ? `Request ${sel.length} review${sel.length > 1 ? "s" : ""} & mark ready`
               : "Mark ready (no reviewers)"}
           </button>
           <button className="small" onClick={() => setOpen(false)}>

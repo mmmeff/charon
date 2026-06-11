@@ -444,6 +444,30 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 
 /* reviewer picker — wraps to its own full-width line inside the PR meta row */
 .submit-review { width: 100%; padding: 10px 12px; margin: 4px 0 0; }
+.picker-hint { font-size: 10px; letter-spacing: 0.06em; }
+/* chips + input share one field */
+.picker-box {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  background: var(--bg-inset); border: 1px solid var(--border);
+  padding: 5px 7px; cursor: text;
+}
+.picker-box:focus-within { border-color: var(--orange); }
+.picker-chip { flex: none; }
+.picker-input,
+.picker-box input.picker-input {
+  flex: 1; min-width: 160px; width: auto;
+  background: none; border: none; padding: 3px 4px;
+}
+.picker-list { border: 1px solid var(--border-subtle); border-top: none; }
+.picker-item {
+  display: flex; align-items: baseline; gap: 7px;
+  padding: 5px 10px; font-size: 12px; cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.picker-item.hi {
+  background: var(--orange-bg); border-left-color: var(--orange); color: var(--fg);
+}
+.picker-enter { margin-left: auto; font-size: 10px; }
 
 /* rename pencil on the PR title — revealed on hover (own PRs only) */
 .viewtitle .title-edit { opacity: 0; margin-left: 8px; transition: opacity 0.12s; }
