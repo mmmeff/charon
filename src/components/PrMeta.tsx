@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePrData } from "../lib/events";
 import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo } from "../types";
 import { Badge, Spinner, age } from "./common";
+import { IconExpand } from "./icons";
 import { Markdown } from "./Markdown";
 import { useResizablePanel } from "./Panels";
 import { useFlow } from "./RepoApp";
@@ -65,12 +66,70 @@ export function PrLabels({ pr }: { pr: PrSummary }) {
   );
 }
 
-/** PR description, rendered as markdown; capped height, scrolls inside. */
+/**
+ * PR description: capped height with inner scroll, plus an expand control
+ * that floats it over the full main column (between the side panels).
+ */
 export function PrDescription({ pr }: { pr: PrSummary }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(
+    null
+  );
+
+  const measure = () => {
+    const main = wrapRef.current?.closest(".ws-main");
+    if (!main) return null;
+    const r = main.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  };
+
+  // keep the overlay glued to the main column through window/panel resizes
+  useEffect(() => {
+    if (!rect) return;
+    const sync = () => setRect(measure());
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRect(null);
+    };
+    window.addEventListener("resize", sync);
+    document.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("resize", sync);
+      document.removeEventListener("keydown", esc);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rect !== null]);
+
   if (!pr.body?.trim()) return null;
+
   return (
-    <div className="card pr-description">
-      <Markdown text={pr.body} html={pr.bodyHtml} />
+    <div className="pr-description-wrap" ref={wrapRef}>
+      <button
+        className="desc-expand"
+        data-tip="Expand description"
+        onClick={() => setRect(measure())}
+      >
+        <IconExpand />
+      </button>
+      <div className="card pr-description">
+        <Markdown text={pr.body} html={pr.bodyHtml} />
+      </div>
+
+      {rect && (
+        <div className="desc-overlay" style={rect}>
+          <div className="desc-overlay-head">
+            <span className="subtle" style={{ fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              Description — #{pr.number} {pr.title}
+            </span>
+            <span style={{ flex: 1 }} />
+            <button className="small" onClick={() => setRect(null)}>
+              ✕ close
+            </button>
+          </div>
+          <div className="desc-overlay-body">
+            <Markdown text={pr.body} html={pr.bodyHtml} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -54,6 +54,12 @@ export const IconRepos = () => (
   </svg>
 );
 
+export const IconExpand = () => (
+  <svg {...base}>
+    <path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" />
+  </svg>
+);
+
 export const IconRefresh = () => (
   <svg {...base}>
     <path d="M13.5 8a5.5 5.5 0 1 1-1.7-4" />
