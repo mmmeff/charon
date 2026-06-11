@@ -50,6 +50,18 @@ export function SettingsView() {
           </select>
         </label>
         <label className="field">
+          <span>Default review prompt</span>
+          <PromptInput
+            rows={2}
+            value={config.reviewPrompt}
+            onChange={(reviewPrompt) => update({ reviewPrompt })}
+          />
+          <small>
+            Prefilled in the composer whenever Review mode is picked — tweak it per run before launching.
+            Template variables (<code>{"{pr-number}"}</code> …) and <code>/skill</code> references work.
+          </small>
+        </label>
+        <label className="field">
           <span>Poll interval (seconds)</span>
           <input
             type="number"

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cleanResultText } from "../lib/agents";
-import { resolveHandler } from "../lib/events";
+import { DEFAULT_REVIEW_PROMPT } from "../lib/defaults";
 import { runDraftEdit, runDraftQuestion, runReviewFlow, runSelfReviewFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
 import { useAgentStore, useUiStore } from "../lib/store";
@@ -38,7 +38,7 @@ const MODE_META: Record<
   review: {
     label: "Review",
     submit: "Review",
-    placeholder: "Optional: anything the review should focus on?",
+    placeholder: "Review instructions…",
     hint: (own, scoped) =>
       own
         ? scoped
@@ -71,9 +71,19 @@ export function Composer({
   onClose?: () => void;
 }) {
   const { ctx, poller } = useFlow();
-  const [mode, setMode] = useState<ComposerMode>(modes[0]);
-  const [text, setText] = useState("");
+  // configurable per-repo default review instructions (Settings → Agent)
+  const reviewPrompt = ctx.config.reviewPrompt?.trim() || DEFAULT_REVIEW_PROMPT;
+  const [mode, setModeState] = useState<ComposerMode>(modes[0]);
+  const [text, setText] = useState(modes[0] === "review" ? reviewPrompt : "");
   const [busy, setBusy] = useState(false);
+
+  // picking Review prefills the configured prompt; leaving it untouched and
+  // switching away clears it back out
+  const setMode = (next: ComposerMode) => {
+    if (next === "review" && !text.trim()) setText(reviewPrompt);
+    else if (mode === "review" && next !== "review" && text === reviewPrompt) setText("");
+    setModeState(next);
+  };
   const [error, setError] = useState("");
   const model = useUiStore((s) => s.composerModel);
   const setModel = useUiStore((s) => s.setComposerModel);
@@ -115,13 +125,11 @@ export function Composer({
           text
         );
         poller.refresh();
-      } else if (reviewKind === "self") {
-        await runSelfReviewFlow(ctx, pr, m, text, selection);
       } else {
-        const handler = resolveHandler(ctx.config.events, "review_requested");
-        let task = interpolate(handler.prompt, { ...prVars(pr), repo: ctx.repo });
-        if (text.trim()) task += `\n\nPay particular attention to: ${text.trim()}`;
-        await runReviewFlow(ctx, pr, task, m, selection);
+        // the input IS the review task (prefilled from the configured prompt)
+        const task = interpolate(text.trim() || reviewPrompt, { ...prVars(pr), repo: ctx.repo });
+        if (reviewKind === "self") await runSelfReviewFlow(ctx, pr, m, task, selection);
+        else await runReviewFlow(ctx, pr, task, m, selection);
       }
       setText("");
       onClose?.();

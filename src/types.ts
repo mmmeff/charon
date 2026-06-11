@@ -63,6 +63,8 @@ export interface RepoConfig {
   localClonePath: string;
   pollIntervalSec: number;
   model: string; // default model for this repo ("" = global default)
+  /** default instructions prefilled in the composer's Review mode */
+  reviewPrompt: string;
   babysitFilters: ClassFilters;
   reviewFilters: ClassFilters;
   /** Overrides keyed by event id; missing ids fall back to catalog defaults */

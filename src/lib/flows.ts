@@ -395,7 +395,7 @@ export async function runSelfReviewFlow(
   ctx: FlowContext,
   pr: PrSummary,
   model?: string,
-  focus?: string,
+  task?: string,
   selection?: LineSelection | null
 ): Promise<string> {
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
@@ -411,7 +411,10 @@ Every finding must be about code in (or directly broken by) this region; anchor 
     : "";
   const base = `You are PR Copilot's review agent. The user wants a critical self-review of THEIR OWN PR #${pr.number}
 ("${pr.title}") in ${ctx.repo} before others see it. Find real problems they should fix.
-${scopeBlock}${focus?.trim() ? `\nThe user asked this review to focus on: ${focus.trim()}\n` : ""}
+
+TASK:
+${task?.trim() || "Review the diff and propose inline comments with severity and confidence."}
+${scopeBlock}
 Reviewer guidance configured for this repo:
 ${ctx.config.reviewFilters.criteria}
 

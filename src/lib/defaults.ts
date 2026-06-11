@@ -294,11 +294,15 @@ export const DEFAULT_REVIEW_FILTERS: ClassFilters = {
     "do not pad reviews with style nits unless severity is marked accordingly.",
 };
 
+export const DEFAULT_REVIEW_PROMPT =
+  "Run the thermonuclear code quality review on PR {pr-number} and propose inline comments with severity and confidence.";
+
 export function defaultRepoConfig(): RepoConfig {
   return {
     localClonePath: "",
     pollIntervalSec: 60,
     model: "",
+    reviewPrompt: DEFAULT_REVIEW_PROMPT,
     babysitFilters: { ...DEFAULT_BABYSIT_FILTERS },
     reviewFilters: { ...DEFAULT_REVIEW_FILTERS },
     events: {},
