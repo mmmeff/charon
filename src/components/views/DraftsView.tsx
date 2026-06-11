@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePrData } from "../../lib/events";
+import { useUiStore } from "../../lib/store";
 import { Badge, SortPicker, age, sortPrs, type SortKey } from "../common";
 import { PrWorkspace } from "../PrWorkspace";
 
@@ -10,7 +11,8 @@ import { PrWorkspace } from "../PrWorkspace";
  */
 export function DraftsView() {
   const drafts = usePrData((s) => s.myDrafts);
-  const [selected, setSelected] = useState<number | null>(null);
+  const selected = useUiStore((s) => s.focusedPr["drafts"] ?? null);
+  const setSelected = (n: number) => useUiStore.getState().setFocusedPr("drafts", n);
   const [sort, setSort] = useState<SortKey>("updated");
   const sorted = sortPrs(drafts, sort);
   const pr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;

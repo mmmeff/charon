@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { killAgent } from "../lib/agents";
+import { useGlobalConfig } from "../lib/store";
 import type { AgentRun } from "../types";
 import { Badge, Spinner, timeAgo, useNow } from "./common";
 
@@ -11,6 +12,8 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
   const [open, setOpen] = useState(defaultOpen);
   const [showPrompt, setShowPrompt] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const githubUrl = useGlobalConfig((s) => s.config?.githubUrl ?? "https://github.com");
+  const prUrl = `${githubUrl}/${run.repo}/pull/${run.prNumber}`;
   const active = run.status === "running" || run.status === "starting";
   useNow(active ? 1000 : 0); // tick the elapsed counter while running
 
@@ -30,9 +33,9 @@ export function AgentCard({ run, defaultOpen = false }: { run: AgentRun; default
           {active && <Spinner />}
           <Badge color={statusColor(run.status)}>{run.status}</Badge>
           <strong>{run.relation}</strong>
-          <span className="subtle">
+          <a href={prUrl} target="_blank" rel="noreferrer" title={prUrl}>
             PR #{run.prNumber} — {run.prTitle}
-          </span>
+          </a>
         </div>
         <div className="row">
           <span className="subtle">

@@ -4,11 +4,12 @@ import { usePrData } from "../../lib/events";
 import { resolveHandler } from "../../lib/events";
 import { runReviewFlow } from "../../lib/flows";
 import { interpolate, prVars } from "../../lib/template";
-import { useAgentStore, useRepoStore } from "../../lib/store";
+import { useAgentStore, useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { Badge, SortPicker, Spinner, age, sortPrs, type SortKey } from "../common";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { ModelPicker } from "../ModelPicker";
+import { PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
 import { InlineCommentEditor, ProposalCard } from "../ProposalCard";
 import { useFlow } from "../RepoApp";
 
@@ -19,7 +20,8 @@ import { useFlow } from "../RepoApp";
  */
 export function ReviewView() {
   const queue = usePrData((s) => s.reviewQueue);
-  const [selected, setSelected] = useState<number | null>(null);
+  const selected = useUiStore((s) => s.focusedPr["review"] ?? null);
+  const setSelected = (n: number) => useUiStore.getState().setFocusedPr("review", n);
   const [sort, setSort] = useState<SortKey>("updated");
   const sorted = sortPrs(queue, sort);
   const pr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;
@@ -138,7 +140,8 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
       : [];
 
   return (
-    <div>
+    <div className="workspace">
+      <div className="ws-main">
       <h2 className="viewtitle">
         #{pr.number} {pr.title}{" "}
         <a href={pr.url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>
@@ -147,10 +150,13 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
       </h2>
       <div className="row" style={{ marginBottom: 12 }}>
         <Badge color="purple">review requested</Badge>
+        <PrLabels pr={pr} />
         <span className="subtle">
           by {pr.author} · {pr.headRef} → {pr.baseRef} · {pr.changedFiles} files
         </span>
       </div>
+
+      <PrDescription pr={pr} />
 
       {!reviewProposal && (
         <div className="card">
@@ -193,6 +199,8 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
         </p>
       )}
       {files && <DiffViewer files={files} anchors={anchors} />}
+      </div>
+      <PrActivityPanel pr={pr} />
     </div>
   );
 }

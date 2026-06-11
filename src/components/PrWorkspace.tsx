@@ -9,7 +9,9 @@ import { useAgentStore, useRepoStore } from "../lib/store";
 import type { CommentInfo, FileDiff, LineSelection, PrSummary } from "../types";
 import { Badge, CiBadge, MergeBadge, Spinner, age, timeAgo } from "./common";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
+import { Markdown } from "./Markdown";
 import { ModelPicker } from "./ModelPicker";
+import { PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
 import { PromptInput } from "./PromptInput";
 import { ProposalCard } from "./ProposalCard";
 import { useFlow } from "./RepoApp";
@@ -99,10 +101,10 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     side: c.side ?? "RIGHT",
     node: <ExistingComment comment={c} />,
   }));
-  const conversation = comments.filter((c) => c.kind === "issue");
 
   return (
-    <div>
+    <div className="workspace">
+      <div className="ws-main">
       <h2 className="viewtitle">
         #{pr.number} {pr.title}{" "}
         <a href={pr.url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>
@@ -123,10 +125,13 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         <Badge color="gray">
           {pr.headRef} → {pr.baseRef}
         </Badge>
+        <PrLabels pr={pr} />
         <span className="subtle">
           +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
         </span>
       </div>
+
+      <PrDescription pr={pr} />
 
       {variant === "babysit" && (failing.length > 0 || pr.mergeableState === "dirty" || activeRuns.length > 0) && (
         <div className="card">
@@ -203,8 +208,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
                 <span className="subtle">{timeAgo(r.startedAt)}</span>
               </div>
               {r.kind === "draft_question" && r.resultText && (
-                <div className="markdown-ish" style={{ marginTop: 8 }}>
-                  {cleanResultText(r.resultText)}
+                <div style={{ marginTop: 8 }}>
+                  <Markdown text={cleanResultText(r.resultText)} />
                 </div>
               )}
               {r.kind === "draft_edit" && r.status === "done" && (
@@ -219,8 +224,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           ))}
         </div>
       )}
-
-      {conversation.length > 0 && <Conversation comments={conversation} />}
 
       {diffErr && <p style={{ color: "var(--red)" }}>{diffErr}</p>}
       {!files && !diffErr && (
@@ -238,6 +241,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           )}
         />
       )}
+      </div>
+      <PrActivityPanel pr={pr} />
     </div>
   );
 }
@@ -270,26 +275,7 @@ function ExistingComment({ comment }: { comment: CommentInfo }) {
           view ↗
         </a>
       </div>
-      <div className="markdown-ish" style={{ fontSize: 13 }}>
-        {comment.body}
-      </div>
-    </div>
-  );
-}
-
-function Conversation({ comments }: { comments: CommentInfo[] }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="card">
-      <button className="link small" onClick={() => setOpen(!open)}>
-        {open ? "▾" : "▸"} conversation ({comments.length})
-      </button>
-      {open &&
-        comments.map((c) => (
-          <div key={c.id} style={{ borderTop: "1px solid var(--border-subtle)", padding: "8px 0" }}>
-            <ExistingComment comment={c} />
-          </div>
-        ))}
+      <Markdown text={comment.body} className="compact" />
     </div>
   );
 }

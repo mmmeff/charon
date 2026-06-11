@@ -182,6 +182,23 @@ export const useAgentStore = create<AgentState>((set) => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Transient UI state — which PR is focused in each tab, kept across tab
+// switches (views unmount when hidden, so this can't live in component state)
+// ---------------------------------------------------------------------------
+
+interface UiState {
+  focusedPr: Record<string, number | null>;
+  setFocusedPr(tab: string, prNumber: number): void;
+}
+
+export const useUiStore = create<UiState>((set) => ({
+  focusedPr: {},
+  setFocusedPr(tab, prNumber) {
+    set((s) => ({ focusedPr: { ...s.focusedPr, [tab]: prNumber } }));
+  },
+}));
+
+// ---------------------------------------------------------------------------
 // Skills registry
 // ---------------------------------------------------------------------------
 
