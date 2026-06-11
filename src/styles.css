@@ -302,9 +302,18 @@ h3, h4 {
   padding: 12px 14px;
   margin-bottom: 10px;
 }
-.card.selectable { cursor: pointer; border-left: 2px solid transparent; }
+.card.selectable { cursor: pointer; border-left: 3px solid transparent; }
 .card.selectable:hover { border-color: var(--fg-subtle); }
-.card.selected { border-left: 2px solid var(--orange); border-color: var(--border); background: #181711; }
+.card.selected,
+.card.selected:hover {
+  border-color: rgba(255, 79, 0, 0.45);
+  border-left: 3px solid var(--orange);
+  background:
+    linear-gradient(90deg, rgba(255, 79, 0, 0.16), rgba(255, 79, 0, 0.04) 45%, transparent 80%),
+    #181711;
+}
+.card.selected h4 { color: var(--fg); }
+.card.selected .meta { color: var(--fg); opacity: 0.75; }
 .card h4 { margin: 0 0 5px; font-size: 13px; font-weight: 600; }
 .card .meta {
   color: var(--fg-muted); font-size: 10.5px; display: flex; gap: 8px; flex-wrap: wrap;
