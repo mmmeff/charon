@@ -10,28 +10,37 @@
   <img src="https://img.shields.io/badge/agents-Cursor%20CLI-ffb000?style=flat-square&labelColor=15140f" alt="Cursor CLI"/>
 </p>
 
-**Charon is a desktop control room for your pull requests.** It watches every PR you own and every
-review you owe, fires AI agents at the busywork — failing CI, merge conflicts, bug-bot findings,
-review requests — and queues up their output as **proposals you approve before anything touches
-GitHub**. Every branch needs passage to main; Charon works the crossing. You set the fare.
+AI made writing code cheap. It didn't make *merging* it cheap: the PRs got bigger, more numerous,
+and more uneven, while review capacity — humans with context and accountability — stayed exactly
+the same. That's the new bottleneck, and the popular fix (point another unsupervised bot at the
+thread) just moves the noise downstream to the people who have to read it.
+
+**Charon is a desktop control room for that bottleneck.** It watches every PR you own and every
+review you owe, fires agents at the work that doesn't need your judgment — failing CI, merge
+conflicts, bug-bot triage, first-pass review — and turns what *does* need your judgment into
+fast, well-presented decisions: **proposals you edit and approve before anything touches GitHub**.
 
 <p align="center">
   <img src="docs/tour.gif" alt="Charon tour: babysitting PRs, reviewing a teammate's diff, watching agents stream" width="100%"/>
 </p>
 
-## The deal: agents do the work, you set the fare
+## Tools for the human in the loop, not a louder bot
 
-Most AI-PR tools post on your behalf and hope you would have said the same thing. Charon inverts
-that:
+You can't fix an AI-volume problem by adding more unsupervised AI output — auto-posted reviews and
+auto-replies are how PR threads became unreadable in the first place. Charon spends its
+intelligence the other way: agents do the legwork, and the product of every run is a *decision
+surface* for you — diffs with anchored findings, severity and confidence on every comment,
+one-click apply-or-dismiss — instead of another post in the thread.
 
 - **The app never posts comments, replies, or reviews on its own.** Every GitHub-facing write is a
   proposal card — edit it, regenerate it with a custom prompt, run it through a humanize skill, or
-  dismiss it. Nothing crosses until you hit *Approve & send*.
+  dismiss it. Nothing ships until you hit *Approve & send*. Your teammates always get *you*, at
+  your speed, not a bot wearing your name.
 - **One automated exception, by design:** during fix flows the agent commits and pushes to *your
-  own* PR branches (never forks, never teammates' branches). Code you can still review; comments
-  that never impersonate you.
+  own* PR branches (never forks, never teammates' branches). Code is reviewable after the fact;
+  comments that impersonate you are not.
 - Agents reviewing teammates' code run **read-only**. Fix agents get an **isolated git worktree**
-  scoped to the one PR they're fixing. You hold the tiller; the agents pull the oars.
+  scoped to the one PR they're fixing.
 
 ## What it does
 
