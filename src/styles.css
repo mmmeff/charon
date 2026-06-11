@@ -597,6 +597,8 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
   font-size: 11.5px; line-height: 1.5; color: var(--fg-muted);
   background: var(--red-bg); border-left: 2px solid var(--red);
 }
+.check-analysis-actions { margin-left: 10px; white-space: nowrap; }
+.check-analysis-actions .link { font-size: 10.5px; }
 .check-log pre {
   margin: 0; font-family: var(--mono); font-size: 10.5px; line-height: 1.5;
   white-space: pre-wrap; word-break: break-word; color: var(--fg-muted);

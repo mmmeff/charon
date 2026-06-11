@@ -131,7 +131,11 @@ WORKFLOW:
 1. Investigate and implement the fix in this worktree.
 2. Commit with a clear message and push to the PR branch with:
    git push origin HEAD:${pr.headRef}
-   (Pushing to this branch is explicitly authorized — it is the user's own PR branch.)
+   (Pushing to this branch is explicitly authorized — ${
+     pr.author === ctx.gh.login
+       ? "it is the user's own PR branch"
+       : `the user explicitly launched this fix on ${pr.author}'s branch from the app`
+   }.)
    Other agents may be pushing fixes to this branch concurrently. If the push is rejected because
    the remote moved, run \`git pull --rebase origin ${pr.headRef}\`, resolve any conflicts in favor of
    keeping both fixes intact, and push again. NEVER force-push.

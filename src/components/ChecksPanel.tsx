@@ -161,6 +161,23 @@ ${log.slice(-AGENT_LOG_TAIL)}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pr.number, pr.headSha, failing.map((c) => c.name).join("|")]);
 
+  // teammate PRs: post the (already-read) analysis as a PR comment
+  const [commented, setCommented] = useState<Record<string, "busy" | "sent" | string>>({});
+  const commentAnalysis = async (c: CheckInfo, text: string) => {
+    setCommented((m) => ({ ...m, [c.name]: "busy" }));
+    try {
+      await ctx.gh.createIssueComment(
+        ctx.repo,
+        pr.number,
+        `**CI failure** — \`${c.name}\`: ${text}${c.url ? `\n\n${c.url}` : ""}`
+      );
+      setCommented((m) => ({ ...m, [c.name]: "sent" }));
+      poller.refresh();
+    } catch (e) {
+      setCommented((m) => ({ ...m, [c.name]: e instanceof Error ? e.message : String(e) }));
+    }
+  };
+
   const retry = async (c: CheckInfo) => {
     setRetrying((r) => ({ ...r, [c.name]: "busy" }));
     try {
@@ -250,6 +267,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
                 (() => {
                   const a = analyses[analysisKey(c)];
                   if (!a) return null;
+                  const sent = commented[c.name];
                   return (
                     <div className="check-analysis">
                       {a.status === "running" ? (
@@ -257,14 +275,45 @@ ${log.slice(-AGENT_LOG_TAIL)}
                           <Spinner /> analyzing…
                         </span>
                       ) : a.status === "done" ? (
-                        a.text
+                        <>
+                          {a.text}
+                          <span className="check-analysis-actions">
+                            <button
+                              className="link small"
+                              title={
+                                mine
+                                  ? "Launch a fix agent (guidance + model)"
+                                  : `Launch a fix agent on ${pr.author}'s branch — you're explicitly authorizing the push`
+                              }
+                              onClick={() => setFixOpen((f) => ({ ...f, [c.name]: !f[c.name] }))}
+                            >
+                              ⚙ fix
+                            </button>
+                            {!mine &&
+                              (sent === "sent" ? (
+                                <span className="subtle">commented ✓</span>
+                              ) : (
+                                <button
+                                  className="link small"
+                                  disabled={sent === "busy"}
+                                  title="Post this analysis as a PR comment for the author"
+                                  onClick={() => void commentAnalysis(c, a.text)}
+                                >
+                                  {sent === "busy" ? <Spinner /> : "↪"} comment to author
+                                </button>
+                              ))}
+                            {sent && sent !== "busy" && sent !== "sent" && (
+                              <span style={{ color: "var(--red)" }}>{sent}</span>
+                            )}
+                          </span>
+                        </>
                       ) : (
                         <span className="subtle">analysis unavailable — {a.text}</span>
                       )}
                     </div>
                   );
                 })()}
-              {failed && mine && fixOpen[c.name] && (
+              {failed && fixOpen[c.name] && (
                 <AgentLaunchForm
                   label={`Fix ${c.name}`}
                   flowKind="ci_fix"
