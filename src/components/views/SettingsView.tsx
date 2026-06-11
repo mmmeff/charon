@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EVENT_CATALOG } from "../../lib/defaults";
 import { resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
@@ -6,6 +6,74 @@ import { useGlobalConfig, useRepoStore, useSkillStore } from "../../lib/store";
 import type { ClassFilters, RepoConfig, SkillSelection } from "../../types";
 import { Badge } from "../common";
 import { PromptInput } from "../PromptInput";
+
+const NAV_SECTIONS = [
+  { id: "s-agent", label: "Agent" },
+  { id: "s-babysit", label: "My PRs · filters" },
+  { id: "s-review", label: "Teammate · filters" },
+  { id: "s-events", label: "Events" },
+  { id: "s-skills", label: "Skills" },
+  { id: "s-conn", label: "Connection" },
+];
+
+const groupId = (g: string) => "g-" + g.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+/** Sticky outline nav with scroll-spy for the settings sections. */
+function SettingsNav() {
+  const groups = [...new Set(EVENT_CATALOG.map((e) => e.group))];
+  const [active, setActive] = useState("s-agent");
+
+  useEffect(() => {
+    const ids = [...NAV_SECTIONS.map((s) => s.id), ...groups.map(groupId)];
+    const visible = new Set<string>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const id = (e.target as HTMLElement).id;
+          if (e.isIntersecting) visible.add(id);
+          else visible.delete(id);
+        }
+        const first = ids.find((id) => visible.has(id));
+        if (first) setActive(first);
+      },
+      { rootMargin: "-5% 0px -70% 0px" }
+    );
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const jump = (id: string) =>
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  return (
+    <nav className="settings-nav">
+      {NAV_SECTIONS.map((s) => (
+        <div key={s.id}>
+          <button
+            className={`settings-nav-item ${active === s.id ? "active" : ""}`}
+            onClick={() => jump(s.id)}
+          >
+            {s.label}
+          </button>
+          {s.id === "s-events" &&
+            groups.map((g) => (
+              <button
+                key={g}
+                className={`settings-nav-item sub ${active === groupId(g) ? "active" : ""}`}
+                onClick={() => jump(groupId(g))}
+              >
+                {g.replace(/^(My PRs|Teammate PRs) — /, "")}
+              </button>
+            ))}
+        </div>
+      ))}
+    </nav>
+  );
+}
 
 /**
  * Per-repo configuration: class filters, the event catalog (toggle + editable
@@ -31,12 +99,15 @@ export function SettingsView() {
 
   return (
     <div className="main">
+      <div className="settings-layout">
+        <SettingsNav />
+        <div className="settings-body">
       <div className="row between" style={{ maxWidth: 880 }}>
         <h2 className="viewtitle">Settings — {repo}</h2>
         {saved && <Badge color="green">saved</Badge>}
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" id="s-agent">
         <h3>Agent</h3>
         <label className="field">
           <span>Default model for this repo</span>
@@ -104,7 +175,7 @@ export function SettingsView() {
         </label>
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" id="s-babysit">
         <h3>My PRs (Babysit) — filters</h3>
         <FilterEditor
           filters={config.babysitFilters}
@@ -113,7 +184,7 @@ export function SettingsView() {
         />
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" id="s-review">
         <h3>Teammate PRs (Review) — filters</h3>
         <FilterEditor
           filters={config.reviewFilters}
@@ -122,7 +193,7 @@ export function SettingsView() {
         />
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" id="s-events">
         <h3>Events</h3>
         <p className="subtle">
           Every event is a toggle plus a prompt template. When an event fires and is enabled, the prompt runs
@@ -136,7 +207,7 @@ export function SettingsView() {
         <EventCatalogEditor config={config} update={update} />
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" id="s-skills">
         <h3>Skills</h3>
         <p className="subtle">
           Imported from <code>~/.cursor</code> (commands, skills) plus any extra directories. Select which
@@ -189,7 +260,7 @@ export function SettingsView() {
         </label>
       </div>
 
-      <div className="settings-section">
+      <div className="settings-section" id="s-conn">
         <h3>Connection (global)</h3>
         <p className="subtle">
           {global.login} @ {global.githubUrl} · agent binary <code>{global.cursorBinary}</code>. Reconfigure
@@ -208,6 +279,8 @@ export function SettingsView() {
             ))}
           </select>
         </label>
+      </div>
+        </div>
       </div>
     </div>
   );
@@ -282,7 +355,7 @@ function EventCatalogEditor({
   return (
     <>
       {groups.map((g) => (
-        <div key={g}>
+        <div key={g} id={groupId(g)}>
           <h4>{g}</h4>
           {EVENT_CATALOG.filter((e) => e.group === g).map((def) => {
             const handler = resolveHandler(config.events, def.id);
