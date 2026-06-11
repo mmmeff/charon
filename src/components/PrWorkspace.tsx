@@ -10,6 +10,7 @@ import type { CommentInfo, FileDiff, LineSelection, PrSummary } from "../types";
 import { Badge, CiBadge, MergeBadge, Spinner, age, timeAgo } from "./common";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { ModelPicker } from "./ModelPicker";
+import { PromptInput } from "./PromptInput";
 import { ProposalCard } from "./ProposalCard";
 import { useFlow } from "./RepoApp";
 
@@ -164,9 +165,10 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
       <div className="card">
         <div className="subtle" style={{ marginBottom: 6 }}>
-          Feedback or a question about the whole diff — or select lines below for a targeted run.
+          Feedback or a question about the whole diff — or select lines below for a targeted run. Type{" "}
+          <code>/</code> to reference a skill.
         </div>
-        <textarea
+        <PromptInput
           rows={3}
           placeholder={
             generalMode === "edit"
@@ -174,7 +176,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
               : "Ask a question or request feedback on the diff (no code changes)…"
           }
           value={general}
-          onChange={(e) => setGeneral(e.target.value)}
+          onChange={setGeneral}
         />
         <div className="row" style={{ marginTop: 8 }}>
           <ModeSelect value={generalMode} onChange={setGeneralMode} />
@@ -331,12 +333,12 @@ function LineCommentForm({
         {sel.path}: lines {sel.startLine}
         {sel.endLine !== sel.startLine ? `–${sel.endLine}` : ""} ({sel.side === "RIGHT" ? "new" : "old"} side)
       </div>
-      <textarea
+      <PromptInput
         autoFocus
         rows={3}
         placeholder={mode === "edit" ? "Describe the change for these lines…" : "Ask about these lines…"}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={setText}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim()) void submit();
         }}

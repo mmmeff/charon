@@ -3,6 +3,7 @@ import { runRewrite, sendProposal } from "../lib/flows";
 import { useRepoStore } from "../lib/store";
 import type { Proposal, ProposedInlineComment, Severity } from "../types";
 import { Badge, ConfidenceBadge, SeverityBadge, Spinner, timeAgo } from "./common";
+import { PromptInput } from "./PromptInput";
 import { useFlow } from "./RepoApp";
 
 const SEVERITIES: Severity[] = ["blocker", "major", "minor", "nit"];
@@ -179,11 +180,11 @@ export function EditableText({
       </div>
       {regenOpen && (
         <div className="row" style={{ marginTop: 6 }}>
-          <input
-            type="text"
-            placeholder="How should it be rewritten? e.g. 'shorter, lead with the fix'"
+          <PromptInput
+            as="input"
+            placeholder="How should it be rewritten? e.g. 'shorter, lead with the fix' — / for skills"
             value={regenPrompt}
-            onChange={(e) => setRegenPrompt(e.target.value)}
+            onChange={setRegenPrompt}
             onKeyDown={(e) => {
               if (e.key === "Enter" && regenPrompt) void rewrite(regenPrompt, false);
             }}

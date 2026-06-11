@@ -5,6 +5,7 @@ import { loadSkills } from "../../lib/skills";
 import { useGlobalConfig, useRepoStore, useSkillStore } from "../../lib/store";
 import type { ClassFilters, RepoConfig, SkillSelection } from "../../types";
 import { Badge } from "../common";
+import { PromptInput } from "../PromptInput";
 
 /**
  * Per-repo configuration: class filters, the event catalog (toggle + editable
@@ -237,10 +238,10 @@ function FilterEditor({
       </label>
       <label className="field">
         <span>LLM criteria</span>
-        <textarea
+        <PromptInput
           rows={3}
           value={filters.criteria}
-          onChange={(e) => onChange({ ...filters, criteria: e.target.value })}
+          onChange={(criteria) => onChange({ ...filters, criteria })}
         />
         <small>
           Fed directly into agent prompts as <code>{"{filter-criteria}"}</code> — e.g. which comments warrant
@@ -303,10 +304,10 @@ function EventCatalogEditor({
                   )}
                 </div>
                 <div className="desc">{def.description}</div>
-                <textarea
+                <PromptInput
                   rows={2}
                   value={handler.prompt}
-                  onChange={(e) => setHandler(def.id, handler.enabled, e.target.value)}
+                  onChange={(prompt) => setHandler(def.id, handler.enabled, prompt)}
                 />
               </div>
             );

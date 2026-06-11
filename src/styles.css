@@ -220,6 +220,21 @@ tr.commentable .diff-num { position: relative; }
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
 }
 
+/* ---- /skill autocomplete ---- */
+.autocomplete { position: relative; width: 100%; }
+.autocomplete-menu {
+  position: absolute; top: 100%; left: 0; margin-top: 2px; z-index: 30;
+  min-width: 280px; max-width: 100%; max-height: 240px; overflow-y: auto;
+  background: var(--bg-raised); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(1, 4, 9, 0.7);
+}
+.autocomplete-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 10px; cursor: pointer; font-size: 12.5px;
+}
+.autocomplete-item .mono { font-family: var(--mono); }
+.autocomplete-item.active { background: var(--accent-bg); }
+
 .spin {
   display: inline-block; width: 12px; height: 12px; border: 2px solid var(--fg-subtle);
   border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;

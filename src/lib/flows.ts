@@ -399,7 +399,7 @@ export async function runDraftQuestion(
   const scope = selection
     ? `\nThe question is about ${selection.path} lines ${selection.startLine}–${selection.endLine}:\n\`\`\`\n${selection.snippet}\n\`\`\`\n`
     : "";
-  const prompt = `You are PR Copilot's analysis agent. The user has a question / wants feedback on their own draft
+  const base = `You are PR Copilot's analysis agent. The user has a question / wants feedback on their own draft
 PR #${pr.number} ("${pr.title}") in ${ctx.repo}. Do NOT make any code changes — answer in text only.
 ${scope}
 QUESTION / FEEDBACK REQUEST:
@@ -411,6 +411,8 @@ ${truncate(diffText, MAX_DIFF_CHARS)}
 \`\`\`
 
 Answer directly and concretely; reference files and line numbers from the diff where useful.`;
+  // expands any /skill references the user typed in the question
+  const prompt = applySkills(base, ctx.skills, []);
 
   return startAgent({
     kind: "draft_question",
