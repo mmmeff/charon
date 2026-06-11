@@ -1,4 +1,5 @@
 import type {
+  CommentInfo,
   GlobalConfig,
   LineSelection,
   Proposal,
@@ -547,6 +548,49 @@ ${findings.map(findingInstruction).join("\n\n")}${
     for (const f of findings) await store.updateFinding(f.key, { status: "open" });
     throw e;
   }
+}
+
+/**
+ * Address a GitHub comment thread on the user's own PR: a fix agent verifies
+ * the feedback, implements it in a worktree, pushes, and drafts a reply to the
+ * thread — which lands as a pending proposal, never auto-posted. Works the
+ * same for bot comments (bugbot etc.) and human reviewers.
+ */
+export async function runAddressComment(
+  ctx: FlowContext,
+  pr: PrSummary,
+  root: CommentInfo,
+  replies: CommentInfo[],
+  model?: string,
+  guidance?: string
+): Promise<string> {
+  const threadText = [root, ...replies]
+    .map(
+      (c) =>
+        `${c.author}${c.authorIsBot ? " [bot]" : ""} (comment id ${c.id}):\n${indent(truncate(c.body, 6000), "  ")}`
+    )
+    .join("\n\n");
+  const where = root.path ? ` on ${root.path}${root.line ? `:${root.line}` : ""}` : "";
+  const isInline = root.kind === "review_comment";
+
+  const task = `Address the following GitHub comment thread${where} from this PR. Treat the feedback as a strong
+recommendation: verify it is correct in context, then implement the change. If you conclude no change is
+warranted, do not commit or push — explain your reasoning in the reply instead.
+
+THREAD:
+${threadText}
+
+After the work, draft a response to the thread${
+    isInline
+      ? `: use proposal type "reply" with in_reply_to ${root.id}`
+      : ` as a top-level PR comment (proposal type "comment")`
+  }, describing what you changed and pushed — or why you made no change.${
+    guidance?.trim()
+      ? `\n\nADDITIONAL GUIDANCE FROM THE USER (takes precedence):\n${guidance.trim()}`
+      : ""
+  }`;
+
+  return runFixFlow(ctx, pr, task, `address comment by ${root.author}`, "feedback_fix", model);
 }
 
 /**

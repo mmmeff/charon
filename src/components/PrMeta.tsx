@@ -1,13 +1,52 @@
 import { useEffect, useRef, useState } from "react";
 import { usePrData } from "../lib/events";
+import { runAddressComment } from "../lib/flows";
 import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
+import { AgentLaunchForm } from "./AgentLaunchForm";
 import { Badge, Spinner, age } from "./common";
 import { IconExpand } from "./icons";
 import { Markdown } from "./Markdown";
 import { useResizablePanel } from "./Panels";
 import { useFlow } from "./RepoApp";
+
+/**
+ * "Address with agent" on a GitHub comment thread — own PRs only (agents push
+ * exclusively to the user's own branch). Spins off a fix agent that implements
+ * the feedback and drafts a reply to the thread as a pending proposal.
+ */
+function AddressWithAgent({
+  pr,
+  root,
+  replies,
+}: {
+  pr: PrSummary;
+  root: CommentInfo;
+  replies: CommentInfo[];
+}) {
+  const { ctx } = useFlow();
+  const [open, setOpen] = useState(false);
+  if (pr.author !== ctx.gh.login) return null;
+  return (
+    <>
+      <button
+        className="link small"
+        title="Spin off a fix agent for this feedback — its reply is proposed for your approval, never auto-posted"
+        onClick={() => setOpen(!open)}
+      >
+        ⚙ address with agent
+      </button>
+      {open && (
+        <AgentLaunchForm
+          label="Address with agent"
+          onRun={(model, guidance) => runAddressComment(ctx, pr, root, replies, model, guidance)}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
 
 /** The review thread (resolution state) containing a given comment. */
 function useThread(prNumber: number, commentId: number): ReviewThreadInfo | undefined {
@@ -243,6 +282,9 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
                 <Badge color="gray">commented</Badge>
               </ActHeader>
               <CommentBody pr={pr} comment={c} />
+              <div className="row" style={{ marginTop: 4 }}>
+                <AddressWithAgent pr={pr} root={c} replies={[]} />
+              </div>
             </div>
           );
         }
@@ -433,6 +475,7 @@ export function DiffCommentThread({
             ↳ reply
           </button>
         )}
+        {!replying && <AddressWithAgent pr={pr} root={root} replies={replies} />}
         {thread && !replying && <ResolveButton pr={pr} thread={thread} />}
         {thread?.isResolved && expanded && (
           <button className="link small" onClick={() => setExpanded(false)}>

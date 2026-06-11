@@ -434,7 +434,8 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .seg button + button { border-left: none; }
 
 /* inline apply form on findings */
-.apply-form { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); }
+/* width:100% lets the form wrap onto its own line when launched from inside a flex .row */
+.apply-form { width: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); }
 
 /* ---- CI checks panel ---- */
 .checks-panel { padding: 10px 14px; }
