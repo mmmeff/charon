@@ -138,6 +138,10 @@ export interface PrSummary {
   mergeableState: string; // clean | dirty | behind | blocked | unstable | unknown
   /** GitHub auto-merge is armed on this PR */
   autoMerge: boolean;
+  /** logins with an outstanding review request */
+  requestedReviewers: string[];
+  /** team slugs with an outstanding review request */
+  requestedTeams: string[];
   requestedFromMe: boolean;
   updatedAt: string;
   additions: number;

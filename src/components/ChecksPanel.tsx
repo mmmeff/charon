@@ -183,7 +183,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
         `**CI failure** — \`${c.name}\`: ${text}${c.url ? `\n\n${c.url}` : ""}`
       );
       setCommented((m) => ({ ...m, [c.name]: "sent" }));
-      poller.refresh();
+      void poller.refreshPr(pr.number);
     } catch (e) {
       setCommented((m) => ({ ...m, [c.name]: e instanceof Error ? e.message : String(e) }));
     }
@@ -194,7 +194,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
     try {
       await ctx.gh.rerunCheck(ctx.repo, c.url);
       setRetrying((r) => ({ ...r, [c.name]: "queued" }));
-      poller.refresh();
+      void poller.refreshPr(pr.number);
     } catch (e) {
       setRetrying((r) => ({ ...r, [c.name]: e instanceof Error ? e.message : String(e) }));
     }

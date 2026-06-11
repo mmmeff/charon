@@ -63,7 +63,7 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
     guard(async () => {
       try {
         await ctx.gh.updateBranch(ctx.repo, pr.number);
-        poller.refresh();
+        void poller.refreshPr(pr.number);
       } catch {
         await conflictFix("base_branch_updated");
       }
@@ -82,7 +82,7 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
     guard(async () => {
       await ctx.gh.closePull(ctx.repo, pr.number);
       void notify("PR closed", `#${pr.number} ${pr.title}`);
-      poller.refresh();
+      void poller.refreshPr(pr.number);
       setConfirmClose(false);
     });
 
@@ -97,7 +97,7 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
       void notify("PR approved", `#${pr.number} ${pr.title}`);
       setApproveOpen(false);
       setApproveText("");
-      poller.refresh();
+      void poller.refreshPr(pr.number);
     });
 
   return (

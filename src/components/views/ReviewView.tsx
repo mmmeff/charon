@@ -37,36 +37,48 @@ export function ReviewView() {
     );
   }
 
+  const needsAttention = sorted.filter((p) => p.requestedFromMe);
+  const reviewing = sorted.filter((p) => !p.requestedFromMe);
+
+  const card = (p: PrSummary) => (
+    <div
+      key={p.number}
+      className={`card selectable ${pr?.number === p.number ? "selected" : ""}`}
+      onClick={() => setSelected(p.number)}
+    >
+      <h4>
+        #{p.number} {p.title}
+      </h4>
+      <div className="meta">
+        <RunningAgentsChip prNumber={p.number} />
+        <span>by {p.author}</span>
+        <span>
+          +{p.additions} −{p.deletions}
+        </span>
+        <Badge color="gray" title={`updated ${p.updatedAt}`}>
+          {age(p.updatedAt)}
+        </Badge>
+      </div>
+    </div>
+  );
+
   return (
     <div className="main split">
       <Sidebar>
         <div className="row between" style={{ marginBottom: 8 }}>
-          <span className="subtle">
-            {queue.length} review{queue.length > 1 ? "s" : ""} waiting
-          </span>
+          <span className="subtle">{needsAttention.length} waiting on you</span>
           <SortPicker value={sort} onChange={setSort} />
         </div>
-        {sorted.map((p) => (
-          <div
-            key={p.number}
-            className={`card selectable ${pr?.number === p.number ? "selected" : ""}`}
-            onClick={() => setSelected(p.number)}
-          >
-            <h4>
-              #{p.number} {p.title}
-            </h4>
-            <div className="meta">
-              <RunningAgentsChip prNumber={p.number} />
-              <span>by {p.author}</span>
-              <span>
-                +{p.additions} −{p.deletions}
-              </span>
-              <Badge color="gray" title={`updated ${p.updatedAt}`}>
-                {age(p.updatedAt)}
-              </Badge>
-            </div>
+        {needsAttention.length > 0 && (
+          <div className="list-group-label">Needs attention ({needsAttention.length})</div>
+        )}
+        {needsAttention.map(card)}
+        {reviewing.length > 0 && (
+          <div className="list-group-label" title="PRs you've reviewed that aren't waiting on you">
+            Reviewing ({reviewing.length})
           </div>
-        ))}
+        )}
+        {reviewing.map(card)}
       </Sidebar>
       <div className="content">{pr && <ReviewWorkspace key={pr.number} pr={pr} />}</div>
     </div>
@@ -150,7 +162,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
                   ...reviewProposal,
                   comments: reviewProposal.comments.filter((x) => x.key !== c.key),
                 });
-                poller.refresh(); // the posted comment returns as a GitHub thread
+                void poller.refreshPr(pr.number); // the posted comment returns as a GitHub thread
               }}
             />
           ),

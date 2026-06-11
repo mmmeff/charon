@@ -5,7 +5,6 @@ import { useRepoStore, useUiStore } from "../../lib/store";
 import { age, sortPrs, timeAgo, type SortKey } from "../../lib/ui";
 import { Badge, CiBadge, EmptyState, MergeBadge, RunningAgentsChip, SortPicker } from "../common";
 import { Sidebar } from "../Panels";
-import { ProposalCard } from "../ProposalCard";
 import { PrWorkspace } from "../PrWorkspace";
 
 /**
@@ -25,9 +24,6 @@ export function BabysitView() {
   const sorted = sortPrs(myOpen, sort);
   const pr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;
 
-  const orphanProposals = proposals.filter(
-    (p) => p.status === "pending" && !myOpen.some((x) => x.number === p.prNumber)
-  );
 
   if (myOpen.length === 0) {
     return (
@@ -35,14 +31,6 @@ export function BabysitView() {
         <EmptyState title="Yard is clear">
           Your open (non-draft) pull requests are watched here: CI, conflicts, and incoming feedback.
         </EmptyState>
-        {orphanProposals.length > 0 && (
-          <>
-            <h3>Pending proposals</h3>
-            {orphanProposals.map((p) => (
-              <ProposalCard key={p.id} proposal={p} />
-            ))}
-          </>
-        )}
       </div>
     );
   }
@@ -99,18 +87,6 @@ export function BabysitView() {
                 </Badge>{" "}
                 #{e.prNumber}
               </div>
-            ))}
-          </>
-        )}
-
-        {orphanProposals.length > 0 && (
-          <>
-            <hr />
-            <div className="subtle" style={{ marginBottom: 6 }}>
-              Proposals for closed/other PRs
-            </div>
-            {orphanProposals.map((p) => (
-              <ProposalCard key={p.id} proposal={p} />
             ))}
           </>
         )}

@@ -4,7 +4,8 @@ import { usePrData } from "../lib/events";
 import { useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
 import { timeAgo, useScrolledPrTitle } from "../lib/ui";
-import { Badge, BranchBadge, CiBadge, LoadingField, MergeBadge, Section } from "./common";
+import { Badge, BranchBadge, CiBadge, LoadingField, Section } from "./common";
+import { ApprovalsMenu, ReviewersMenu } from "./ReviewerMenus";
 import { ChecksPanel } from "./ChecksPanel";
 import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
@@ -24,7 +25,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   const { ctx } = useFlow();
   const checks = usePrData((s) => s.checks[pr.number] ?? []);
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
-  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
   const proposals = useRepoStore((s) => s.proposals);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [diffErr, setDiffErr] = useState("");
@@ -61,7 +61,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   }, [files, pr.headSha]);
 
   const prProposals = proposals.filter((p) => p.prNumber === pr.number && p.status !== "dismissed");
-  const approvals = new Set(reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)).size;
 
   // review-comment threads (bug-bots and humans) anchored onto the diff,
   // each with inline reply
@@ -111,11 +110,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           )}
           {variant === "babysit" && (
             <>
-              <CiBadge checks={checks} />
-              <MergeBadge state={pr.mergeableState} />
-              <Badge color={approvals >= ctx.config.requiredApprovals ? "green" : "gray"}>
-                {approvals}/{ctx.config.requiredApprovals} approvals
-              </Badge>
+              <ApprovalsMenu pr={pr} />
+              <ReviewersMenu pr={pr} />
             </>
           )}
           <BranchBadge head={pr.headRef} base={pr.baseRef} />

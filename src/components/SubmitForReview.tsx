@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { usePrData } from "../lib/events";
 import { notify } from "../lib/notify";
+import { useUiStore } from "../lib/store";
 import type { PrSummary } from "../types";
 import { Spinner } from "./common";
 import { useFlow } from "./flow";
@@ -82,6 +84,14 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
       void notify("Opened for review", `#${pr.number} ${pr.title}`);
       poller.refresh();
       setOpen(false);
+      // advance to the next draft after a beat — this one is on its way out
+      const list = usePrData.getState().myDrafts;
+      const idx = list.findIndex((p) => p.number === pr.number);
+      const remaining = list.filter((p) => p.number !== pr.number);
+      const next = remaining[Math.min(Math.max(idx, 0), remaining.length - 1)];
+      if (next) {
+        setTimeout(() => useUiStore.getState().setFocusedPr("drafts", next.number), 1000);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

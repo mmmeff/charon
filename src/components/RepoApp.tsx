@@ -178,12 +178,11 @@ export function RepoApp({ repo }: { repo: string }) {
   const activeAgents = agentOrder.filter(
     (id) => runs[id]?.status === "running" || runs[id]?.status === "starting"
   ).length;
-  const pendingProposals = repoStore.proposals.filter((p) => p.status === "pending").length;
 
   const tabs: { id: Tab; label: string; icon: () => JSX.Element; count?: number; hot?: boolean }[] = [
     { id: "drafts", label: "Drafts", icon: IconDrafts, count: prData.myDrafts.length },
     { id: "open", label: "Open PRs", icon: IconOpen, count: prData.myOpen.length },
-    { id: "review", label: "Review", icon: IconReview, count: prData.reviewQueue.length },
+    { id: "review", label: "Review", icon: IconReview, count: prData.reviewQueue.filter((p) => p.requestedFromMe).length },
     { id: "activity", label: "Agents", icon: IconActivity, count: activeAgents, hot: activeAgents > 0 },
     { id: "settings", label: "Settings", icon: IconSettings },
   ];
@@ -218,6 +217,9 @@ export function RepoApp({ repo }: { repo: string }) {
           >
             <IconRepos />
           </button>
+          <div className="rail-version" title="Charon version">
+            v{__APP_VERSION__}
+          </div>
         </nav>
 
         <div className="app-col">
@@ -258,11 +260,6 @@ export function RepoApp({ repo }: { repo: string }) {
               </button>
             )}
             <span className="spacer" />
-            {pendingProposals > 0 && (
-              <span className="badge yellow">
-                {pendingProposals} pending approval{pendingProposals > 1 ? "s" : ""}
-              </span>
-            )}
             <span
               className={`pollstatus ${prData.pollError ? "err" : ""}`}
               title={

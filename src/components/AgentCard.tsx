@@ -78,15 +78,30 @@ export function AgentCard({
 
   return (
     <div className={embedded ? "agent-embedded" : `card ${active ? "agent-running" : ""}`}>
-      <div className="row between">
+      <div className="row between agent-head" onClick={() => setOpen(!open)} title={open ? "Collapse stream" : "Expand stream"}>
         <div className="row">
+          <span className="agent-caret">{open ? "▾" : "▸"}</span>
           {active && <Spinner />}
           <Badge color={statusColor(run.status)}>{run.status}</Badge>
           <strong>{run.relation}</strong>
-          <button className="link agent-pr-link" title="Open in this app" onClick={openInApp}>
+          <button
+            className="link agent-pr-link"
+            title="Open in this app"
+            onClick={(e) => {
+              e.stopPropagation();
+              openInApp();
+            }}
+          >
             PR #{run.prNumber} — {run.prTitle}
           </button>
-          <a href={prUrl} target="_blank" rel="noreferrer" className="subtle" title="Open on GitHub">
+          <a
+            href={prUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="subtle"
+            title="Open on GitHub"
+            onClick={(e) => e.stopPropagation()}
+          >
             ↗
           </a>
         </div>
@@ -95,13 +110,16 @@ export function AgentCard({
             {run.model} · {elapsed}s · {timeAgo(run.startedAt)}
           </span>
           {active && (
-            <button className="small danger" onClick={() => void killAgent(run.id)}>
+            <button
+              className="small danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                void killAgent(run.id);
+              }}
+            >
               Stop
             </button>
           )}
-          <button className="small" onClick={() => setOpen(!open)}>
-            {open ? "Hide" : "Watch"}
-          </button>
         </div>
       </div>
       {run.error && <div style={{ color: "var(--red)", marginTop: 6, fontSize: 12.5 }}>{run.error}</div>}

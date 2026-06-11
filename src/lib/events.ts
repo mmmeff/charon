@@ -363,6 +363,46 @@ export class RepoPoller {
     void this.tick();
   }
 
+  /**
+   * Targeted refresh of one PR — instant reactivity after user actions
+   * (comment, approve, merge, …) without waiting on a full poll. No event
+   * dispatch here (snapshots untouched); the next full poll reconciles.
+   * Closed/merged PRs drop out of the lists immediately.
+   */
+  async refreshPr(number: number): Promise<void> {
+    try {
+      const { gh, repo } = this.getCtx();
+      const detail = await gh.getPull(repo, number);
+      const [ch, cm, rv, th, tl] = await Promise.all([
+        gh.listChecks(repo, detail.headSha),
+        gh.listComments(repo, number),
+        gh.listReviews(repo, number),
+        gh.listReviewThreads(repo, number).catch(() => []),
+        gh.listTimeline(repo, number),
+      ]);
+      const d = usePrData.getState();
+      const open = detail.state === "open";
+      const swap = (l: PrSummary[]) =>
+        open
+          ? l.map((p) =>
+              p.number === number ? { ...detail, requestedFromMe: p.requestedFromMe } : p
+            )
+          : l.filter((p) => p.number !== number);
+      d.patch({
+        checks: { ...d.checks, [number]: ch },
+        comments: { ...d.comments, [number]: cm },
+        reviews: { ...d.reviews, [number]: rv },
+        threads: { ...d.threads, [number]: th },
+        timeline: { ...d.timeline, [number]: tl },
+        myDrafts: swap(d.myDrafts),
+        myOpen: swap(d.myOpen),
+        reviewQueue: swap(d.reviewQueue),
+      });
+    } catch (e) {
+      console.warn("refreshPr failed", e);
+    }
+  }
+
   private schedule() {
     if (this.stopped) return;
     const sec = Math.max(20, this.getCtx().config.pollIntervalSec || 60);
@@ -383,9 +423,10 @@ export class RepoPoller {
       const store = useRepoStore.getState();
       const isFirstRun = Object.keys(store.snapshots).length === 0;
 
-      const [openPulls, requested] = await Promise.all([
+      const [openPulls, requested, reviewedByMe] = await Promise.all([
         gh.listOpenPulls(repo),
         gh.reviewRequestedNumbers(repo),
+        gh.reviewedByMeNumbers(repo).catch(() => new Set<number>()),
       ]);
 
       const notExcluded = (pr: PrSummary, labels: string[]) =>
@@ -396,11 +437,12 @@ export class RepoPoller {
       );
       const myDrafts = mine.filter((p) => p.draft);
       const myNonDraft = mine.filter((p) => !p.draft);
+      // needs-attention (outstanding request) + reviewing (I reviewed it before)
       const teammate = openPulls
-        .filter((p) => p.author !== me && requested.has(p.number))
+        .filter((p) => p.author !== me && (requested.has(p.number) || reviewedByMe.has(p.number)))
         .filter((p) => notExcluded(p, config.reviewFilters.excludeLabels))
         .filter((p) => !p.draft || config.reviewFilters.processDrafts)
-        .map((p) => ({ ...p, requestedFromMe: true }));
+        .map((p) => ({ ...p, requestedFromMe: requested.has(p.number) }));
 
       // Track previously-known PRs that left the open list (merged/closed).
       const stillOpen = new Set(openPulls.map((p) => p.number));

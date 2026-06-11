@@ -196,6 +196,8 @@ export class GitHubClient {
       url: p.html_url ?? "",
       mergeableState: p.mergeable_state ?? "unknown",
       autoMerge: p.auto_merge != null,
+      requestedReviewers: (p.requested_reviewers ?? []).map((u: any) => String(u.login)),
+      requestedTeams: (p.requested_teams ?? []).map((t: any) => String(t.slug)),
       requestedFromMe,
       updatedAt: p.updated_at ?? "",
       additions: p.additions ?? 0,
@@ -225,6 +227,17 @@ export class GitHubClient {
       "GET",
       `/search/issues?q=${encodeURIComponent(
         `is:pr is:open repo:${repo} review-requested:${this.login}`
+      )}&per_page=100`
+    );
+    return new Set(res.items.map((i) => i.number));
+  }
+
+  /** Open PRs the user has already reviewed (beyond outstanding requests). */
+  async reviewedByMeNumbers(repo: string): Promise<Set<number>> {
+    const res = await this.json<{ items: { number: number }[] }>(
+      "GET",
+      `/search/issues?q=${encodeURIComponent(
+        `is:pr is:open repo:${repo} reviewed-by:${this.login} -author:${this.login}`
       )}&per_page=100`
     );
     return new Set(res.items.map((i) => i.number));
@@ -585,6 +598,19 @@ export class GitHubClient {
     } catch {
       return [];
     }
+  }
+
+  /** Withdraw review requests (direct user-authored action). */
+  async removeReviewRequest(
+    repo: string,
+    number: number,
+    reviewers: string[],
+    teamReviewers: string[] = []
+  ): Promise<void> {
+    await this.json("DELETE", `/repos/${repo}/pulls/${number}/requested_reviewers`, {
+      reviewers,
+      team_reviewers: teamReviewers,
+    });
   }
 
   /** Request reviews from users and/or teams (direct user-authored action). */

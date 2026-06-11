@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { usePrData } from "../lib/events";
 import { runAddressComment, runDescriptionDraft, runTitleDraft } from "../lib/flows";
 import type { ReviewThreadInfo } from "../lib/github";
-import { useUiStore } from "../lib/store";
+import { useAgentStore, useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
+import { AgentCard } from "./AgentCard";
 import { AgentLaunchForm } from "./AgentLaunchForm";
 import { ControlCenter } from "./ControlCenter";
 import { age } from "../lib/ui";
@@ -29,6 +30,8 @@ function AddressWithAgent({
 }) {
   const { ctx } = useFlow();
   const [open, setOpen] = useState(false);
+  const [runId, setRunId] = useState<string | null>(null);
+  const run = useAgentStore((s) => (runId ? s.runs[runId] : undefined));
   if (pr.author !== ctx.gh.login) return null;
   return (
     <>
@@ -43,10 +46,13 @@ function AddressWithAgent({
         <AgentLaunchForm
           label="Address with agent"
           flowKind="feedback_fix"
-          onRun={(model, guidance) => runAddressComment(ctx, pr, root, replies, model, guidance)}
+          onRun={async (model, guidance) =>
+            setRunId(await runAddressComment(ctx, pr, root, replies, model, guidance))
+          }
           onClose={() => setOpen(false)}
         />
       )}
+      {run && <AgentCard run={run} embedded defaultOpen />}
     </>
   );
 }
@@ -818,7 +824,7 @@ function SendBox({
     try {
       await send(ctx, text);
       setText("");
-      poller.refresh();
+      poller.refreshPr(pr.number);
       onSent?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -828,7 +834,7 @@ function SendBox({
   };
 
   return (
-    <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: 10, flex: 1, minWidth: 0, width: "100%" }}>
       <textarea
         rows={2}
         autoFocus={autoFocus}

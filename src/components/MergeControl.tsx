@@ -44,7 +44,7 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
     try {
       await ctx.gh.mergePull(ctx.repo, pr.number, method);
       void notify("PR merged", `#${pr.number} ${pr.title}`);
-      poller.refresh();
+      void poller.refreshPr(pr.number);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -64,7 +64,7 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
       const fix = (l: PrSummary[]) =>
         l.map((p) => (p.number === pr.number ? { ...p, autoMerge: !pr.autoMerge } : p));
       d.patch({ myDrafts: fix(d.myDrafts), myOpen: fix(d.myOpen), reviewQueue: fix(d.reviewQueue) });
-      poller.refresh();
+      void poller.refreshPr(pr.number);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
