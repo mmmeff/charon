@@ -79,7 +79,7 @@ function Onboarding({
           <h1>
             <IconCharonMoon size={26} id="connect" /> CHARON
           </h1>
-          <div className="sub">the ferryman for your pull requests</div>
+          <div className="sub">human-in-the-loop agents for pull requests</div>
         </div>
       </div>
       <p className="sub2">
@@ -199,7 +199,7 @@ function RepoList({
           <h1>
             <IconCharonMoon size={26} id="picker" /> CHARON
           </h1>
-          <div className="sub">select a crossing — each repo runs in its own window</div>
+          <div className="sub">each repo runs in its own window</div>
         </div>
       </div>
       <div className="row between" style={{ marginBottom: 16 }}>
