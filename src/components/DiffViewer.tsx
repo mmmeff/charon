@@ -219,13 +219,16 @@ export function DiffViewer({
           </label>
         </div>
       )}
-      <FileTree
-        files={files}
-        activePath={activePath}
-        open={treeOpen}
-        onClose={() => setTreeOpen(false)}
-        onSelect={jumpToFile}
-      />
+      <div className="diff-area">
+        {treeOpen && (
+          <FileTree
+            files={files}
+            activePath={activePath}
+            onClose={() => setTreeOpen(false)}
+            onSelect={jumpToFile}
+          />
+        )}
+        <div className="diff-list">
       {files.map((file) => {
         const path = keyOf(file);
         const isCollapsed = collapsed[path];
@@ -277,6 +280,8 @@ export function DiffViewer({
           </div>
         );
       })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -354,6 +359,14 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
   const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
   return (
     <table className="diff-table split">
+      {/* explicit column widths: the first row is a colspan-4 hunk header, so
+          fixed table layout would otherwise fall back to four equal columns */}
+      <colgroup>
+        <col className="col-num" />
+        <col className="col-text" />
+        <col className="col-num" />
+        <col className="col-text" />
+      </colgroup>
       <tbody>
         {rows.map((row, i) => {
           if (row.kind === "hunk") {

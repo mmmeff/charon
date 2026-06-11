@@ -48,19 +48,17 @@ const counts = (f: FileDiff) => {
 };
 
 /**
- * Floating file navigator that slides in from the left of the diff list.
- * Highlights the file currently in view; clicking jumps to it.
+ * File navigator docked left of the diff list (the diff shrinks to make
+ * room). Highlights the file currently in view; clicking jumps to it.
  */
 export function FileTree({
   files,
   activePath,
-  open,
   onClose,
   onSelect,
 }: {
   files: FileDiff[];
   activePath: string | null;
-  open: boolean;
   onClose: () => void;
   onSelect: (path: string) => void;
 }) {
@@ -103,7 +101,7 @@ export function FileTree({
   };
 
   return (
-    <div className={`filetree ${open ? "open" : ""}`}>
+    <div className="filetree">
       <div className="row between" style={{ marginBottom: 6, paddingLeft: 10 }}>
         <strong style={{ fontSize: 12.5 }}>{files.length} files changed</strong>
         <button className="link small" onClick={onClose}>
