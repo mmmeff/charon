@@ -457,6 +457,23 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .ws-section-label::before { content: "▚"; color: var(--orange); opacity: 0.7; font-size: 8px; }
 .ws-section-label::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
 
+/* ⋯ overflow menu — tertiary PR actions */
+.overflow-menu { position: relative; }
+.overflow-pop {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 35;
+  min-width: 170px; padding: 4px;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+.overflow-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; padding: 7px 10px;
+  font-size: 11px; letter-spacing: 0.04em;
+}
+.overflow-item:hover:not(:disabled) { background: rgba(233, 228, 212, 0.06); border: none; }
+.overflow-item.danger { color: var(--red); }
+.overflow-error { color: var(--red); font-size: 10.5px; padding: 4px 10px 6px; max-width: 260px; }
+
 /* reviewer picker — wraps to its own full-width line inside the PR meta row */
 .submit-review { width: 100%; padding: 10px 12px; margin: 4px 0 0; }
 .picker-hint { font-size: 10px; letter-spacing: 0.06em; }

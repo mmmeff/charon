@@ -15,6 +15,7 @@ import { FindingCard, FindingsStrip } from "./Findings";
 import { groupCommentThreads } from "../lib/threads";
 import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels, PrTitle } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
+import { PrOverflowMenu } from "./PrOverflowMenu";
 import { SubmitForReview } from "./SubmitForReview";
 import { useFlow } from "./flow";
 
@@ -163,12 +164,9 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           <span className="subtle">
             +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
           </span>
-          {variant === "draft" && pr.draft && (
-            <>
-              <span style={{ flex: 1 }} />
-              <SubmitForReview pr={pr} />
-            </>
-          )}
+          <span style={{ flex: 1 }} />
+          {variant === "draft" && pr.draft && <SubmitForReview pr={pr} />}
+          <PrOverflowMenu pr={pr} />
         </div>
         <PrDescription pr={pr} />
       </Section>

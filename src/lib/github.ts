@@ -576,6 +576,11 @@ export class GitHubClient {
     });
   }
 
+  /** Close the user's own PR without merging (direct user-authored action). */
+  async closePull(repo: string, number: number): Promise<void> {
+    await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { state: "closed" });
+  }
+
   /** Server-side "Update branch": merge the base branch into the PR head. */
   async updateBranch(repo: string, number: number): Promise<void> {
     await this.json("PUT", `/repos/${repo}/pulls/${number}/update-branch`, {});
