@@ -13,7 +13,7 @@ import { Composer, RunResults } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
 import { groupCommentThreads } from "../lib/threads";
-import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels } from "./PrMeta";
+import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels, PrTitle } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
 import { SubmitForReview } from "./SubmitForReview";
 import { useFlow } from "./flow";
@@ -124,11 +124,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   return (
     <div className="workspace">
       <div className="ws-main" ref={mainRef}>
-      <h2 className="viewtitle">
-        <a href={pr.url} title="Open on GitHub">
-          #{pr.number} {pr.title} <span className="ext">↗</span>
-        </a>
-      </h2>
+      <PrTitle pr={pr} />
       <div className="row" style={{ marginBottom: 12 }}>
         {pr.draft && <Badge color="gray">draft</Badge>}
         {variant === "draft" && pr.draft && <SubmitForReview pr={pr} />}

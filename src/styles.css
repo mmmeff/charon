@@ -445,6 +445,10 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 /* reviewer picker — wraps to its own full-width line inside the PR meta row */
 .submit-review { width: 100%; padding: 10px 12px; margin: 4px 0 0; }
 
+/* rename pencil on the PR title — revealed on hover (own PRs only) */
+.viewtitle .title-edit { opacity: 0; margin-left: 8px; transition: opacity 0.12s; }
+.viewtitle:hover .title-edit { opacity: 1; }
+
 /* ---- CI checks panel ---- */
 .checks-panel { padding: 10px 14px; }
 .checks-title {

@@ -285,7 +285,8 @@ export class GitHubClient {
     } catch {
       /* commit statuses are optional too */
     }
-    return out;
+    // GitHub's checks UI lists alphabetically (case-insensitive); match it
+    return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }
 
   /**
@@ -511,6 +512,20 @@ export class GitHubClient {
   /** Edit the description of the user's own PR (direct user-authored write). */
   async updatePullBody(repo: string, number: number, body: string): Promise<void> {
     await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { body });
+  }
+
+  /** Rename the user's own PR (direct user-authored write). */
+  async updatePullTitle(repo: string, number: number, title: string): Promise<void> {
+    await this.json("PATCH", `/repos/${repo}/pulls/${number}`, { title });
+  }
+
+  /** Recent PR titles — convention examples for the AI title drafter. */
+  async listRecentPullTitles(repo: string, limit = 30): Promise<string[]> {
+    const res = await this.json<any[]>(
+      "GET",
+      `/repos/${repo}/pulls?state=all&sort=created&direction=desc&per_page=${limit}`
+    );
+    return res.map((p) => String(p.title));
   }
 
   /** Repo collaborators — the reviewer candidate pool. */

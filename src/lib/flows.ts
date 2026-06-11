@@ -830,6 +830,68 @@ Respond with ONLY the new PR description markdown — no preamble, no commentary
 }
 
 /**
+ * Draft a PR title with an agent (read-only). Recent PR titles from the repo
+ * are provided as convention examples so the suggestion matches house style.
+ * Resolves with a single-line title — the caller drops it into the title
+ * editor for the user to review and save.
+ */
+export async function runTitleDraft(
+  ctx: FlowContext,
+  pr: PrSummary,
+  instruction: string,
+  model?: string
+): Promise<string> {
+  const [diffText, recentTitles] = await Promise.all([
+    ctx.gh.getPullDiff(ctx.repo, pr.number),
+    ctx.gh.listRecentPullTitles(ctx.repo).catch(() => [] as string[]),
+  ]);
+  const examples = recentTitles.filter((t) => t !== pr.title).slice(0, 25);
+  return new Promise((resolve, reject) => {
+    const base = `You are PR Copilot's writing agent. Draft a title for the user's own PR #${pr.number}
+in ${ctx.repo} (branch ${pr.headRef} → ${pr.baseRef}).
+
+INSTRUCTION: ${instruction.trim() || "Write a clear, specific title that describes the change."}
+
+CURRENT TITLE: ${pr.title}
+
+PROJECT CONVENTION — recent PR titles from this repo; match their style (prefixes, tense, ticket
+tags, capitalization, length):
+${examples.length ? examples.map((t) => `- ${t}`).join("\n") : "(no examples available — use a concise imperative title)"}
+
+PR description:
+${truncate(pr.body || "(none)", 3000)}
+
+THE DIFF (ground truth for what changed):
+\`\`\`diff
+${truncate(diffText, MAX_DIFF_CHARS)}
+\`\`\`
+
+Respond with ONLY the new title — one line, no quotes, no preamble, no markdown.`;
+    const prompt = applySkills(base, ctx.skills, ctx.config.skills.rewrite);
+    startAgent({
+      kind: "rewrite",
+      relation: "title draft",
+      repo: ctx.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prompt,
+      model: resolveModel(ctx, model),
+      binary: ctx.global.cursorBinary,
+      mode: "ask",
+      onDone: (run) => {
+        const line = cleanResultText(run.resultText)
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)[0]
+          ?.replace(/^["'`]+|["'`]+$/g, "");
+        if (line) resolve(line);
+        else reject(new Error("the agent produced no title"));
+      },
+    }).catch(reject);
+  });
+}
+
+/**
  * Regenerate a piece of proposal text — either by custom instruction or via
  * the humanize skill. Resolves with the rewritten text.
  */

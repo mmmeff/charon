@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { usePrData } from "../lib/events";
-import { runAddressComment, runDescriptionDraft } from "../lib/flows";
+import { runAddressComment, runDescriptionDraft, runTitleDraft } from "../lib/flows";
 import type { ReviewThreadInfo } from "../lib/github";
 import { useUiStore } from "../lib/store";
 import type { CommentInfo, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
@@ -90,6 +90,107 @@ function ResolveButton({ pr, thread }: { pr: PrSummary; thread: ReviewThreadInfo
     >
       {busy ? <Spinner /> : thread.isResolved ? "unresolve" : "✓ resolve"}
     </button>
+  );
+}
+
+/**
+ * The workspace PR title: a link to GitHub, and on the user's own PRs a
+ * rename control with an AI suggestion that follows the repo's title
+ * conventions. Saving PATCHes the title directly as the user.
+ */
+export function PrTitle({ pr }: { pr: PrSummary }) {
+  const { ctx } = useFlow();
+  const mine = pr.author === ctx.gh.login;
+  const [editing, setEditing] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const startEdit = (withAi = false) => {
+    setDraft(pr.title);
+    setError("");
+    setAiOpen(withAi);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    const title = draft.trim();
+    if (!title || title === pr.title) {
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await ctx.gh.updatePullTitle(ctx.repo, pr.number, title);
+      // optimistic: rename everywhere it appears; the next poll reconciles
+      const d = usePrData.getState();
+      const fix = (l: PrSummary[]) => l.map((p) => (p.number === pr.number ? { ...p, title } : p));
+      d.patch({ myDrafts: fix(d.myDrafts), myOpen: fix(d.myOpen), reviewQueue: fix(d.reviewQueue) });
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <h2 className="viewtitle">
+        <a href={pr.url} title="Open on GitHub">
+          #{pr.number} {pr.title} <span className="ext">↗</span>
+        </a>
+        {mine && (
+          <button className="link small title-edit" title="Rename PR" onClick={() => startEdit()}>
+            ✎
+          </button>
+        )}
+      </h2>
+    );
+  }
+
+  return (
+    <div className="card" style={{ padding: 10, marginBottom: 10 }}>
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !busy) void save();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        placeholder="PR title"
+        style={{ width: "100%", fontWeight: 600 }}
+      />
+      <div className="row" style={{ marginTop: 6 }}>
+        <button className="small primary" disabled={busy} onClick={() => void save()}>
+          {busy ? <Spinner /> : null} Save title
+        </button>
+        <button className="small" onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+        {!aiOpen && (
+          <button className="link small" onClick={() => setAiOpen(true)}>
+            ✦ suggest with AI
+          </button>
+        )}
+        <span className="subtle">⏎ to save — renames on GitHub directly, as you</span>
+        {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
+      </div>
+      {aiOpen && (
+        <AgentLaunchForm
+          label="Suggest title"
+          placeholder="Optional: guidance, e.g. 'conventional-commits style', 'mention the ticket'  ( / for skills )"
+          onRun={async (model, instruction) => {
+            // suggestion lands in the input — the user reviews, then saves
+            setDraft(await runTitleDraft(ctx, pr, instruction, model));
+          }}
+          onClose={() => setAiOpen(false)}
+        />
+      )}
+    </div>
   );
 }
 
