@@ -494,8 +494,12 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 /* control center — the PR's state-aware action surface at the top of the
    activity panel: submit/merge/automerge/branch-maintenance/approve/close */
 .control-center {
-  margin-bottom: 16px; padding: 0;
+  margin-bottom: 0; padding: 0;
   display: flex; flex-direction: column; gap: 8px;
+}
+.cc-divider {
+  border: none; border-top: 1px solid var(--border-subtle);
+  margin: 16px 0 14px;
 }
 .control-center .row { gap: 6px; }
 .control-center select { max-width: 100%; }
@@ -923,7 +927,7 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
   background-size: 7px 7px;
 }
 .ws-activity-inner { overflow-y: auto; padding: 12px 12px 60px; min-height: 0; flex: 1; }
-.act-item { border-bottom: 1px solid var(--border-subtle); padding: 8px 0; font-size: 12px; }
+.act-item { border-bottom: 1px solid var(--border-subtle); padding: 12px 0; font-size: 12px; }
 .act-item:last-child { border-bottom: none; }
 .act-reply {
   margin: 6px 0 0 14px; padding-left: 10px; border-left: 2px solid var(--border);
@@ -934,7 +938,7 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
 .act-top { margin-bottom: 3px; }
 
 /* compact non-comment timeline entries (pushed / merged / labeled …) */
-.act-event {
+.act-event { padding: 6px 0; 
   padding: 6px 0; font-size: 11.5px;
   border-bottom: 1px solid var(--border-subtle);
   min-width: 0;

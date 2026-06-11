@@ -449,6 +449,7 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
       {handle}
       <div className="ws-activity-inner">
       <ControlCenter pr={pr} />
+      <hr className="cc-divider" />
       <div className="subtle" style={{ marginBottom: 8, fontWeight: 600 }}>
         Activity ({count})
       </div>
