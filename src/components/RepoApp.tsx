@@ -42,6 +42,23 @@ export function RepoApp({ repo }: { repo: string }) {
   const agentOrder = useAgentStore((s) => s.order);
   const runs = useAgentStore((s) => s.runs);
   const scrolledPr = useUiStore((s) => s.scrolledPrTitle);
+  // keep the breadcrumb mounted briefly on hide so it can animate out
+  const [crumb, setCrumb] = useState(scrolledPr);
+  const [crumbLeaving, setCrumbLeaving] = useState(false);
+  useEffect(() => {
+    if (scrolledPr) {
+      setCrumb(scrolledPr);
+      setCrumbLeaving(false);
+    } else if (crumb) {
+      setCrumbLeaving(true);
+      const t = setTimeout(() => {
+        setCrumb(null);
+        setCrumbLeaving(false);
+      }, 180);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrolledPr]);
   useNow(); // keeps "synced Xs ago" ticking without interaction
 
   useEffect(() => {
@@ -162,15 +179,15 @@ export function RepoApp({ repo }: { repo: string }) {
           <div className="topstrip">
             <span className="brand">SWITCHYARD</span>
             <span className="dim">/ {repo}</span>
-            {scrolledPr && (
+            {crumb && (
               <button
-                className="topstrip-pr"
+                className={`topstrip-pr ${crumbLeaving ? "out" : "in"}`}
                 title="Jump to top"
                 onClick={() =>
                   document.querySelector(".ws-main")?.scrollTo({ top: 0, behavior: "smooth" })
                 }
               >
-                / #{scrolledPr.number} {scrolledPr.title}
+                / #{crumb.number} {crumb.title}
               </button>
             )}
             <span className="spacer" />

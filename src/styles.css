@@ -253,10 +253,12 @@ h3, h4 {
   color: var(--fg-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   max-width: 38vw;
-  animation: tip-in 0.15s ease;
 }
 .topstrip-pr:hover { color: var(--orange); background: none; border: none; }
-@keyframes tip-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+.topstrip-pr.in { animation: crumb-in 0.18s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.topstrip-pr.out { animation: crumb-out 0.18s ease forwards; }
+@keyframes crumb-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@keyframes crumb-out { to { opacity: 0; transform: translateY(7px); } }
 .pollstatus {
   color: var(--fg-subtle); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
 }
