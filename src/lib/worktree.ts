@@ -174,6 +174,33 @@ export async function createWorktree(
   });
 }
 
+/**
+ * Read-only worktree at the PR head, for review agents that need the full
+ * project to investigate — not just the diff. Same-repo PRs reuse the
+ * standard branch slots (dep caches and all); fork PRs check out GitHub's
+ * `pull/<n>/head` ref detached in a throwaway worktree, since their branch
+ * doesn't exist in this repo.
+ */
+export async function createReviewWorktree(
+  gh: GitHubClient,
+  repo: string,
+  configuredClonePath: string,
+  pr: PrSummary
+): Promise<Worktree> {
+  if (!pr.headRepoFullName || pr.headRepoFullName === repo) {
+    return createWorktree(gh, repo, configuredClonePath, pr);
+  }
+  const clonePath = await ensureClone(gh, repo, configuredClonePath);
+  const dataDir = await native.appDataDir();
+  return withCloneLock(clonePath, async () => {
+    await git(["fetch", "origin", `pull/${pr.number}/head`], clonePath);
+    const tmpPath = `${dataDir}/worktrees/${sanitize(repo)}/pr-${pr.number}-${uid()}`;
+    await git(["worktree", "add", "--detach", tmpPath, pr.headSha], clonePath);
+    leases.add(tmpPath);
+    return { path: tmpPath, localBranch: "", prBranch: pr.headRef, clonePath, persistent: false };
+  });
+}
+
 /** Post-run cleanup: persistent worktrees stay for reuse; temp ones go. */
 export async function releaseWorktree(wt: Worktree): Promise<void> {
   leases.delete(wt.path);
@@ -184,10 +211,12 @@ export async function releaseWorktree(wt: Worktree): Promise<void> {
     } catch (e) {
       console.warn("worktree cleanup failed", e);
     }
-    try {
-      await git(["branch", "-D", wt.localBranch], wt.clonePath);
-    } catch {
-      /* branch may not exist */
+    if (wt.localBranch) {
+      try {
+        await git(["branch", "-D", wt.localBranch], wt.clonePath);
+      } catch {
+        /* branch may not exist */
+      }
     }
   });
 }

@@ -16,7 +16,31 @@ import type { GitHubClient } from "./github";
 import { applySkills } from "./skills";
 import { interpolate, prVars, truncate, uid } from "./template";
 import { useRepoStore } from "./store";
-import { createWorktree, releaseWorktree, type Worktree } from "./worktree";
+import { createReviewWorktree, createWorktree, releaseWorktree, type Worktree } from "./worktree";
+
+/**
+ * Best-effort full-project checkout for review agents. Reviews must not fail
+ * just because no clone can be provisioned — they degrade to diff-only.
+ */
+async function tryReviewWorktree(ctx: FlowContext, pr: PrSummary): Promise<Worktree | null> {
+  try {
+    return await createReviewWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);
+  } catch (e) {
+    console.warn("review worktree unavailable — falling back to diff-only review", e);
+    return null;
+  }
+}
+
+const reviewWorkspaceBlock = (wt: Worktree | null, pr: PrSummary) =>
+  wt
+    ? `
+Your working directory is a checkout of the FULL repository at this PR's head commit (${pr.headSha}).
+Investigate freely before judging the diff: read the surrounding code, trace callers and implementations,
+check how similar things are done elsewhere in the project. You are running read-only — never modify files.
+`
+    : `
+(No local checkout is available — review from the diff and PR context alone.)
+`;
 
 export interface FlowContext {
   gh: GitHubClient;
@@ -407,8 +431,9 @@ ${selection.snippet}
 \`\`\`
 Every comment must be about code in (or directly broken by) this region; anchor comments to lines within it.\n`
     : "";
+  const wt = await tryReviewWorktree(ctx, pr);
   const base = `You are PR Copilot's review agent. Review PR #${pr.number} ("${pr.title}") by ${pr.author} in ${ctx.repo}.
-
+${reviewWorkspaceBlock(wt, pr)}
 TASK:
 ${task}
 ${scopeBlock}
@@ -427,23 +452,33 @@ ${HITL_CONTRACT}
 ${REVIEW_CONTRACT}`;
 
   const prompt = applySkills(base, ctx.skills, ctx.config.skills.review);
-  return startAgent({
-    kind: "review",
-    relation: selection
-      ? `review (${selection.path}:${selection.startLine}–${selection.endLine})`
-      : "review",
-    repo: ctx.repo,
-    prNumber: pr.number,
-    prTitle: pr.title,
-    prompt,
-    model: resolveModel(ctx, model, "review"),
-    binary: ctx.global.cursorBinary,
-    mode: "ask", // read-only: a review must never touch code or GitHub
-    onDone: (run) =>
-      selection
-        ? mergeIntoReviewProposal(ctx, pr, run.id, run.resultText, diffText)
-        : createReviewProposal(ctx, pr, run.id, run.resultText, diffText, "automated self-review"),
-  });
+  try {
+    return await startAgent({
+      kind: "review",
+      relation: selection
+        ? `review (${selection.path}:${selection.startLine}–${selection.endLine})`
+        : "review",
+      repo: ctx.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prompt,
+      model: resolveModel(ctx, model, "review"),
+      binary: ctx.global.cursorBinary,
+      cwd: wt?.path,
+      mode: "ask", // read-only: a review must never touch code or GitHub
+      onDone: async (run) => {
+        try {
+          if (selection) await mergeIntoReviewProposal(ctx, pr, run.id, run.resultText, diffText);
+          else await createReviewProposal(ctx, pr, run.id, run.resultText, diffText, "automated self-review");
+        } finally {
+          if (wt) await releaseWorktree(wt);
+        }
+      },
+    });
+  } catch (e) {
+    if (wt) await releaseWorktree(wt); // spawn failure: free the slot lease
+    throw e;
+  }
 }
 
 /**
@@ -469,9 +504,10 @@ ${selection.snippet}
 \`\`\`
 Every finding must be about code in (or directly broken by) this region; anchor findings to lines within it.\n`
     : "";
+  const wt = await tryReviewWorktree(ctx, pr);
   const base = `You are PR Copilot's review agent. The user wants a critical self-review of THEIR OWN PR #${pr.number}
 ("${pr.title}") in ${ctx.repo} before others see it. Find real problems they should fix.
-
+${reviewWorkspaceBlock(wt, pr)}
 TASK:
 ${task?.trim() || "Review the diff and propose inline comments with severity and confidence."}
 ${scopeBlock}
@@ -488,48 +524,58 @@ ${diff}
 ${HITL_CONTRACT}
 ${REVIEW_CONTRACT}`;
   const prompt = applySkills(base, ctx.skills, ctx.config.skills.review);
-  return startAgent({
-    kind: "review",
-    relation: selection
-      ? `self-review (${selection.path}:${selection.startLine}–${selection.endLine})`
-      : "self-review",
-    repo: ctx.repo,
-    prNumber: pr.number,
-    prTitle: pr.title,
-    prompt,
-    model: resolveModel(ctx, model, "review"),
-    binary: ctx.global.cursorBinary,
-    mode: "ask",
-    onDone: async (run) => {
-      const parsed = parseReviewOutput(run.resultText, diffText);
-      const diffFiles = parseUnifiedDiff(diffText);
-      const findings: ReviewFinding[] = parsed.comments.map((c) => ({
-        key: uid("find-"),
-        prNumber: pr.number,
-        headSha: pr.headSha,
-        path: c.path,
-        line: c.line,
-        startLine: c.startLine,
-        side: c.side,
-        severity: c.severity,
-        confidence: c.confidence,
-        body: c.body,
-        suggestion: c.suggestion,
-        anchorText: lineTextAt(diffFiles, c.path, c.side, c.line) ?? undefined,
-        status: "open",
-        createdAt: Date.now(),
-      }));
-      const note = parsed.dropped.length
-        ? ` (${parsed.dropped.length} unanchorable finding(s) dropped: ${parsed.dropped.join(", ")})`
-        : "";
-      // scoped reviews merge into existing findings; full reviews replace them
-      if (selection) {
-        await useRepoStore.getState().mergeFindings(pr.number, findings);
-      } else {
-        await useRepoStore.getState().setFindings(pr.number, findings, parsed.summary + note);
-      }
-    },
-  });
+  try {
+    return await startAgent({
+      kind: "review",
+      relation: selection
+        ? `self-review (${selection.path}:${selection.startLine}–${selection.endLine})`
+        : "self-review",
+      repo: ctx.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prompt,
+      model: resolveModel(ctx, model, "review"),
+      binary: ctx.global.cursorBinary,
+      cwd: wt?.path,
+      mode: "ask",
+      onDone: async (run) => {
+        try {
+          const parsed = parseReviewOutput(run.resultText, diffText);
+          const diffFiles = parseUnifiedDiff(diffText);
+          const findings: ReviewFinding[] = parsed.comments.map((c) => ({
+            key: uid("find-"),
+            prNumber: pr.number,
+            headSha: pr.headSha,
+            path: c.path,
+            line: c.line,
+            startLine: c.startLine,
+            side: c.side,
+            severity: c.severity,
+            confidence: c.confidence,
+            body: c.body,
+            suggestion: c.suggestion,
+            anchorText: lineTextAt(diffFiles, c.path, c.side, c.line) ?? undefined,
+            status: "open",
+            createdAt: Date.now(),
+          }));
+          const note = parsed.dropped.length
+            ? ` (${parsed.dropped.length} unanchorable finding(s) dropped: ${parsed.dropped.join(", ")})`
+            : "";
+          // scoped reviews merge into existing findings; full reviews replace them
+          if (selection) {
+            await useRepoStore.getState().mergeFindings(pr.number, findings);
+          } else {
+            await useRepoStore.getState().setFindings(pr.number, findings, parsed.summary + note);
+          }
+        } finally {
+          if (wt) await releaseWorktree(wt);
+        }
+      },
+    });
+  } catch (e) {
+    if (wt) await releaseWorktree(wt); // spawn failure: free the slot lease
+    throw e;
+  }
 }
 
 const findingInstruction = (f: ReviewFinding) =>
