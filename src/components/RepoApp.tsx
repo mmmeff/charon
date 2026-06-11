@@ -5,6 +5,7 @@ import { RepoPoller, usePrData } from "../lib/events";
 import type { FlowContext } from "../lib/flows";
 import { loadSkills } from "../lib/skills";
 import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore } from "../lib/store";
+import { native } from "../lib/tauri";
 import { timeAgo } from "./common";
 import { ActivityView } from "./views/ActivityView";
 import { BabysitView } from "./views/BabysitView";
@@ -34,6 +35,8 @@ export function RepoApp({ repo }: { repo: string }) {
 
   useEffect(() => {
     void repoStore.init(repo);
+    // remember this repo so the next app boot reopens it directly
+    void useGlobalConfig.getState().setLastRepo(repo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo]);
 
@@ -104,6 +107,14 @@ export function RepoApp({ repo }: { repo: string }) {
             <span className="dim">{repo.split("/")[0]}/</span>
             {repo.split("/")[1]}
           </span>
+          <button
+            className="small"
+            title="Switch repository"
+            style={{ marginRight: 8 }}
+            onClick={() => void native.openLauncherWindow()}
+          >
+            repos
+          </button>
           {tabs.map((t) => (
             <button
               key={t.id}

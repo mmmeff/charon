@@ -20,6 +20,8 @@ export interface GlobalConfig {
   defaultModel: string;
   /** Repos the user has added, "owner/name" */
   repos: string[];
+  /** Most recently opened repo — auto-opened on next app boot */
+  lastRepo: string;
   /** Extra directories to scan for skills, beyond ~/.cursor */
   extraSkillDirs: string[];
 }

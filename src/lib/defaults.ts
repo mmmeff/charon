@@ -325,6 +325,7 @@ export function defaultGlobalConfig(): GlobalConfig {
     modelLabels: { auto: "Auto" },
     defaultModel: "auto",
     repos: [],
+    lastRepo: "",
     extraSkillDirs: [],
   };
 }

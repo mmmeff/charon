@@ -412,6 +412,34 @@ fn open_repo_window(app: tauri::AppHandle, repo: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Re-open the repo picker (e.g. from a repo window). `?picker=1` suppresses
+/// the boot-time auto-open of the last repo so the picker actually shows.
+#[tauri::command]
+fn open_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("launcher") {
+        win.show().map_err(|e| e.to_string())?;
+        win.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "launcher",
+        tauri::WebviewUrl::App("index.html?picker=1".into()),
+    )
+    .title("PR Copilot")
+    .inner_size(760.0, 680.0)
+    .min_inner_size(560.0, 480.0)
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Close the window that invoked this command.
+#[tauri::command]
+fn close_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -428,7 +456,9 @@ pub fn run() {
             save_blob,
             app_data_dir,
             list_cursor_skills,
-            open_repo_window
+            open_repo_window,
+            open_launcher_window,
+            close_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

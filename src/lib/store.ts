@@ -23,6 +23,7 @@ interface GlobalState {
   loaded: boolean;
   load(): Promise<GlobalConfig | null>;
   save(cfg: GlobalConfig): Promise<void>;
+  setLastRepo(repo: string): Promise<void>;
 }
 
 export const useGlobalConfig = create<GlobalState>((set) => ({
@@ -35,6 +36,15 @@ export const useGlobalConfig = create<GlobalState>((set) => ({
     return config;
   },
   async save(cfg) {
+    set({ config: cfg });
+    await native.saveBlob("global.json", JSON.stringify(cfg, null, 2));
+  },
+  // read-modify-write against the file so concurrent repo windows don't
+  // clobber each other's global config changes
+  async setLastRepo(repo) {
+    const raw = await native.loadBlob("global.json");
+    if (!raw) return;
+    const cfg: GlobalConfig = { ...defaultGlobalConfig(), ...JSON.parse(raw), lastRepo: repo };
     set({ config: cfg });
     await native.saveBlob("global.json", JSON.stringify(cfg, null, 2));
   },

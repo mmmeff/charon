@@ -86,6 +86,14 @@ export const native = {
     return invoke("open_repo_window", { repo });
   },
 
+  openLauncherWindow(): Promise<void> {
+    return invoke("open_launcher_window");
+  },
+
+  closeThisWindow(): Promise<void> {
+    return invoke("close_window");
+  },
+
   onAgentStream(cb: (ev: AgentStreamEvent) => void): Promise<UnlistenFn> {
     return listen<AgentStreamEvent>("agent-stream", (e) => cb(e.payload));
   },

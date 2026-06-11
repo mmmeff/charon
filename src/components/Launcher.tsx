@@ -162,16 +162,23 @@ function RepoList({
     try {
       if (!(await gh.repoExists(full))) throw new Error(`Repository ${full} not found or not accessible.`);
       if (!config.repos.includes(full)) {
-        await save({ ...config, repos: [...config.repos, full] });
+        await save({ ...config, repos: [...config.repos, full], lastRepo: full });
       }
       setQuery("");
       setSuggestions([]);
-      await native.openRepoWindow(full);
+      await openRepo(full);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
+  };
+
+  // open the repo window and retire the picker — it can be reopened from any
+  // repo window's "repos" button
+  const openRepo = async (full: string) => {
+    await native.openRepoWindow(full);
+    await native.closeThisWindow();
   };
 
   return (
@@ -226,13 +233,13 @@ function RepoList({
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              void native.openRepoWindow(r);
+              void openRepo(r);
             }}
           >
             {r}
           </a>
           <div className="row">
-            <button className="small primary" onClick={() => void native.openRepoWindow(r)}>
+            <button className="small primary" onClick={() => void openRepo(r)}>
               Open
             </button>
             <button
