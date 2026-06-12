@@ -94,70 +94,78 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
 
   return (
     <>
-      {(methods?.length ?? 0) > 1 && (
-        <select
-          value={method}
-          onChange={(e) => setMethod(e.target.value as MergeMethod)}
-          title="Merge method"
-        >
-          {(methods ?? []).map((m) => (
-            <option key={m} value={m}>
-              {METHOD_LABELS[m]}
-            </option>
+      <div className="row cc-actions">
+        {showMerge &&
+          (confirming ? (
+            <>
+              <button
+                className={`small ${blocked ? "danger" : "primary"}`}
+                disabled={busy}
+                onClick={() => void merge()}
+              >
+                {busy ? <Spinner /> : null} Confirm {blocked ? "override " : ""}
+                {METHOD_LABELS[method].toLowerCase()}
+              </button>
+              <button className="small" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              {blocked ? (
+                <button
+                  className="small danger"
+                  disabled={busy || !methods}
+                  title={`${blockReason} — merging overrides branch protection (admin)`}
+                  onClick={() => setConfirming(true)}
+                >
+                  ⚠ Override merge…
+                </button>
+              ) : (
+                <button
+                  className="small primary"
+                  disabled={conflicted || !methods || busy}
+                  title={conflicted ? "Resolve conflicts first" : METHOD_LABELS[method]}
+                  onClick={() => setConfirming(true)}
+                >
+                  Merge…
+                </button>
+              )}
+              {(methods?.length ?? 0) > 1 && (
+                <select
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value as MergeMethod)}
+                  title="Merge method"
+                >
+                  {(methods ?? []).map((m) => (
+                    <option key={m} value={m}>
+                      {METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </>
           ))}
-        </select>
-      )}
-      {showMerge &&
-        (confirming ? (
-          <>
-            <button
-              className={`small ${blocked ? "danger" : "primary"}`}
-              disabled={busy}
-              onClick={() => void merge()}
-            >
-              {busy ? <Spinner /> : null} Confirm {blocked ? "override " : ""}
-              {METHOD_LABELS[method].toLowerCase()}
-            </button>
-            <button className="small" onClick={() => setConfirming(false)}>
-              Cancel
-            </button>
-          </>
-        ) : blocked ? (
-          <button
-            className="small danger"
-            disabled={busy || !methods}
-            title={`${blockReason} — merging overrides branch protection (admin)`}
-            onClick={() => setConfirming(true)}
-          >
-            ⚠ Override merge…
-          </button>
-        ) : (
-          <button
-            className="small primary"
-            disabled={conflicted || !methods || busy}
-            title={conflicted ? "Resolve conflicts first" : METHOD_LABELS[method]}
-            onClick={() => setConfirming(true)}
-          >
-            Merge…
-          </button>
-        ))}
-      {!showMerge && (
-        <span className="subtle" style={{ fontSize: 11 }} title={blockReason}>
-          merge blocked — {blockReason}
-        </span>
-      )}
-      <button
-        className="small"
-        disabled={busy}
-        title={
-          pr.autoMerge
-            ? "Disarm auto-merge"
-            : `Merge automatically (${METHOD_LABELS[method].toLowerCase()}) once requirements are met`
-        }
-        onClick={() => void toggleAutoMerge()}
-      >
-        ⏻ {pr.autoMerge ? "Disable automerge" : "Automerge"}
-      </button>
+        {!showMerge && (
+          <span className="subtle" style={{ fontSize: 11 }} title={blockReason}>
+            merge blocked — {blockReason}
+          </span>
+        )}
+      </div>
+      <div className="row cc-actions">
+        <button
+          className="small"
+          disabled={busy}
+          title={
+            pr.autoMerge
+              ? "Disarm auto-merge"
+              : `Merge automatically (${METHOD_LABELS[method].toLowerCase()}) once requirements are met`
+          }
+          onClick={() => void toggleAutoMerge()}
+        >
+          ⏻ {pr.autoMerge ? "Disable automerge" : "Automerge"}
+        </button>
+      </div>
       {error && <span style={{ color: "var(--red)", fontSize: 12 }}>{error}</span>}
     </>
   );

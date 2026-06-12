@@ -6,7 +6,7 @@ import { notify } from "../lib/notify";
 import { useAgentStore } from "../lib/store";
 import { interpolate, prVars } from "../lib/template";
 import type { PrSummary } from "../types";
-import { Badge, CiBadge, MergeBadge, Spinner } from "./common";
+import { Badge, Spinner } from "./common";
 import { MergeControl } from "./MergeControl";
 import { SubmitForReview } from "./SubmitForReview";
 import { useFlow } from "./flow";
@@ -100,38 +100,74 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
       void poller.refreshPr(pr.number);
     });
 
+  // status tokens: quiet colored text, deliberately NOT box-shaped — boxes
+  // mean "clickable" in this panel
+  const tokens: { text: string; color: string; title?: string }[] = [
+    mine
+      ? { text: pr.draft ? "draft" : "open", color: pr.draft ? "var(--fg-muted)" : "var(--steel)" }
+      : { text: `review · ${pr.author}`, color: "var(--rust)" },
+  ];
+  if (checks.length > 0) {
+    const failing = checks.some((c) => c.conclusion === "failure" || c.conclusion === "error");
+    const running = checks.some((c) => !c.conclusion);
+    const green = checks.every(
+      (c) => c.conclusion === "success" || c.conclusion === "skipped" || c.conclusion === "neutral"
+    );
+    tokens.push(
+      failing
+        ? { text: "ci failing", color: "var(--red)" }
+        : running
+          ? { text: "ci running", color: "var(--amber)" }
+          : green
+            ? { text: "ci green", color: "var(--acid)" }
+            : { text: "ci mixed", color: "var(--amber)" }
+    );
+  }
+  if (mine) {
+    const ms: Record<string, { text: string; color: string }> = {
+      dirty: { text: "conflicts", color: "var(--red)" },
+      behind: { text: "behind base", color: "var(--amber)" },
+      blocked: { text: "blocked", color: "var(--amber)" },
+      clean: { text: "mergeable", color: "var(--acid)" },
+    };
+    const m = ms[pr.mergeableState];
+    if (m) tokens.push(m);
+  }
+  if (pr.autoMerge) {
+    tokens.push({
+      text: "⏻ automerge",
+      color: "var(--acid)",
+      title: "Auto-merge is armed — merges once all requirements pass",
+    });
+  }
+
   return (
     <div className="control-center">
       {/* ── state at a glance ── */}
-      <div className="row">
-        <Badge color={mine ? (pr.draft ? "gray" : "blue") : "purple"}>
-          {mine ? (pr.draft ? "draft" : "open") : "review"}
-        </Badge>
-        {!mine && <span className="subtle">by {pr.author}</span>}
-        <CiBadge checks={checks} />
-        {mine && <MergeBadge state={pr.mergeableState} />}
-        {pr.autoMerge && (
-          <Badge color="green" title="Auto-merge is armed — merges once all requirements pass">
-            ⏻
-          </Badge>
-        )}
+      <div className="cc-status">
+        {tokens.map((t, i) => (
+          <span key={t.text}>
+            {i > 0 && <span className="sep">·&nbsp;&nbsp;</span>}
+            <span style={{ color: t.color }} title={t.title}>
+              {t.text}
+            </span>
+          </span>
+        ))}
       </div>
 
       {mine ? (
         <>
           {/* ── primary action by state ── */}
           {pr.draft ? (
-            <div className="row">
+            <div className="row cc-actions">
               <SubmitForReview pr={pr} />
             </div>
           ) : (
-            <div className="row">
-              <MergeControl pr={pr} />
-            </div>
+            <MergeControl pr={pr} />
           )}
 
           {/* ── branch maintenance ── */}
-          <div className="row">
+          <div className="row cc-actions">
             {pr.mergeableState === "dirty" ? (
               <button className="small" disabled={busy} onClick={() => void resolveConflicts()}>
                 {busy ? <Spinner /> : null} Resolve conflicts
