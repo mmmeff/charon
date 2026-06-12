@@ -23,6 +23,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and release (e.g. v0.3.0); empty builds main"
+        required: false
+        type: string
   workflow_call:
     inputs:
       tag:
@@ -101,15 +106,20 @@ jobs:
 
       # The bundler signs whenever APPLE_CERTIFICATE is *set* — even to "" —
       # and a missing repo secret expands to exactly that, killing the build
-      # at `security import`. So the Apple env only gets exported when the
-      # secrets actually exist; until then releases build unsigned.
+      # at `security import`. The secrets context isn't allowed in step-level
+      # `if:` expressions (it breaks workflow parsing), so the guard lives in
+      # the shell: the Apple env only reaches the build step when the secrets
+      # are actually non-empty. Until then releases build unsigned.
       - name: Enable Apple code signing (when cert secret is configured)
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "APPLE_CERTIFICATE secret not set; building unsigned."
+            exit 0
+          fi
           {
             echo "APPLE_CERTIFICATE<<__APPLE_EOF__"
             echo "$APPLE_CERTIFICATE"
@@ -119,12 +129,15 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Enable notarization (when Apple ID secrets are configured)
-        if: ${{ secrets.APPLE_ID != '' }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          if [ -z "$APPLE_ID" ]; then
+            echo "APPLE_ID secret not set; skipping notarization."
+            exit 0
+          fi
           {
             echo "APPLE_ID=$APPLE_ID"
             echo "APPLE_PASSWORD=$APPLE_PASSWORD"

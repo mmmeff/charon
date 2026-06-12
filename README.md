@@ -117,9 +117,9 @@ entries — the engine never changes.
 ## Getting started
 
 **Download:** grab the latest macOS DMG (universal — Apple Silicon + Intel) from
-[Releases](../../releases/latest). The app isn't code-signed yet; on first launch right-click →
-Open, or clear the quarantine flag with `xattr -cr /Applications/Charon.app`. You'll still need the
-[Cursor CLI](https://cursor.com/cli) (`cursor-agent login`) for agent runs.
+[Releases](../../releases/latest). Builds are code-signed and notarized, so it opens like any
+other app. You'll need the [Cursor CLI](https://cursor.com/cli) (`cursor-agent login`) for
+agent runs.
 
 **Or build from source** — prerequisites: **Node 18+**, **Rust (stable)**, and the Cursor CLI:
 
