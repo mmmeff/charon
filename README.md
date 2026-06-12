@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mmmeff.github.io/charon/"><b>mmmeff.github.io/charon</b></a> · <a href="../../releases/latest">Download for macOS</a>
+  <a href="https://charon.sh"><b>charon.sh</b></a> · <a href="../../releases/latest">Download for macOS</a>
 </p>
 
 <p align="center">

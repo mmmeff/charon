@@ -7,8 +7,10 @@
 <meta name="description" content="AI made writing code cheap. Merging it is the new bottleneck. Charon is a desktop control room: agents do the legwork, you make the calls."/>
 <meta property="og:title" content="Charon — human-in-the-loop agents for pull requests"/>
 <meta property="og:description" content="A desktop control room for the PR bottleneck. Agents fix CI, resolve conflicts, and draft reviews — nothing ships without your approval."/>
-<meta property="og:image" content="https://mmmeff.github.io/charon/assets/open-prs.png"/>
+<meta property="og:image" content="https://charon.sh/assets/open-prs.png"/>
 <meta property="og:type" content="website"/>
+<meta property="og:url" content="https://charon.sh/"/>
+<link rel="canonical" href="https://charon.sh/"/>
 <link rel="icon" type="image/svg+xml" href="assets/app-icon.svg"/>
 <style>
 :root{
@@ -130,7 +132,6 @@ header::after{
   }
   nav{padding:12px 16px}
   nav .links{gap:12px;font-size:11px}
-  nav .links a:not(.dl):not(:last-of-type){display:none}
 }
 
 /* ---------- ticker ---------- */
@@ -209,6 +210,25 @@ h2 .a{color:var(--acid)}
   box-shadow:0 24px 60px rgba(0,0,0,.5);
   position:relative;
 }
+.fshot img{cursor:zoom-in;transition:filter .15s ease}
+.fshot img:hover{filter:brightness(1.08)}
+.lightbox{
+  position:fixed;inset:0;z-index:200;
+  display:flex;align-items:center;justify-content:center;
+  padding:3vmin;cursor:zoom-out;
+  background:color-mix(in srgb, var(--ink) 94%, transparent);
+  backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .18s ease;
+}
+.lightbox.open{opacity:1;pointer-events:auto}
+.lightbox img{
+  max-width:100%;max-height:100%;object-fit:contain;
+  border:1px solid var(--line);box-shadow:0 32px 90px rgba(0,0,0,.7);
+}
+.lightbox .lb-cap{
+  position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
+  font-size:11px;letter-spacing:.22em;color:var(--bone-dim);text-transform:uppercase;
+}
 .fshot::before{
   content:attr(data-cap);
   position:absolute;top:-26px;left:0;
@@ -273,9 +293,22 @@ h2 .a{color:var(--acid)}
   position:relative;text-align:center;padding:140px 28px;overflow:hidden;
 }
 #outro-canvas{position:absolute;inset:0;width:100%;height:100%}
-.outro-inner{position:relative;z-index:2}
+.outro-inner{
+  position:relative;z-index:2;
+  display:inline-block;
+  background:color-mix(in srgb, var(--ink) 90%, transparent);
+  backdrop-filter:blur(5px);
+  border:1px solid var(--line);
+  padding:54px 72px;
+}
+.outro-inner::before,.outro-inner::after{
+  content:"+";position:absolute;color:var(--bone-dim);font-size:13px;line-height:1;
+}
+.outro-inner::before{top:-7px;left:-5px}
+.outro-inner::after{bottom:-7px;right:-5px}
 .outro h2{margin-bottom:14px}
 .outro p{color:var(--bone-dim);font-size:14px;margin-bottom:34px}
+@media (max-width:700px){.outro-inner{padding:38px 26px}}
 footer{
   border-top:1px solid var(--line);
   padding:26px 28px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;
@@ -307,9 +340,6 @@ footer .right{margin-left:auto;display:flex;gap:20px}
   </svg>
   <span class="name">CHARON</span>
   <div class="links">
-    <a href="#bottleneck">WHY</a>
-    <a href="#tour">TOUR</a>
-    <a href="#hood">HOW</a>
     <a href="https://github.com/mmmeff/charon">GITHUB</a>
     <a class="dl" href="https://github.com/mmmeff/charon/releases/latest">DOWNLOAD ↓</a>
   </div>
@@ -769,6 +799,23 @@ const EVENTS = ['ci_failed','merge_conflict_detected','bug_bot_finding','review_
 const tickerEl = document.getElementById('ticker');
 const seq = EVENTS.map(e => `<i>▸</i> ${e} <em>·</em>`).join(' ');
 tickerEl.innerHTML = seq + ' ' + seq;
+
+/* ---------- screenshot lightbox ---------- */
+const lb = document.createElement('div');
+lb.className = 'lightbox';
+lb.innerHTML = '<img alt=""/><div class="lb-cap"></div>';
+document.body.appendChild(lb);
+const lbImg = lb.querySelector('img'), lbCap = lb.querySelector('.lb-cap');
+document.querySelectorAll('.fshot img').forEach(img => {
+  img.addEventListener('click', () => {
+    lbImg.src = img.src;
+    lbImg.alt = img.alt;
+    lbCap.textContent = img.closest('.fshot').dataset.cap || '';
+    lb.classList.add('open');
+  });
+});
+lb.addEventListener('click', () => lb.classList.remove('open'));
+addEventListener('keydown', e => { if(e.key === 'Escape') lb.classList.remove('open'); });
 
 /* ---------- reveal on scroll ---------- */
 const ro = new IntersectionObserver(es => {
