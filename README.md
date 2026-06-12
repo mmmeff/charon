@@ -146,12 +146,11 @@ own window.
 ## Trust & limitations
 
 - The GitHub token is stored in the app data dir as plain JSON
-  (`~/Library/Application Support/com.prcopilot.app` on macOS). Use a fine-grained token scoped to
-  the repos you add.
+  (`~/Library/Application Support/com.prcopilot.app` on macOS). Prefer a fine-grained token scoped to
+  the repos you add, but classic tokens work too if you need broader access/permissions.
 - Fork-sourced PRs are never pushed to — fix flows refuse them; only same-repo branches count as
   "your own".
 - The watcher runs while a repo window is open (poll interval configurable, default 60s).
-- Screenshots above show a demo workspace (`boxcar/dispatch`) — fictional repo, real UI.
 
 ## License
 
