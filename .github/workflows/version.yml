@@ -1,0 +1,115 @@
+# Auto-versioning: every push to main computes the next semantic version,
+# bumps all version files, tags, and chains into the release build.
+#
+# Bump rules (scanned across commit subjects+bodies since the last v* tag):
+#   - "#major", "BREAKING CHANGE", or a conventional "type!:" → major
+#   - "#minor" or a "feat:"/"feat(scope):" subject            → minor
+#   - anything else                                           → patch
+#
+# The bump commit + tag are pushed with GITHUB_TOKEN, whose pushes do NOT
+# trigger other workflows (GitHub's recursion guard) — that both prevents
+# loops and is why the release build is chained here via workflow_call
+# instead of relying on the tag-push trigger.
+
+name: Auto Version
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autoversion-main
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    # belt-and-suspenders: never bump in response to a release bump commit
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Compute and apply version bump
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase --quiet origin main
+
+          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1)
+          if [ -n "$LAST_TAG" ]; then
+            BASE="${LAST_TAG#v}"
+            RANGE="${LAST_TAG}..HEAD"
+          else
+            BASE=$(node -p "require('./src-tauri/tauri.conf.json').version")
+            RANGE="HEAD"
+          fi
+
+          COMMITS=$(git log --no-merges --pretty=format:'%s%n%b' "$RANGE")
+          if [ -z "$COMMITS" ]; then
+            echo "No commits since ${LAST_TAG:-the beginning}; nothing to release."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BUMP="patch"
+          if echo "$COMMITS" | grep -qiE '#major|BREAKING CHANGE' || echo "$COMMITS" | grep -qE '^[a-z]+(\([^)]*\))?!:'; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qiE '#minor' || echo "$COMMITS" | grep -qE '^feat(\([^)]*\))?:'; then
+            BUMP="minor"
+          fi
+
+          IFS=. read -r MA MI PA <<< "$BASE"
+          case "$BUMP" in
+            major) MA=$((MA+1)); MI=0; PA=0 ;;
+            minor) MI=$((MI+1)); PA=0 ;;
+            patch) PA=$((PA+1)) ;;
+          esac
+          NEXT="${MA}.${MI}.${PA}"
+          echo "Bump: ${BASE} -> ${NEXT} (${BUMP})"
+
+          # package.json + package-lock.json
+          npm version --no-git-tag-version "$NEXT" > /dev/null
+          # tauri.conf.json
+          node -e "
+            const fs = require('fs');
+            const p = 'src-tauri/tauri.conf.json';
+            const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+            c.version = '$NEXT';
+            fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n');
+          "
+          # Cargo.toml + Cargo.lock (charon-app package only)
+          python3 - "$NEXT" << 'PYEOF'
+          import re, sys
+          next_version = sys.argv[1]
+          toml = open('src-tauri/Cargo.toml').read()
+          toml = re.sub(r'^version = "[^"]+"', f'version = "{next_version}"', toml, count=1, flags=re.M)
+          open('src-tauri/Cargo.toml', 'w').write(toml)
+          lock = open('src-tauri/Cargo.lock').read()
+          lock = re.sub(r'(name = "charon-app"\nversion = )"[^"]+"', rf'\1"{next_version}"', lock, count=1)
+          open('src-tauri/Cargo.lock', 'w').write(lock)
+          PYEOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git commit -m "chore(release): v${NEXT}"
+          git tag "v${NEXT}"
+          git push origin main "v${NEXT}"
+          echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: bump
+    if: ${{ needs.bump.outputs.tag != '' }}
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.bump.outputs.tag }}
+    secrets: inherit

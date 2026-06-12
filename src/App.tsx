@@ -3,6 +3,23 @@ import { Launcher } from "./components/Launcher";
 import { RepoApp } from "./components/RepoApp";
 import { native } from "./lib/tauri";
 import { useGlobalConfig } from "./lib/store";
+import { applyUpdate, startUpdateLoop, useUpdateStore } from "./lib/updater";
+
+/** Slim banner shown once an update is downloaded and staged. */
+function UpdateBanner() {
+  const ready = useUpdateStore((s) => s.ready);
+  if (!ready) return null;
+  return (
+    <div className="update-banner">
+      <span>
+        v{ready} downloaded — restart to apply
+      </span>
+      <button className="small primary" onClick={() => void applyUpdate()}>
+        Restart now
+      </button>
+    </div>
+  );
+}
 
 /**
  * Window routing:
@@ -17,6 +34,10 @@ export default function App() {
   const explicitPicker = params.has("picker");
   const { loaded, load } = useGlobalConfig();
   const [autoOpening, setAutoOpening] = useState(!repo && !explicitPicker);
+
+  useEffect(() => {
+    startUpdateLoop();
+  }, []);
 
   // Route every external link through the OS browser — the webview must
   // never navigate away, and target=_blank is unreliable inside Tauri.
@@ -60,5 +81,10 @@ export default function App() {
       </div>
     );
   }
-  return repo ? <RepoApp repo={repo} /> : <Launcher />;
+  return (
+    <>
+      {repo ? <RepoApp repo={repo} /> : <Launcher />}
+      <UpdateBanner />
+    </>
+  );
 }

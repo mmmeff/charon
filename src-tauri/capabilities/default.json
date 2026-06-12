@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capability for all Charon windows",
   "windows": ["*"],
-  "permissions": ["core:default", "notification:default"]
+  "permissions": ["core:default", "notification:default", "updater:default", "process:default"]
 }

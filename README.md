@@ -125,8 +125,11 @@ npm run tauri dev      # development
 npm run tauri build    # packaged app
 ```
 
-Releases are cut by the [release workflow](.github/workflows/release.yml): push a `v*` tag (or run
-it manually from the Actions tab) and it builds the universal DMG and publishes it.
+Releases are fully automatic: every push to `main` [auto-bumps the version](.github/workflows/version.yml)
+(patch by default; put `#minor` or `#major` in a commit message — or use `feat:` / `feat!:` — to bump
+further), tags it, and the [release workflow](.github/workflows/release.yml) builds and publishes the
+universal DMG with an auto-generated changelog. Installed apps **self-update**: Charon checks for new
+releases in the background, downloads them, and offers a one-click restart.
 
 <p align="center">
   <img src="docs/onboarding.png" alt="Onboarding: GitHub instance, PAT, cursor-agent binary" width="85%"/>

@@ -556,6 +556,13 @@ pub fn run() {
     fixup_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+            Ok(())
+        })
         .on_window_event(|window, event| {
             // remember per-repo window sizes (logical units) across launches
             if let tauri::WindowEvent::Resized(size) = event {

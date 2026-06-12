@@ -1,14 +1,19 @@
-# Release workflow: builds the macOS DMG and publishes it as a GitHub Release.
+# Release workflow: builds the macOS DMG + signed updater artifacts and
+# publishes them as a GitHub Release.
 #
 # Triggers:
-#   - pushing a tag like v0.1.0 (the usual path: bump version, tag, push)
+#   - called by version.yml after it auto-bumps and tags a new version (the
+#     normal path — every push to main flows through there)
+#   - pushing a tag like v0.1.0 by hand
 #   - manual run from the Actions tab (workflow_dispatch)
 #
 # The release is keyed to the app version in src-tauri/tauri.conf.json via
-# tauri-action's v__VERSION__ template, so both triggers converge on the same
-# release. The bundle is a universal binary (Apple Silicon + Intel) and is
-# unsigned. Release notes are a changelog auto-built from the commits since the
-# previous tag, plus the first-launch note for the unsigned build.
+# tauri-action's v__VERSION__ template, so all triggers converge on the same
+# release. The bundle is a universal binary (Apple Silicon + Intel) and is not
+# Apple-codesigned; updater artifacts ARE minisign-signed
+# (TAURI_SIGNING_PRIVATE_KEY) and tauri-action uploads latest.json so
+# installed apps self-update. Release notes are a changelog auto-built from
+# the commits since the previous tag.
 
 name: Release
 
@@ -16,6 +21,12 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Existing tag to build and release (e.g. v0.3.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -26,20 +37,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0 # full history + tags so the changelog can diff against the previous tag
 
       - name: Build changelog
         id: changelog
         shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            CURRENT="$GITHUB_REF_NAME"
-            PREV=$(git tag --sort=-version:refname | grep -vFx "$CURRENT" | head -1)
-            TO="$CURRENT"
+          if [ -n "$INPUT_TAG" ]; then
+            CURRENT="$INPUT_TAG"; TO="$INPUT_TAG"
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            CURRENT="$GITHUB_REF_NAME"; TO="$CURRENT"
           else
-            CURRENT="(unreleased)"
+            CURRENT="(unreleased)"; TO="HEAD"
+          fi
+          if [ "$TO" = "HEAD" ]; then
             PREV=$(git tag --sort=-version:refname | head -1)
-            TO="HEAD"
+          else
+            PREV=$(git tag --sort=-version:refname | grep -vFx "$CURRENT" | head -1)
           fi
           if [ -n "$PREV" ]; then
             HEADER="### Changes since ${PREV}"
@@ -59,7 +76,7 @@ jobs:
             echo ""
             [ -n "$COMPARE" ] && { echo "$COMPARE"; echo ""; }
             echo "---"
-            echo "macOS build (universal: Apple Silicon + Intel). Not code-signed — on first launch right-click the app → Open, or clear the quarantine flag: \`xattr -cr /Applications/Charon.app\`"
+            echo "macOS build (universal: Apple Silicon + Intel). Not code-signed — on first launch right-click the app → Open, or clear the quarantine flag: \`xattr -cr /Applications/Charon.app\`. The app self-updates from this release onward."
             echo "__CHANGELOG_EOF__"
           } >> "$GITHUB_OUTPUT"
 
@@ -83,6 +100,8 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: v__VERSION__
           releaseName: "Charon v__VERSION__"
