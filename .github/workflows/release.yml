@@ -9,8 +9,10 @@
 #
 # The release is keyed to the app version in src-tauri/tauri.conf.json via
 # tauri-action's v__VERSION__ template, so all triggers converge on the same
-# release. The bundle is a universal binary (Apple Silicon + Intel) and is not
-# Apple-codesigned; updater artifacts ARE minisign-signed
+# release. The bundle is a universal binary (Apple Silicon + Intel),
+# codesigned with the Developer ID Application cert (APPLE_CERTIFICATE) and
+# notarized through APPLE_ID + APPLE_PASSWORD (app-specific password).
+# Updater artifacts are additionally minisign-signed
 # (TAURI_SIGNING_PRIVATE_KEY) and tauri-action uploads latest.json so
 # installed apps self-update. Release notes are a changelog auto-built from
 # the commits since the previous tag.
@@ -76,7 +78,7 @@ jobs:
             echo ""
             [ -n "$COMPARE" ] && { echo "$COMPARE"; echo ""; }
             echo "---"
-            echo "macOS build (universal: Apple Silicon + Intel). Not code-signed — on first launch right-click the app → Open, or clear the quarantine flag: \`xattr -cr /Applications/Charon.app\`. The app self-updates from this release onward."
+            echo "macOS build (universal: Apple Silicon + Intel), code-signed and notarized. The app self-updates from this release onward."
             echo "__CHANGELOG_EOF__"
           } >> "$GITHUB_OUTPUT"
 
@@ -102,6 +104,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # Apple code-signing + notarization
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: v__VERSION__
           releaseName: "Charon v__VERSION__"

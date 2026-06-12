@@ -60,9 +60,9 @@ export function ActivityView() {
           ))}
       </div>
       {filtered.length === 0 && (
-        <EmptyState title={`All units idle${filter !== "all" ? ` (${filter})` : ""}`}>
-          Agent runs appear here live: which PR they work on, in what relation (review, CI fix, conflict
-          fix, draft edit, response…), their prompt, and a stream of what they're doing.
+        <EmptyState title={`All agents idle${filter !== "all" ? ` (${filter})` : ""}`}>
+          Agent runs appear here live: which PR they're on, what they were asked to do, and a stream of
+          their work as it happens.
         </EmptyState>
       )}
       {filtered.map((r) => (

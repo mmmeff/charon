@@ -5,6 +5,7 @@ import { useFlow } from "./flow";
 import type { SortKey } from "../lib/ui";
 import type { Severity } from "../types";
 import { AsciiField } from "./AsciiField";
+import { AsciiMoon } from "./AsciiMoon";
 
 // NOTE: keep this file component-only. Hooks and plain functions belong in
 // src/lib/ui.ts — mixed exports here break Vite Fast Refresh in dev.
@@ -86,11 +87,11 @@ export function ApprovalsBadge({ prNumber }: { prNumber: number }) {
   );
 }
 
-/** Empty-state block: ASCII flow-field texture + tracked uppercase title. */
+/** Empty-state block: the orbiting ASCII Charon + tracked uppercase title. */
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="empty">
-      <AsciiField height={96} opacity={0.4} />
+      <AsciiMoon height={190} />
       <h3>{title}</h3>
       {children && <p>{children}</p>}
     </div>

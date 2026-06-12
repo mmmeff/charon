@@ -28,8 +28,8 @@ export function BabysitView() {
   if (myOpen.length === 0) {
     return (
       <div className="main">
-        <EmptyState title="Yard is clear">
-          Your open (non-draft) pull requests are watched here: CI, conflicts, and incoming feedback.
+        <EmptyState title="No open PRs">
+          Your open pull requests are watched here — CI, merge state, and incoming feedback, with agents on call.
         </EmptyState>
       </div>
     );

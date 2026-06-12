@@ -23,8 +23,8 @@ export function DraftsView() {
   if (drafts.length === 0) {
     return (
       <div className="main">
-        <EmptyState title="No drafts on the siding">
-          Your draft pull requests appear here as a workspace for iterating on the diff.
+        <EmptyState title="No drafts">
+          Your draft pull requests appear here — a workspace for iterating before anyone is asked to review.
         </EmptyState>
       </div>
     );

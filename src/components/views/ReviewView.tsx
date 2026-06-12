@@ -30,8 +30,8 @@ export function ReviewView() {
   if (queue.length === 0) {
     return (
       <div className="main">
-        <EmptyState title="No inbound traffic">
-          PRs where your review is requested (directly or via a team) appear here.
+        <EmptyState title="Nothing to review">
+          PRs waiting on your review — requested directly or via a team — appear here, along with ones you're already reviewing.
         </EmptyState>
       </div>
     );
