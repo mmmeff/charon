@@ -551,17 +551,59 @@ fn fixup_path() {
 #[cfg(not(unix))]
 fn fixup_path() {}
 
+/// Add "Check for Updates…" to the macOS app menu (right under "About"),
+/// keeping the rest of the default menu intact. The click is forwarded to the
+/// focused window as a `menu-check-updates` event; the frontend runs the
+/// actual updater check and shows the result.
+#[cfg(target_os = "macos")]
+fn install_app_menu(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+
+    let handle = app.handle();
+    let menu = Menu::default(handle)?;
+    if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.first() {
+        let check = MenuItem::with_id(
+            handle,
+            "check-updates",
+            "Check for Updates…",
+            true,
+            None::<&str>,
+        )?;
+        // default app submenu starts [About, separator, …] — slot in after About
+        app_menu.insert(&check, 1)?;
+    }
+    app.set_menu(menu)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     fixup_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             #[cfg(desktop)]
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
+            #[cfg(target_os = "macos")]
+            install_app_menu(app)?;
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == "check-updates" {
+                // target one window so only one dialog/notification shows
+                let windows = app.webview_windows();
+                let target = windows
+                    .iter()
+                    .find(|(_, w)| w.is_focused().unwrap_or(false))
+                    .or_else(|| windows.iter().next())
+                    .map(|(label, _)| label.clone());
+                if let Some(label) = target {
+                    let _ = app.emit_to(label, "menu-check-updates", ());
+                }
+            }
         })
         .on_window_event(|window, event| {
             // remember per-repo window sizes (logical units) across launches

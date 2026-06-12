@@ -1,7 +1,10 @@
 import { getVersion } from "@tauri-apps/api/app";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { create } from "zustand";
+import { notify } from "./notify";
 import { isTauri } from "./tauri";
 
 /**
@@ -69,6 +72,91 @@ export function startUpdateLoop(): void {
 
   void checkOnce();
   setInterval(() => void checkOnce(), CHECK_INTERVAL_MS);
+
+  // "Check for Updates…" in the macOS app menu — Rust emits this to the
+  // focused window only, so exactly one window responds
+  void getCurrentWebviewWindow().listen("menu-check-updates", () => {
+    void checkForUpdatesManually();
+  });
+}
+
+let manualCheckActive = false;
+
+/**
+ * Menu-driven update check. Unlike the silent background loop, this always
+ * tells the user something: an OS notification when already up to date, or a
+ * native Update/Cancel dialog with the new version and its changelog.
+ */
+export async function checkForUpdatesManually(): Promise<void> {
+  if (!isTauri() || manualCheckActive) return;
+  manualCheckActive = true;
+  try {
+    // the background loop may already have an install staged
+    const staged = useUpdateStore.getState().ready;
+    if (staged) {
+      const restart = await ask(
+        `Charon v${staged} is already downloaded and ready to install.\n\nRestart now to apply it?`,
+        { title: "Update ready", kind: "info", okLabel: "Restart now", cancelLabel: "Later" },
+      );
+      if (restart) await applyUpdate();
+      return;
+    }
+
+    const update = await check();
+    if (!update) {
+      const current = await getVersion();
+      await notify("Charon is up to date", `v${current} is the latest version.`);
+      return;
+    }
+
+    // ...or be mid-download in another window
+    const lock = localStorage.getItem(LOCK_KEY);
+    if (lock && Date.now() - Number(lock) < LOCK_TTL_MS) {
+      await notify(
+        `Charon v${update.version} is downloading`,
+        "You'll be prompted to restart when it's ready.",
+      );
+      return;
+    }
+
+    const current = await getVersion();
+    const accepted = await ask(
+      `Charon v${update.version} is available (you have v${current}).${formatNotes(update.body)}`,
+      {
+        title: "Update available",
+        kind: "info",
+        okLabel: "Update",
+        cancelLabel: "Cancel",
+      },
+    );
+    if (!accepted) return;
+
+    localStorage.setItem(LOCK_KEY, String(Date.now()));
+    await update.downloadAndInstall();
+    localStorage.setItem(READY_KEY, update.version);
+    localStorage.removeItem(LOCK_KEY);
+    useUpdateStore.setState({ ready: update.version });
+    await applyUpdate();
+  } catch (e) {
+    localStorage.removeItem(LOCK_KEY);
+    console.warn("manual update check failed", e);
+    await notify("Update check failed", String(e));
+  } finally {
+    manualCheckActive = false;
+  }
+}
+
+/** Trim the release notes down to dialog-sized changelog bullets. */
+function formatNotes(body: string | undefined): string {
+  if (!body) return "";
+  const lines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("- "));
+  if (!lines.length) return "";
+  const shown = lines.slice(0, 10);
+  if (lines.length > shown.length) shown.push(`…and ${lines.length - shown.length} more`);
+  return `\n\nChanges:\n${shown.join("\n")}`;
 }
 
 /** Clear the staged flag right before relaunching into the new version. */
