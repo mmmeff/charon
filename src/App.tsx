@@ -3,20 +3,31 @@ import { Launcher } from "./components/Launcher";
 import { RepoApp } from "./components/RepoApp";
 import { native } from "./lib/tauri";
 import { useGlobalConfig } from "./lib/store";
-import { applyUpdate, startUpdateLoop, useUpdateStore } from "./lib/updater";
+import { kickOffUpdate, startUpdateLoop, useUpdateStore } from "./lib/updater";
 
-/** Slim banner shown once an update is downloaded and staged. */
-function UpdateBanner() {
-  const ready = useUpdateStore((s) => s.ready);
-  if (!ready) return null;
+/**
+ * Bottom-left toast shown as soon as a newer release is detected. The link
+ * applies a staged download instantly, or rides the in-flight download and
+ * restarts the moment it lands.
+ */
+function UpdateToast() {
+  const { available, ready, updating } = useUpdateStore();
+  const version = ready ?? available;
+  if (!version) return null;
   return (
-    <div className="update-banner">
+    <div className="update-toast">
       <span>
-        v{ready} downloaded — restart to apply
+        time to update — Charon v{version} is {ready ? "ready" : "out"}
       </span>
-      <button className="small primary" onClick={() => void applyUpdate()}>
-        Restart now
-      </button>
+      {updating && !ready ? (
+        <span className="update-toast-busy">
+          <span className="spin" /> updating…
+        </span>
+      ) : (
+        <button className="update-toast-link" onClick={() => void kickOffUpdate()}>
+          {ready ? "Restart & update" : "Update now"}
+        </button>
+      )}
     </div>
   );
 }
@@ -84,7 +95,7 @@ export default function App() {
   return (
     <>
       {repo ? <RepoApp repo={repo} /> : <Launcher />}
-      <UpdateBanner />
+      <UpdateToast />
     </>
   );
 }

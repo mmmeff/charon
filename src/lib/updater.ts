@@ -21,18 +21,28 @@ const READY_KEY = "charon-update-ready";
 const LOCK_TTL_MS = 15 * 60 * 1000;
 
 interface UpdateState {
-  /** version string when an update is downloaded and ready to apply */
+  /** version string as soon as a newer release is detected */
+  available: string | null;
+  /** version string once that update is downloaded and ready to apply */
   ready: string | null;
+  /** true while a user-requested update is waiting on the download */
+  updating: boolean;
 }
 
 export const useUpdateStore = create<UpdateState>(() => ({
+  available: null,
   ready: null,
+  updating: false,
 }));
+
+/** set when the user clicks the toast before the download has finished */
+let applyWhenReady = false;
 
 async function checkOnce(): Promise<void> {
   try {
     const update = await check();
     if (!update) return;
+    useUpdateStore.setState({ available: update.version });
 
     // another window may already be downloading this version
     const lock = localStorage.getItem(LOCK_KEY);
@@ -43,10 +53,28 @@ async function checkOnce(): Promise<void> {
     localStorage.setItem(READY_KEY, update.version);
     localStorage.removeItem(LOCK_KEY);
     useUpdateStore.setState({ ready: update.version });
+    if (applyWhenReady) await applyUpdate();
   } catch (e) {
     localStorage.removeItem(LOCK_KEY);
+    applyWhenReady = false;
+    useUpdateStore.setState({ updating: false });
     console.warn("update check failed", e);
   }
+}
+
+/**
+ * Toast click: restart immediately if the update is staged, otherwise ride
+ * the in-flight download (or start one) and relaunch the moment it lands.
+ */
+export async function kickOffUpdate(): Promise<void> {
+  if (useUpdateStore.getState().ready) return applyUpdate();
+  applyWhenReady = true;
+  useUpdateStore.setState({ updating: true });
+  // fresh lock → a download is already running here or in another window;
+  // it will apply via applyWhenReady / the storage mirror when it lands
+  const lock = localStorage.getItem(LOCK_KEY);
+  if (lock && Date.now() - Number(lock) < LOCK_TTL_MS) return;
+  await checkOnce();
 }
 
 let started = false;
@@ -61,13 +89,16 @@ export function startUpdateLoop(): void {
   if (staged) {
     void getVersion().then((current) => {
       if (cmpVersions(current, staged) >= 0) localStorage.removeItem(READY_KEY);
-      else useUpdateStore.setState({ ready: staged });
+      else useUpdateStore.setState({ available: staged, ready: staged });
     });
   }
 
   // mirror "ready" across windows
   window.addEventListener("storage", (e) => {
-    if (e.key === READY_KEY && e.newValue) useUpdateStore.setState({ ready: e.newValue });
+    if (e.key === READY_KEY && e.newValue) {
+      useUpdateStore.setState({ available: e.newValue, ready: e.newValue });
+      if (applyWhenReady) void applyUpdate();
+    }
   });
 
   void checkOnce();
@@ -108,6 +139,7 @@ export async function checkForUpdatesManually(): Promise<void> {
       await notify("Charon is up to date", `v${current} is the latest version.`);
       return;
     }
+    useUpdateStore.setState({ available: update.version });
 
     // ...or be mid-download in another window
     const lock = localStorage.getItem(LOCK_KEY);
