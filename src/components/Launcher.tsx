@@ -94,7 +94,6 @@ function Onboarding({
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://github.com or https://ghe.yourcompany.com"
         />
-        <small>For GitHub Enterprise, the API is reached at &lt;url&gt;/api/v3.</small>
       </label>
       <label className="field">
         <span>Personal access token</span>
@@ -199,7 +198,6 @@ function RepoList({
           <h1>
             <IconCharonMoon size={26} id="picker" /> CHARON
           </h1>
-          <div className="sub">each repo runs in its own window</div>
         </div>
       </div>
       <div className="row between" style={{ marginBottom: 16 }}>
