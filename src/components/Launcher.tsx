@@ -29,7 +29,8 @@ function Onboarding({
   existing: GlobalConfig | null;
   onDone: (cfg: GlobalConfig) => Promise<void>;
 }) {
-  const [url, setUrl] = useState(existing?.githubUrl ?? "https://github.com");
+  // || not ??: a saved-but-empty URL should still fall back to github.com
+  const [url, setUrl] = useState(existing?.githubUrl || "https://github.com");
   const [token, setToken] = useState(existing?.token ?? "");
   const [insecure, setInsecure] = useState(existing?.insecureTls ?? false);
   const [binary, setBinary] = useState(existing?.cursorBinary ?? "cursor-agent");
@@ -117,8 +118,7 @@ function Onboarding({
           placeholder="ghp_…"
         />
         <small>
-          Use a <strong>classic</strong> token with the full <code>repo</code> scope checked —
-          fine-grained tokens miss some of the APIs Charon needs (checks, reviews, GraphQL).
+          Use a <strong>classic</strong> token with the full <code>repo</code> scope checked.
           {tokenUrl && (
             <>
               {" "}
