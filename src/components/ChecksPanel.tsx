@@ -96,10 +96,26 @@ export function ChecksPanel({ pr }: { pr: PrSummary }) {
   const [fixOpen, setFixOpen] = useState<Record<string, boolean>>({});
   const [retrying, setRetrying] = useState<Record<string, "busy" | "queued" | string>>({});
 
-  if (checks.length === 0) return null;
   const expanded = openOverride ?? failing.length > 0;
   const running = checks.filter((c) => !c.conclusion).length;
   const passed = checks.filter((c) => c.conclusion === "success").length;
+
+  // live CI: while the panel is expanded AND scrolled into view, refresh the
+  // check list every 5s (one cheap API call; full polls still reconcile)
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((es) => setInView(es.some((e) => e.isIntersecting)));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!expanded || !inView) return;
+    const t = setInterval(() => void poller.refreshChecks(pr.number, pr.headSha), 5000);
+    return () => clearInterval(t);
+  }, [expanded, inView, pr.number, pr.headSha, poller]);
 
   const fetchLog = async (c: CheckInfo): Promise<string> => {
     const cached = logs[c.name];
@@ -205,8 +221,10 @@ ${log.slice(-AGENT_LOG_TAIL)}
     }
   };
 
+  if (checks.length === 0) return null;
+
   return (
-    <div className="card checks-panel">
+    <div className="card checks-panel" ref={panelRef}>
       <div className="row">
         <button className="link small" onClick={() => setOpenOverride(!expanded)}>
           {expanded ? "▾" : "▸"}

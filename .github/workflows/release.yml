@@ -24,6 +24,43 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags so the changelog can diff against the previous tag
+
+      - name: Build changelog
+        id: changelog
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            CURRENT="$GITHUB_REF_NAME"
+            PREV=$(git tag --sort=-version:refname | grep -vFx "$CURRENT" | head -1)
+            TO="$CURRENT"
+          else
+            CURRENT="(unreleased)"
+            PREV=$(git tag --sort=-version:refname | head -1)
+            TO="HEAD"
+          fi
+          if [ -n "$PREV" ]; then
+            HEADER="### Changes since ${PREV}"
+            LOG=$(git log --no-merges --pretty=format:'- %s' "${PREV}..${TO}")
+            COMPARE="**Full changelog:** https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${CURRENT}"
+          else
+            HEADER="### Changes"
+            LOG=$(git log --no-merges --pretty=format:'- %s' "$TO")
+            COMPARE=""
+          fi
+          [ -z "$LOG" ] && LOG="- No code changes."
+          {
+            echo "body<<__CHANGELOG_EOF__"
+            echo "$HEADER"
+            echo ""
+            echo "$LOG"
+            echo ""
+            [ -n "$COMPARE" ] && { echo "$COMPARE"; echo ""; }
+            echo "---"
+            echo "macOS build (universal: Apple Silicon + Intel). Not code-signed — on first launch right-click the app → Open, or clear the quarantine flag: \`xattr -cr /Applications/Charon.app\`"
+            echo "__CHANGELOG_EOF__"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:

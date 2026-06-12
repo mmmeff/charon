@@ -403,6 +403,24 @@ export class RepoPoller {
     }
   }
 
+  private refreshingChecks = false;
+
+  /** Checks-only refresh (one API call) — drives the live CI panel ticker. */
+  async refreshChecks(number: number, headSha: string): Promise<void> {
+    if (this.refreshingChecks) return;
+    this.refreshingChecks = true;
+    try {
+      const { gh, repo } = this.getCtx();
+      const ch = await gh.listChecks(repo, headSha);
+      const d = usePrData.getState();
+      d.patch({ checks: { ...d.checks, [number]: ch } });
+    } catch (e) {
+      console.warn("refreshChecks failed", e);
+    } finally {
+      this.refreshingChecks = false;
+    }
+  }
+
   private schedule() {
     if (this.stopped) return;
     const sec = Math.max(20, this.getCtx().config.pollIntervalSec || 60);
