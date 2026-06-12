@@ -658,6 +658,15 @@ button.chip-add:hover:not(:disabled) { background: rgba(233, 228, 212, 0.06); bo
 .check-log .log-err { color: var(--red); }
 .check-log .log-warn { color: var(--amber); }
 
+/* checks header: ambient drift while CI runs */
+.checks-head { position: relative; }
+.checks-head > * { position: relative; }
+.checks-head-fx {
+  position: absolute !important; inset: -4px -14px; overflow: hidden;
+  pointer-events: none;
+}
+.checks-head-fx canvas { height: 100% !important; }
+
 /* auto-triage one-liner under failed checks */
 .check-analysis {
   margin: 4px 0 4px 22px; padding: 5px 9px;
