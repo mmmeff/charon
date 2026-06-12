@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Charon — human-in-the-loop agents for pull requests</title>
+<meta name="description" content="AI made writing code cheap. Merging it is the new bottleneck. Charon is a desktop control room: agents do the legwork, you make the calls."/>
+<meta property="og:title" content="Charon — human-in-the-loop agents for pull requests"/>
+<meta property="og:description" content="A desktop control room for the PR bottleneck. Agents fix CI, resolve conflicts, and draft reviews — nothing ships without your approval."/>
+<meta property="og:image" content="https://mmmeff.github.io/charon/assets/open-prs.png"/>
+<meta property="og:type" content="website"/>
+<link rel="icon" type="image/svg+xml" href="assets/app-icon.svg"/>
+<style>
+:root{
+  --ink:#0e0d0a;
+  --ink-2:#15140f;
+  --ink-3:#1d1b14;
+  --line:#2a281f;
+  --bone:#e9e4d4;
+  --bone-dim:#8f8a7a;
+  --orange:#ff4f00;
+  --acid:#cff24d;
+  --rust:#9c4a22;
+  --mono:"SF Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ink);
+  color:var(--bone);
+  font-family:var(--mono);
+  font-size:15px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--orange);color:var(--ink)}
+a{color:var(--acid);text-decoration:none}
+a:hover{text-decoration:underline}
+img{max-width:100%;display:block}
+
+/* ---------- nav ---------- */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:50;
+  display:flex;align-items:center;gap:14px;
+  padding:14px 28px;
+  background:color-mix(in srgb, var(--ink) 82%, transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+nav .mark{width:22px;height:22px;flex:none}
+nav .name{font-weight:700;letter-spacing:.35em;font-size:13px}
+nav .links{margin-left:auto;display:flex;gap:22px;font-size:12px;letter-spacing:.08em}
+nav .links a{color:var(--bone-dim)}
+nav .links a:hover{color:var(--acid);text-decoration:none}
+nav .links a.dl{color:var(--orange)}
+
+/* ---------- hero ---------- */
+header{
+  position:relative;min-height:100svh;
+  display:flex;align-items:center;
+  overflow:hidden;
+}
+#hero-canvas{
+  position:absolute;inset:0;width:100%;height:100%;display:block;
+}
+header::after{
+  content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:
+    linear-gradient(100deg, var(--ink) 8%, color-mix(in srgb, var(--ink) 92%, transparent) 40%, transparent 66%),
+    linear-gradient(to top, var(--ink) 0%, transparent 14%);
+}
+.hero-inner{
+  position:relative;z-index:2;
+  padding:120px 28px 80px;
+  max-width:1100px;margin:0 auto;width:100%;
+}
+.wordmark{
+  font-size:clamp(7px,1.55vw,16px);
+  line-height:1.12;
+  color:var(--bone);
+  text-shadow:0 0 24px rgba(255,79,0,.25);
+  white-space:pre;
+  user-select:none;
+}
+.wordmark b{color:var(--orange);font-weight:inherit}
+.tagline{
+  margin-top:28px;
+  font-size:clamp(13px,1.6vw,17px);
+  letter-spacing:.22em;
+  color:var(--acid);
+}
+.hero-sub{
+  margin-top:18px;
+  max-width:560px;
+  color:var(--bone-dim);
+  font-size:14px;
+}
+.hero-sub strong{color:var(--bone);font-weight:600}
+.cta-row{margin-top:36px;display:flex;gap:14px;flex-wrap:wrap}
+.btn{
+  display:inline-block;
+  padding:13px 26px;
+  font-family:var(--mono);font-size:13px;letter-spacing:.12em;
+  border:1px solid var(--orange);
+  color:var(--orange);
+  background:transparent;
+  cursor:pointer;
+  transition:all .15s ease;
+  text-transform:uppercase;
+}
+.btn:hover{background:var(--orange);color:var(--ink);text-decoration:none;box-shadow:0 0 32px rgba(255,79,0,.4)}
+.btn.ghost{border-color:var(--line);color:var(--bone-dim)}
+.btn.ghost:hover{border-color:var(--bone);color:var(--bone);background:transparent;box-shadow:none}
+.hero-meta{
+  margin-top:22px;font-size:11px;letter-spacing:.1em;color:var(--bone-dim);
+}
+.hero-meta span{color:var(--acid)}
+.scroll-hint{
+  position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+  z-index:2;color:var(--bone-dim);font-size:11px;letter-spacing:.3em;
+  animation:bob 2.4s ease-in-out infinite;
+}
+@keyframes bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,8px)}}
+@media (max-width:700px){
+  header::after{
+    background:
+      linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--ink) 78%, transparent) 30%, color-mix(in srgb, var(--ink) 85%, transparent) 100%),
+      linear-gradient(to top, var(--ink) 0%, transparent 14%);
+  }
+  nav{padding:12px 16px}
+  nav .links{gap:12px;font-size:11px}
+  nav .links a:not(.dl):not(:last-of-type){display:none}
+}
+
+/* ---------- ticker ---------- */
+.ticker{
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+  background:var(--ink-2);
+  overflow:hidden;white-space:nowrap;
+  padding:10px 0;
+  font-size:12px;letter-spacing:.14em;color:var(--bone-dim);
+  user-select:none;
+}
+.ticker-track{display:inline-block;animation:tick 60s linear infinite}
+.ticker:hover .ticker-track{animation-play-state:paused}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.ticker em{font-style:normal;color:var(--orange);padding:0 18px}
+.ticker i{font-style:normal;color:var(--acid)}
+
+/* ---------- sections ---------- */
+section{padding:110px 28px;max-width:1100px;margin:0 auto}
+.sec-label{
+  font-size:12px;letter-spacing:.3em;color:var(--orange);
+  margin-bottom:14px;
+}
+.sec-label::before{content:"// "}
+h2{
+  font-size:clamp(24px,3.4vw,38px);
+  font-weight:700;letter-spacing:.04em;line-height:1.2;
+  margin-bottom:22px;text-transform:uppercase;
+}
+h2 .a{color:var(--acid)}
+.prose{max-width:680px;color:var(--bone-dim);font-size:15px}
+.prose strong{color:var(--bone);font-weight:600}
+.prose em{color:var(--acid);font-style:normal}
+.prose+.prose{margin-top:16px}
+
+/* corner-ticked cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:48px}
+.card{
+  position:relative;
+  border:1px solid var(--line);
+  background:var(--ink-2);
+  padding:26px 24px;
+  transition:border-color .2s ease, transform .2s ease;
+}
+.card::before,.card::after{
+  content:"+";position:absolute;color:var(--bone-dim);font-size:13px;line-height:1;
+  transition:color .2s ease;
+}
+.card::before{top:-7px;left:-5px}
+.card::after{bottom:-7px;right:-5px}
+.card:hover{border-color:var(--acid);transform:translateY(-3px)}
+.card:hover::before,.card:hover::after{color:var(--acid)}
+.card h3{font-size:14px;letter-spacing:.12em;margin-bottom:12px;color:var(--bone);text-transform:uppercase}
+.card h3 .n{color:var(--orange);margin-right:8px}
+.card p{font-size:13px;color:var(--bone-dim)}
+.card p strong{color:var(--bone)}
+
+/* ---------- feature rows ---------- */
+.feature{
+  display:grid;grid-template-columns:5fr 7fr;gap:48px;align-items:center;
+  margin-top:90px;
+}
+.feature.flip{grid-template-columns:7fr 5fr}
+.feature.flip .ftext{order:2}
+.feature.flip .fshot{order:1}
+.ftext h3{
+  font-size:20px;letter-spacing:.06em;margin-bottom:14px;text-transform:uppercase;
+}
+.ftext h3::before{content:attr(data-n) " ";color:var(--orange);font-size:13px;vertical-align:middle;letter-spacing:.2em}
+.ftext p{color:var(--bone-dim);font-size:14px}
+.ftext p strong{color:var(--bone)}
+.ftext p em{color:var(--acid);font-style:normal}
+.fshot{
+  border:1px solid var(--line);
+  box-shadow:0 24px 60px rgba(0,0,0,.5);
+  position:relative;
+}
+.fshot::before{
+  content:attr(data-cap);
+  position:absolute;top:-26px;left:0;
+  font-size:10px;letter-spacing:.22em;color:var(--bone-dim);text-transform:uppercase;
+}
+@media (max-width:840px){
+  .feature,.feature.flip{grid-template-columns:1fr;gap:28px}
+  .feature.flip .ftext{order:1}
+  .feature.flip .fshot{order:2}
+}
+
+/* ---------- divider canvases ---------- */
+.divider{display:block;width:100%;height:140px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+
+/* ---------- terminal ---------- */
+.term-wrap{max-width:1100px;margin:0 auto}
+.term{
+  border:1px solid var(--line);
+  background:var(--ink-2);
+  box-shadow:0 24px 60px rgba(0,0,0,.5);
+}
+.term-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 14px;border-bottom:1px solid var(--line);
+  font-size:11px;letter-spacing:.12em;color:var(--bone-dim);
+}
+.term-bar .dot{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.term-bar .dot.o{background:var(--orange)}
+.term-bar .dot.a{background:var(--acid)}
+.term-body{
+  padding:20px 22px;min-height:340px;
+  font-size:13px;line-height:1.7;
+  white-space:pre-wrap;word-break:break-word;
+}
+.term-body .ev{color:var(--orange)}
+.term-body .ok{color:var(--acid)}
+.term-body .dim{color:var(--bone-dim)}
+.term-body .hl{color:var(--bone);font-weight:600}
+.cursor{
+  display:inline-block;width:8px;height:15px;background:var(--acid);
+  vertical-align:text-bottom;animation:blink 1s steps(1) infinite;
+}
+@keyframes blink{50%{opacity:0}}
+
+/* ---------- under the hood ---------- */
+.hood{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin-top:48px}
+.hood>div{background:var(--ink);padding:22px}
+.hood h4{font-size:11px;letter-spacing:.22em;color:var(--orange);margin-bottom:10px;text-transform:uppercase}
+.hood p{font-size:13px;color:var(--bone-dim)}
+.hood p code{color:var(--acid);font-family:inherit;font-size:12px}
+
+.callout{
+  margin-top:48px;border:1px solid var(--line);border-left:3px solid var(--orange);
+  background:var(--ink-2);padding:22px 26px;
+  font-size:13px;color:var(--bone-dim);max-width:820px;
+}
+.callout strong{color:var(--bone)}
+.callout a{color:var(--acid)}
+
+/* ---------- footer ---------- */
+.outro{
+  position:relative;text-align:center;padding:140px 28px;overflow:hidden;
+}
+#outro-canvas{position:absolute;inset:0;width:100%;height:100%}
+.outro-inner{position:relative;z-index:2}
+.outro h2{margin-bottom:14px}
+.outro p{color:var(--bone-dim);font-size:14px;margin-bottom:34px}
+footer{
+  border-top:1px solid var(--line);
+  padding:26px 28px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;
+  font-size:12px;color:var(--bone-dim);max-width:none;
+}
+footer .right{margin-left:auto;display:flex;gap:20px}
+
+/* ---------- reveal ---------- */
+.rv{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s ease}
+.rv.in{opacity:1;transform:none}
+@media (prefers-reduced-motion: reduce){
+  .rv{opacity:1;transform:none;transition:none}
+  .ticker-track{animation:none}
+  .scroll-hint{animation:none}
+  .cursor{animation:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+    <defs><clipPath id="nm"><circle cx="32" cy="32" r="26"/></clipPath></defs>
+    <circle cx="32" cy="32" r="26" fill="#cfc9ba"/>
+    <g clip-path="url(#nm)">
+      <ellipse cx="30" cy="10" rx="30" ry="16" fill="#9c4a22"/>
+      <path d="M8 40 Q 24 34 34 42 T 58 44 L 58 50 Q 34 54 8 46 Z" fill="#5d5749" opacity=".55"/>
+    </g>
+  </svg>
+  <span class="name">CHARON</span>
+  <div class="links">
+    <a href="#bottleneck">WHY</a>
+    <a href="#tour">TOUR</a>
+    <a href="#hood">HOW</a>
+    <a href="https://github.com/mmmeff/charon">GITHUB</a>
+    <a class="dl" href="https://github.com/mmmeff/charon/releases/latest">DOWNLOAD ↓</a>
+  </div>
+</nav>
+
+<header>
+  <canvas id="hero-canvas" aria-hidden="true"></canvas>
+  <div class="hero-inner">
+    <pre class="wordmark" aria-label="CHARON"> ██████╗██╗  ██╗ █████╗ ██████╗  ██████╗ ███╗   ██╗
+██╔════╝██║  ██║██╔══██╗██╔══██╗██╔═══██╗████╗  ██║
+██║     ███████║███████║██████╔╝██║   ██║██╔██╗ ██║
+██║     ██╔══██║██╔══██║██╔══██╗██║   ██║██║╚██╗██║
+╚██████╗██║  ██║██║  ██║██║  ██║╚██████╔╝██║ ╚████║
+ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝</pre>
+    <div class="tagline">HUMAN-IN-THE-LOOP AGENTS FOR PULL REQUESTS</div>
+    <p class="hero-sub">AI made writing code cheap. It didn't make <strong>merging</strong> it cheap.
+Charon is a desktop control room for the new bottleneck — agents do the legwork,
+<strong>you make the calls</strong>.</p>
+    <div class="cta-row">
+      <a class="btn" href="https://github.com/mmmeff/charon/releases/latest">Download for macOS</a>
+      <a class="btn ghost" href="https://github.com/mmmeff/charon">View source</a>
+    </div>
+    <div class="hero-meta">FREE · OPEN SOURCE · <span>SELF-UPDATING</span> · UNIVERSAL BINARY</div>
+  </div>
+  <div class="scroll-hint">▼ SCROLL</div>
+</header>
+
+<div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
+
+<section id="bottleneck">
+  <div class="sec-label rv">01 — THE BOTTLENECK</div>
+  <h2 class="rv">REVIEW IS THE NEW <span class="a">COMPILE</span></h2>
+  <p class="prose rv">The PRs got bigger, more numerous, and more uneven — while review capacity
+  (humans with context and accountability) stayed exactly the same. The popular fix is to point
+  another unsupervised bot at the thread. That just moves the noise downstream to the people who
+  have to read it.</p>
+  <p class="prose rv">Charon spends its intelligence the other way. Agents handle what doesn't need
+  your judgment — <strong>failing CI, merge conflicts, bug-bot triage, first-pass review</strong> —
+  and everything that <em>does</em> need it becomes a fast, well-presented decision:
+  <strong>proposals you edit and approve before anything touches GitHub</strong>.</p>
+
+  <div class="cards">
+    <div class="card rv">
+      <h3><span class="n">▸</span>NOTHING POSTS ITSELF</h3>
+      <p>Every GitHub-facing write is a proposal card — edit it, regenerate it, or dismiss it.
+      Nothing ships until you hit <strong>Approve &amp; send</strong>. Your teammates always get
+      <strong>you</strong>, at your speed, not a bot wearing your name.</p>
+    </div>
+    <div class="card rv">
+      <h3><span class="n">▸</span>READ-ONLY ON THEIR CODE</h3>
+      <p>Agents reviewing teammates' code can't write anything, anywhere. Fix agents get an
+      <strong>isolated git worktree</strong> scoped to the one PR they're fixing — never forks,
+      never anyone else's branch.</p>
+    </div>
+    <div class="card rv">
+      <h3><span class="n">▸</span>EVERY BEHAVIOR IS YOURS</h3>
+      <p>Every event handler is a toggle plus a prompt template you can rewrite. Per-repo filters
+      decide what's worth an agent's attention. Don't like a behavior? <strong>Edit the
+      prompt.</strong></p>
+    </div>
+  </div>
+</section>
+
+<canvas class="divider" data-flow aria-hidden="true"></canvas>
+
+<section id="tour">
+  <div class="sec-label rv">02 — THE CONTROL ROOM</div>
+  <h2 class="rv">WHAT IT <span class="a">DOES</span></h2>
+  <p class="prose rv">One window per repo. A poller snapshots checks, mergeability, comments, and
+  reviews, then diffs the snapshots into events — and every event runs <strong>your</strong> prompt.</p>
+
+  <div class="feature">
+    <div class="ftext rv">
+      <h3 data-n="2.1">BABYSITS YOUR OPEN PRS</h3>
+      <p><em>ci_failed</em>, <em>merge_conflict_detected</em>, <em>bug_bot_finding</em> — the
+      default playbook fixes CI, resolves conflicts, and triages bot findings before you've
+      finished your coffee. Self-review findings land <strong>anchored on the diff</strong>,
+      severity- and confidence-tagged, one <strong>Apply</strong> away from a fix agent.</p>
+    </div>
+    <div class="fshot rv" data-cap="open-prs · event feed · proposals"><img src="assets/open-prs.png" alt="Open PRs view" loading="lazy"/></div>
+  </div>
+
+  <div class="feature flip">
+    <div class="ftext rv">
+      <h3 data-n="2.2">DRAFTS REVIEWS YOU'D ACTUALLY SEND</h3>
+      <p>When a teammate requests your review, an agent reads the full diff and drafts inline
+      comments on a native diff view — file tree, unified/split, resolvable threads. Toggle
+      comments off, rewrite them, change the verdict, then submit the whole review
+      <strong>in one shot</strong>.</p>
+    </div>
+    <div class="fshot rv" data-cap="review · anchored comments · one verdict"><img src="assets/review.png" alt="Review view" loading="lazy"/></div>
+  </div>
+
+  <div class="feature">
+    <div class="ftext rv">
+      <h3 data-n="2.3">TREATS DRAFTS AS A WORKSPACE</h3>
+      <p>GitHub-style click-and-drag line selection on your draft PRs. Select lines and
+      <strong>Edit</strong> — an agent implements the change in a worktree and pushes. Ask a
+      question instead and it answers read-only. <em>Your draft, no approval gate, full speed.</em></p>
+    </div>
+    <div class="fshot rv" data-cap="drafts · line-scoped edits"><img src="assets/drafts.png" alt="Drafts view" loading="lazy"/></div>
+  </div>
+
+  <div class="feature flip">
+    <div class="ftext rv">
+      <h3 data-n="2.4">SHOWS YOU EVERYTHING</h3>
+      <p>Every run — its prompt, model, working directory, and <strong>live streamed
+      output</strong> — in one feed. Stop a runaway agent with one click.</p>
+    </div>
+    <div class="fshot rv" data-cap="activity · live agent streams"><img src="assets/activity.png" alt="Activity feed" loading="lazy"/></div>
+  </div>
+
+  <div class="feature">
+    <div class="ftext rv">
+      <h3 data-n="2.5">AND EVERY BEHAVIOR IS A PROMPT</h3>
+      <p>The event catalog: every handler is a toggle plus an editable prompt template with
+      interpolated variables and <em>/skill</em> references. New event types are catalog entries —
+      <strong>the engine never changes</strong>.</p>
+    </div>
+    <div class="fshot rv" data-cap="settings · event catalog"><img src="assets/settings-events.png" alt="Settings event catalog" loading="lazy"/></div>
+  </div>
+</section>
+
+<section id="watch" style="max-width:none;background:var(--ink-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="term-wrap">
+    <div class="sec-label rv">03 — LIVE FEED</div>
+    <h2 class="rv">AGENTS, <span class="a">SUPERVISED</span></h2>
+    <p class="prose rv" style="margin-bottom:42px">This is the shape of every run: an event fires, an agent
+    streams, and the output is a decision for you — not a post in the thread.</p>
+    <div class="term rv">
+      <div class="term-bar">
+        <span class="dot o"></span><span class="dot a"></span><span class="dot"></span>
+        <span style="margin-left:10px">charon · activity — boxcar/dispatch</span>
+      </div>
+      <div class="term-body" id="term"><span class="cursor"></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="hood">
+  <div class="sec-label rv">04 — UNDER THE HOOD</div>
+  <h2 class="rv">SMALL MACHINE, <span class="a">SHARP EDGES</span></h2>
+  <div class="hood rv">
+    <div><h4>Stack</h4><p>Tauri 2 — Rust backend for HTTP, git, and process spawning; React + TypeScript front end. One window per repo, config stored locally.</p></div>
+    <div><h4>Events</h4><p>Every handler is <code>event → { enabled, prompt }</code>. Prompts interpolate <code>{pr-number}</code>, <code>{check-name}</code>, <code>{comment-body}</code>, and <code>/skill</code> references.</p></div>
+    <div><h4>Agents</h4><p>Runs stream through <code>cursor-agent --print --output-format stream-json</code>. Fixes run in dedicated worktrees; reviews run read-only in <code>--mode ask</code>.</p></div>
+    <div><h4>GitHub</h4><p>Works against github.com and GitHub Enterprise (<code>/api/v3</code>). REST plus a dash of GraphQL. Fine-grained PAT recommended.</p></div>
+    <div><h4>Skills</h4><p>Imported from <code>~/.cursor/commands</code> and <code>~/.cursor/skills</code>, selectable per stage. <code>humanize</code> ships built in.</p></div>
+    <div><h4>Releases</h4><p>Every push to main auto-versions, tags, builds a universal DMG, and publishes. Installed apps <strong>self-update</strong> with a one-click restart.</p></div>
+  </div>
+  <div class="callout rv">
+    <strong>Cursor is the only supported agent harness today.</strong> Every run shells out to the
+    <a href="https://cursor.com/cli">Cursor CLI</a> (<code>cursor-agent</code>). The harness is the one
+    piece that's pluggable by design — adapters for Claude Code, Codex, or any streaming CLI slot in
+    behind the same interface. <a href="https://github.com/mmmeff/charon/issues">Contributions welcome.</a>
+  </div>
+</section>
+
+<div class="outro">
+  <canvas id="outro-canvas" data-flow aria-hidden="true"></canvas>
+  <div class="outro-inner">
+    <h2 class="rv">TAKE THE <span class="a">HELM</span></h2>
+    <p class="rv">Free. Open source. macOS universal. Updates itself.</p>
+    <div class="rv"><a class="btn" href="https://github.com/mmmeff/charon/releases/latest">Download Charon</a></div>
+  </div>
+</div>
+
+<footer>
+  <span>© Matt Frey · MIT</span>
+  <div class="right">
+    <a href="https://github.com/mmmeff/charon">github</a>
+    <a href="https://github.com/mmmeff/charon/releases">releases</a>
+    <a href="https://github.com/mmmeff/charon/issues">issues</a>
+  </div>
+</footer>
+
+<script>
+/* ============================================================
+   ASCII shader engine — two passes:
+   1. scene shader rendered at one-texel-per-character-cell
+   2. composite pass maps cell luminance to a glyph atlas
+   ============================================================ */
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const VERT = `#version 300 es
+void main(){
+  vec2 p = vec2((gl_VertexID<<1 & 2), (gl_VertexID & 2));
+  gl_Position = vec4(p*2.0-1.0, 0.0, 1.0);
+}`;
+
+const SCENE_FRAG = `#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 uCells;
+uniform float uTime;
+uniform float uAspect;
+uniform vec2 uMouse;
+uniform int uMode;
+
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
+}
+float fbm(vec2 p){
+  float v=0.0, a=0.5;
+  for(int i=0;i<5;i++){ v+=a*noise(p); p=p*2.03+vec2(17.0,9.2); a*=0.5; }
+  return v;
+}
+
+vec3 moonScene(vec2 uv){
+  vec3 col = vec3(0.0);
+
+  // stars: sparse, per-cell twinkle
+  vec2 cell = floor(uv*uCells);
+  float s = hash(cell*1.37);
+  float tw = step(0.992, s) * (0.35 + 0.65*pow(0.5+0.5*sin(uTime*1.7 + s*60.0), 2.0));
+  col += vec3(0.91,0.89,0.83) * tw * 0.65;
+
+  // drifting embers rising on the left
+  vec2 ep = uv*vec2(uAspect,1.0);
+  float em = noise(vec2(ep.x*14.0, ep.y*3.0 - uTime*0.22));
+  float ember = smoothstep(0.965, 1.0, em) * smoothstep(0.85, 0.2, uv.x) * 0.7;
+  col += vec3(1.0,0.31,0.0) * ember;
+
+  // the moon — on portrait screens, smaller and tucked top-right
+  float portrait = smoothstep(1.15, 0.7, uAspect);
+  vec2 c = vec2(mix(0.73, 0.86, portrait) + uMouse.x*0.012,
+                mix(0.46, 0.84, portrait) + uMouse.y*0.012);
+  vec2 p = uv - c; p.x *= uAspect;
+  float r = 0.40 * mix(1.0, 0.5, portrait);
+  float d = length(p);
+
+  if(d < r){
+    vec2 q = p / r;
+    float z = sqrt(max(0.0, 1.0 - dot(q,q)));
+    vec3 n = vec3(q, z);
+    float lon = atan(q.x, z) + uTime*0.045;
+    float lat = asin(clamp(q.y, -1.0, 1.0));
+    vec2 sp = vec2(lon*1.4, lat*1.6);
+
+    float tex = fbm(sp*2.6 + 7.0);
+    vec3 albedo = mix(vec3(0.62,0.59,0.53), vec3(0.84,0.81,0.73), tex);
+
+    // dusty red polar cap (Mordor Macula, but it's a marketing site)
+    float capEdge = 0.62 + 0.20*fbm(vec2(lon*2.2, 3.0));
+    float cap = smoothstep(capEdge-0.10, capEdge+0.14, lat);
+    albedo = mix(albedo, vec3(0.61,0.27,0.12), cap*0.92);
+
+    // canyon band
+    float chY = lat + 0.16 - 0.12*noise(vec2(lon*1.8, 9.0));
+    float ch = smoothstep(0.045, 0.0, abs(chY));
+    albedo = mix(albedo, vec3(0.30,0.28,0.24), ch*0.65);
+
+    // craters
+    float cr = smoothstep(0.60, 0.78, fbm(sp*5.5 + 13.0));
+    albedo *= 1.0 - 0.28*cr;
+
+    vec3 L = normalize(vec3(-0.55, 0.38, 0.72));
+    float diff = clamp(dot(n,L), 0.0, 1.0);
+    col = albedo * (0.05 + 1.05*pow(diff, 1.15));
+
+    // warm rim on the lit limb
+    float rim = pow(1.0 - z, 2.6);
+    col += vec3(1.0,0.31,0.0) * rim * 0.4 * smoothstep(0.0,0.3,diff);
+  } else {
+    float glow = exp(-(d - r)*8.0);
+    col += vec3(1.0,0.31,0.0) * glow * 0.22;
+  }
+  return col;
+}
+
+vec3 flowScene(vec2 uv){
+  vec2 p = uv*vec2(uAspect,1.0)*2.6;
+  float t = uTime*0.10;
+  float w = fbm(p*1.6 - vec2(t*0.7, t));
+  float v = fbm(p + vec2(t, -t*0.5) + w*1.6);
+  vec3 col = vec3(0.0);
+  col = mix(col, vec3(0.91,0.89,0.83)*0.45, smoothstep(0.38, 0.78, v));
+  col = mix(col, vec3(1.0,0.31,0.0), smoothstep(0.72, 0.92, v)*0.85);
+  col = mix(col, vec3(0.81,0.95,0.30), smoothstep(0.90, 1.0, v)*0.7);
+  return col;
+}
+
+void main(){
+  vec2 uv = gl_FragCoord.xy / uCells;
+  o = vec4(uMode==0 ? moonScene(uv) : flowScene(uv), 1.0);
+}`;
+
+const COMP_FRAG = `#version 300 es
+precision highp float;
+out vec4 o;
+uniform sampler2D uScene;
+uniform sampler2D uGlyphs;
+uniform vec2 uCells;
+uniform vec2 uCellPx;
+uniform float uGlyphN;
+void main(){
+  vec2 cell = floor(gl_FragCoord.xy / uCellPx);
+  vec2 cuv = (cell + 0.5) / uCells;
+  vec3 c = texture(uScene, cuv).rgb;
+  float luma = clamp(dot(c, vec3(0.299,0.587,0.114)), 0.0, 1.0);
+  float gi = floor(min(luma, 0.999) * uGlyphN);
+  vec2 inCell = vec2(
+    fract(gl_FragCoord.x / uCellPx.x),
+    1.0 - fract(gl_FragCoord.y / uCellPx.y)
+  );
+  vec2 guv = vec2((gi + inCell.x) / uGlyphN, inCell.y);
+  float a = texture(uGlyphs, guv).a;
+  // glyph density carries the luminance; keep color punchy
+  vec3 tint = c / max(luma, 0.02);
+  vec3 col = tint * min(1.0, 0.35 + luma*1.1);
+  o = vec4(col * a, 1.0);
+}`;
+
+const RAMP = " .,:;i+*xeo#%@";
+
+function makeGlyphAtlas(cellW, cellH){
+  const n = RAMP.length;
+  const cv = document.createElement('canvas');
+  cv.width = cellW * n; cv.height = cellH;
+  const g = cv.getContext('2d');
+  g.clearRect(0,0,cv.width,cv.height);
+  g.fillStyle = '#fff';
+  g.font = `${Math.floor(cellH*0.82)}px ${getComputedStyle(document.body).fontFamily}`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for(let i=0;i<n;i++) g.fillText(RAMP[i], i*cellW + cellW/2, cellH/2 + 1);
+  return cv;
+}
+
+function compile(gl, type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(gl, fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, VERT));
+  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+function asciiShader(canvas, mode){
+  const gl = canvas.getContext('webgl2', {antialias:false, alpha:false});
+  if(!gl) return; // graceful: charcoal background remains
+
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const CW = Math.round(8*dpr), CH = Math.round(15*dpr);
+
+  const scene = program(gl, SCENE_FRAG);
+  const comp = program(gl, COMP_FRAG);
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+
+  // glyph atlas
+  const atlas = makeGlyphAtlas(CW, CH);
+  const glyphTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, glyphTex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  // scene FBO
+  const sceneTex = gl.createTexture();
+  const fbo = gl.createFramebuffer();
+  let cols = 0, rows = 0;
+
+  function resize(){
+    const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+    if(canvas.width === w && canvas.height === h && cols) return;
+    canvas.width = w; canvas.height = h;
+    cols = Math.max(2, Math.ceil(w / CW));
+    rows = Math.max(2, Math.ceil(h / CH));
+    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  const u = (p, name) => gl.getUniformLocation(p, name);
+  let mouse = [0,0];
+  if(mode === 0){
+    addEventListener('pointermove', e => {
+      mouse = [(e.clientX/innerWidth)*2-1, -((e.clientY/innerHeight)*2-1)];
+    }, {passive:true});
+  }
+
+  let visible = true, raf = 0;
+  new IntersectionObserver(es => {
+    visible = es[0].isIntersecting;
+    if(visible && !raf) raf = requestAnimationFrame(frame);
+  }).observe(canvas);
+  document.addEventListener('visibilitychange', () => {
+    if(!document.hidden && visible && !raf) raf = requestAnimationFrame(frame);
+  });
+
+  const t0 = performance.now();
+  function frame(){
+    raf = 0;
+    if(document.hidden || !visible) return;
+    resize();
+    const t = (performance.now() - t0) / 1000;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, cols, rows);
+    gl.useProgram(scene);
+    gl.uniform2f(u(scene,'uCells'), cols, rows);
+    gl.uniform1f(u(scene,'uTime'), REDUCED ? 0 : t);
+    gl.uniform1f(u(scene,'uAspect'), canvas.width / canvas.height);
+    gl.uniform2f(u(scene,'uMouse'), mouse[0], mouse[1]);
+    gl.uniform1i(u(scene,'uMode'), mode);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(comp);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+    gl.uniform1i(u(comp,'uScene'), 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, glyphTex);
+    gl.uniform1i(u(comp,'uGlyphs'), 1);
+    gl.uniform2f(u(comp,'uCells'), cols, rows);
+    gl.uniform2f(u(comp,'uCellPx'), CW, CH);
+    gl.uniform1f(u(comp,'uGlyphN'), RAMP.length);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    if(!REDUCED) raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+  addEventListener('resize', () => { if(REDUCED){ resize(); frame(); } });
+}
+
+try{
+  asciiShader(document.getElementById('hero-canvas'), 0);
+  document.querySelectorAll('canvas[data-flow]').forEach(c => asciiShader(c, 1));
+}catch(e){ console.warn('ascii shader disabled:', e); }
+
+/* ---------- event ticker ---------- */
+const EVENTS = ['ci_failed','merge_conflict_detected','bug_bot_finding','review_requested',
+  'teammate_review_submitted','pr_opened','check_suite_completed','comment_added',
+  'self_review_finding','proposal_approved','agent_run_completed','draft_edit_requested',
+  'thread_resolved','mergeable_again','push_to_branch'];
+const tickerEl = document.getElementById('ticker');
+const seq = EVENTS.map(e => `<i>▸</i> ${e} <em>·</em>`).join(' ');
+tickerEl.innerHTML = seq + ' ' + seq;
+
+/* ---------- reveal on scroll ---------- */
+const ro = new IntersectionObserver(es => {
+  es.forEach(e => { if(e.isIntersecting){ e.target.classList.add('in'); ro.unobserve(e.target); } });
+}, {threshold: 0.12});
+document.querySelectorAll('.rv').forEach(el => ro.observe(el));
+
+/* ---------- terminal typing ---------- */
+const SCRIPT = [
+  ['ev','event'], ['dim','  '], ['hl','ci_failed'], ['dim','  pr #482 — "rework dispatch retry queue"  check: '], ['hl','test-linux-x64'], ['nl'],
+  ['dim','──────────────────────────────────────────────'], ['nl'],
+  ['ok','▸ agent spawned'], ['dim','  cursor-agent · worktree /tmp/charon-wt-482 · model auto'], ['nl'],
+  ['dim','  reading failing check output… 3 failures in '], ['hl','retry_queue.test.ts'], ['nl'],
+  ['dim','  > expected backoff of 250ms, received 0ms'], ['nl'],
+  ['dim','  cause: jitter seeded from Date.now() mocked to epoch in CI'], ['nl'],
+  ['dim','  patching '], ['hl','src/queue/backoff.ts'], ['dim',' — inject clock, clamp jitter floor'], ['nl'],
+  ['dim','  $ npm test -- retry_queue   '], ['ok','✓ 41 passed'], ['nl'],
+  ['ok','▸ pushed fix'], ['dim','  2 files · +14 −6 · your branch, your PR'], ['nl'],
+  ['nl'],
+  ['ev','event'], ['dim','  '], ['hl','teammate_review_submitted'], ['dim','  pr #479 — sarah requested changes'], ['nl'],
+  ['ok','▸ proposal drafted'], ['dim','  reply + 2 code suggestions — '], ['hl','waiting for you'], ['nl'],
+  ['dim','  [ edit ]  [ regenerate ]  [ humanize ]  [ '], ['ok','approve & send'], ['dim',' ]  [ dismiss ]'], ['nl'],
+  ['nl'],
+  ['acid-note','  nothing was posted. nothing ships until you say so.'], ['nl']
+];
+const termEl = document.getElementById('term');
+let started = false;
+new IntersectionObserver(es => {
+  if(es[0].isIntersecting && !started){ started = true; typeLoop(); }
+}, {threshold: 0.3}).observe(termEl);
+
+function typeLoop(){
+  termEl.innerHTML = '<span class="cursor"></span>';
+  const cursor = termEl.querySelector('.cursor');
+  let i = 0, j = 0, span = null;
+  function step(){
+    if(i >= SCRIPT.length){
+      setTimeout(() => { if(!REDUCED) typeLoop(); }, 9000);
+      return;
+    }
+    const [cls, text] = SCRIPT[i];
+    if(cls === 'nl'){
+      termEl.insertBefore(document.createTextNode('\n'), cursor);
+      i++; j = 0; span = null;
+      setTimeout(step, REDUCED ? 0 : 60);
+      return;
+    }
+    if(!span){
+      span = document.createElement('span');
+      span.className = cls === 'acid-note' ? 'ok' : cls;
+      termEl.insertBefore(span, cursor);
+    }
+    if(REDUCED){ span.textContent = text; i++; j = 0; span = null; step(); return; }
+    const chunk = cls === 'dim' ? 3 : 1;
+    span.textContent = text.slice(0, j += chunk);
+    if(j >= text.length){ i++; j = 0; span = null; }
+    setTimeout(step, cls === 'dim' ? 8 : 22);
+  }
+  step();
+}
+</script>
+</body>
+</html>

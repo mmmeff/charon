@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+  <a href="https://mmmeff.github.io/charon/"><b>mmmeff.github.io/charon</b></a> · <a href="../../releases/latest">Download for macOS</a>
+</p>
+
+<p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-cff24d?style=flat-square&labelColor=15140f" alt="MIT license"/></a>
   <img src="https://img.shields.io/badge/Tauri-2-ff4f00?style=flat-square&labelColor=15140f" alt="Tauri 2"/>
   <img src="https://img.shields.io/badge/React-18-8fb4cc?style=flat-square&labelColor=15140f" alt="React 18"/>

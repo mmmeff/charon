@@ -6,6 +6,8 @@
 #     or a line-anchored "BREAKING CHANGE:" footer in a body      → major
 #   - subject containing "#minor" or a "feat:"/"feat(scope):"     → minor
 #   - anything else                                               → patch
+#   - "#norelease" in the pushed head commit's subject skips the bump
+#     entirely (site/docs-only changes shouldn't cut macOS releases)
 # Markers only count in subject lines (plus the anchored BREAKING CHANGE
 # footer) so commit-body prose *mentioning* them can't trigger a bump.
 #
@@ -31,7 +33,7 @@ jobs:
   bump:
     runs-on: ubuntu-latest
     # belt-and-suspenders: never bump in response to a release bump commit
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') && !contains(github.event.head_commit.message, '#norelease') }}
     outputs:
       tag: ${{ steps.bump.outputs.tag }}
     steps:
