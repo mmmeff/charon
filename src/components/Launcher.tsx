@@ -36,6 +36,19 @@ function Onboarding({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // valid host URL → deep link to the classic-token page, scopes prefilled
+  const tokenUrl = (() => {
+    try {
+      const u = new URL(url);
+      if (u.protocol === "https:" || u.protocol === "http:") {
+        return `${u.origin}/settings/tokens/new?scopes=repo&description=Charon`;
+      }
+    } catch {
+      /* not a parseable URL yet */
+    }
+    return null;
+  })();
+
   const connect = async () => {
     setBusy(true);
     setError("");
@@ -101,9 +114,21 @@ function Onboarding({
           type="password"
           value={token}
           onChange={(e) => setToken(e.target.value)}
-          placeholder="ghp_… or fine-grained token"
+          placeholder="ghp_…"
         />
-        <small>Needs repo read/write (contents, pull requests) scopes.</small>
+        <small>
+          Use a <strong>classic</strong> token with the full <code>repo</code> scope checked —
+          fine-grained tokens miss some of the APIs Charon needs (checks, reviews, GraphQL).
+          {tokenUrl && (
+            <>
+              {" "}
+              <a href={tokenUrl} target="_blank" rel="noreferrer">
+                Generate one on {new URL(tokenUrl).host} ↗
+              </a>{" "}
+              (the <code>repo</code> scope comes pre-checked).
+            </>
+          )}
+        </small>
       </label>
       <label className="field">
         <span>Cursor agent binary</span>
