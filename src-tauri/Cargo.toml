@@ -1,6 +1,6 @@
 [package]
 name = "charon-app"
-version = "1.1.0"
+version = "1.1.1"
 description = "Charon — human-in-the-loop GitHub PR agent desktop app"
 edition = "2021"
 
