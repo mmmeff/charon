@@ -1,10 +1,13 @@
 # Auto-versioning: every push to main computes the next semantic version,
 # bumps all version files, tags, and chains into the release build.
 #
-# Bump rules (scanned across commit subjects+bodies since the last v* tag):
-#   - "#major", "BREAKING CHANGE", or a conventional "type!:" → major
-#   - "#minor" or a "feat:"/"feat(scope):" subject            → minor
-#   - anything else                                           → patch
+# Bump rules (since the last v* tag):
+#   - subject containing "#major" or a conventional "type!:" subject,
+#     or a line-anchored "BREAKING CHANGE:" footer in a body      → major
+#   - subject containing "#minor" or a "feat:"/"feat(scope):"     → minor
+#   - anything else                                               → patch
+# Markers only count in subject lines (plus the anchored BREAKING CHANGE
+# footer) so commit-body prose *mentioning* them can't trigger a bump.
 #
 # The bump commit + tag are pushed with GITHUB_TOKEN, whose pushes do NOT
 # trigger other workflows (GitHub's recursion guard) — that both prevents
@@ -53,17 +56,20 @@ jobs:
             RANGE="HEAD"
           fi
 
-          COMMITS=$(git log --no-merges --pretty=format:'%s%n%b' "$RANGE")
-          if [ -z "$COMMITS" ]; then
+          SUBJECTS=$(git log --no-merges --pretty=format:'%s' "$RANGE")
+          BODIES=$(git log --no-merges --pretty=format:'%b' "$RANGE")
+          if [ -z "$SUBJECTS" ]; then
             echo "No commits since ${LAST_TAG:-the beginning}; nothing to release."
             echo "tag=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           BUMP="patch"
-          if echo "$COMMITS" | grep -qiE '#major|BREAKING CHANGE' || echo "$COMMITS" | grep -qE '^[a-z]+(\([^)]*\))?!:'; then
+          if echo "$SUBJECTS" | grep -qiE '#major' \
+            || echo "$SUBJECTS" | grep -qE '^[a-z]+(\([^)]*\))?!:' \
+            || echo "$BODIES" | grep -qE '^BREAKING[ -]CHANGE:'; then
             BUMP="major"
-          elif echo "$COMMITS" | grep -qiE '#minor' || echo "$COMMITS" | grep -qE '^feat(\([^)]*\))?:'; then
+          elif echo "$SUBJECTS" | grep -qiE '#minor' || echo "$SUBJECTS" | grep -qE '^feat(\([^)]*\))?:'; then
             BUMP="minor"
           fi
 
