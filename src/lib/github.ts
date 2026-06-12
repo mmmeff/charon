@@ -127,6 +127,53 @@ export class GitHubClient {
     return data.data as T;
   }
 
+  /**
+   * Per-file viewed state for the signed-in user (GitHub's native review
+   * progress): VIEWED | UNVIEWED | DISMISSED (was viewed, file changed
+   * since). Returns the PR node id for the toggle mutations.
+   */
+  async viewedFiles(
+    repo: string,
+    number: number
+  ): Promise<{ id: string; states: Record<string, string> }> {
+    const [owner, name] = repo.split("/");
+    let after: string | null = null;
+    let id = "";
+    const states: Record<string, string> = {};
+    do {
+      const data: any = await this.graphql(
+        `query($owner:String!,$name:String!,$number:Int!,$after:String){
+          repository(owner:$owner,name:$name){
+            pullRequest(number:$number){
+              id
+              files(first:100, after:$after){
+                pageInfo{ hasNextPage endCursor }
+                nodes{ path viewerViewedState }
+              }
+            }
+          }
+        }`,
+        { owner, name, number, after }
+      );
+      const prn = data?.repository?.pullRequest;
+      if (!prn) break;
+      id = prn.id;
+      for (const n of prn.files?.nodes ?? []) states[n.path] = n.viewerViewedState;
+      const pi = prn.files?.pageInfo;
+      after = pi?.hasNextPage ? pi.endCursor : null;
+    } while (after);
+    return { id, states };
+  }
+
+  /** Toggle GitHub's per-file viewed mark (syncs with github.com's UI). */
+  async setFileViewed(prNodeId: string, path: string, viewed: boolean): Promise<void> {
+    const m = viewed ? "markFileAsViewed" : "unmarkFileAsViewed";
+    await this.graphql(
+      `mutation($id:ID!,$path:String!){ ${m}(input:{pullRequestId:$id,path:$path}){ pullRequest{ id } } }`,
+      { id: prNodeId, path }
+    );
+  }
+
   /** Review threads with resolution state, mapped to REST comment ids. */
   async listReviewThreads(repo: string, number: number): Promise<ReviewThreadInfo[]> {
     const [owner, name] = repo.split("/");

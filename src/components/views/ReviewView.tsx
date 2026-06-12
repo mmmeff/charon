@@ -93,6 +93,11 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   const checks = usePrData((s) => s.checks[pr.number] ?? []);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [error, setError] = useState("");
+  // GitHub's per-file viewed state — shared with github.com's own UI, and
+  // GitHub flips files back to unviewed (DISMISSED) when they change
+  const [viewedState, setViewedState] = useState<{ id: string; states: Record<string, string> } | null>(
+    null
+  );
   const mainRef = useRef<HTMLDivElement>(null);
   useScrolledPrTitle(mainRef, pr);
 
@@ -101,8 +106,22 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
       .getPullDiff(ctx.repo, pr.number)
       .then((d) => setFiles(parseUnifiedDiff(d)))
       .catch((e) => setError(String(e)));
+    ctx.gh
+      .viewedFiles(ctx.repo, pr.number)
+      .then(setViewedState)
+      .catch(() => setViewedState(null)); // older GHE: feature silently absent
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pr.number, pr.headSha]);
+
+  const toggleFileViewed = (path: string, viewed: boolean) => {
+    if (!viewedState) return;
+    const prev = viewedState.states[path];
+    // optimistic; revert on failure
+    setViewedState((s) => s && { ...s, states: { ...s.states, [path]: viewed ? "VIEWED" : "UNVIEWED" } });
+    ctx.gh.setFileViewed(viewedState.id, path, viewed).catch(() => {
+      setViewedState((s) => s && { ...s, states: { ...s.states, [path]: prev } });
+    });
+  };
 
   const reviewProposal = proposals.find(
     (p): p is Extract<Proposal, { type: "review" }> =>
@@ -219,6 +238,9 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
           files={files}
           anchors={anchors}
           selectable
+          remoteViewed={
+            viewedState ? { map: viewedState.states, toggle: toggleFileViewed } : undefined
+          }
           renderCommentForm={(sel, close) => (
             <Composer
               pr={pr}

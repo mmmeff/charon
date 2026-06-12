@@ -43,13 +43,16 @@ export function DiffViewer({
   selectable = false,
   anchors = [],
   viewedKey,
+  remoteViewed,
   renderCommentForm,
 }: {
   files: FileDiff[];
   selectable?: boolean;
   anchors?: DiffAnchor[];
-  /** enables per-file "viewed" checkboxes; state persists under this key */
+  /** local "viewed" checkboxes; state persists under this key (own drafts) */
   viewedKey?: string;
+  /** GitHub-backed viewed state (teammate reviews) — syncs with github.com */
+  remoteViewed?: { map: Record<string, string>; toggle: (path: string, viewed: boolean) => void };
   renderCommentForm?: (sel: LineSelection, close: () => void) => ReactNode;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -75,6 +78,18 @@ export function DiffViewer({
       if (viewedKey) localStorage.setItem(viewedKey, JSON.stringify(next));
       return next;
     });
+  };
+  const viewedEnabled = !!viewedKey || !!remoteViewed;
+  // remote mode: GitHub owns invalidation (DISMISSED on change); local mode:
+  // the content hash plays that role
+  const isViewedPath = (path: string) =>
+    remoteViewed
+      ? remoteViewed.map[path] === "VIEWED"
+      : !!viewedKey && viewed[path] === fileHashes.get(path);
+  const toggleViewed = (path: string, hash: string, next: boolean) => {
+    if (remoteViewed) remoteViewed.toggle(path, next);
+    else setFileViewed(path, next ? hash : null);
+    setCollapsed((c) => ({ ...c, [path]: next }));
   };
   const [hideWs, setHideWsState] = useState(() => localStorage.getItem("prc-diff-ws") !== "off");
   const [mode, setModeState] = useState<ViewMode>(
@@ -343,10 +358,9 @@ export function DiffViewer({
             <input type="checkbox" checked={hideWs} onChange={(e) => setHideWs(e.target.checked)} />
             Hide whitespace changes
           </label>
-          {viewedKey && (
+          {viewedEnabled && (
             <span className="subtle">
-              {files.filter((f) => viewed[keyOf(f)] === fileHashes.get(keyOf(f))).length}/{files.length}{" "}
-              viewed
+              {files.filter((f) => isViewedPath(keyOf(f))).length}/{files.length} viewed
             </span>
           )}
         </div>
@@ -364,7 +378,7 @@ export function DiffViewer({
       {files.map((file) => {
         const path = keyOf(file);
         const hash = fileHashes.get(path) ?? "";
-        const isViewed = !!viewedKey && viewed[path] === hash;
+        const isViewed = viewedEnabled && isViewedPath(path);
         // viewed files collapse by default; an explicit expand overrides
         // without clearing the viewed mark
         const isCollapsed = collapsed[path] ?? isViewed;
@@ -390,23 +404,15 @@ export function DiffViewer({
               {file.isDeleted && <Badge color="red">deleted</Badge>}
               {file.isBinary && <Badge color="gray">binary</Badge>}
               {wsOnly && <Badge color="gray">whitespace-only changes</Badge>}
-              {viewedKey && (
-                <label className="viewed-toggle" title="Mark as read — collapses the file; it stays read if you re-expand">
-                  <input
-                    type="checkbox"
-                    checked={isViewed}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setFileViewed(path, hash);
-                        setCollapsed((c) => ({ ...c, [path]: true }));
-                      } else {
-                        setFileViewed(path, null);
-                        setCollapsed((c) => ({ ...c, [path]: false }));
-                      }
-                    }}
-                  />
+              {viewedEnabled && (
+                <button
+                  className={`viewed-toggle-btn ${isViewed ? "on" : ""}`}
+                  title="Mark as read — collapses the file; re-expanding keeps it read"
+                  onClick={() => toggleViewed(path, hash, !isViewed)}
+                >
+                  <input type="checkbox" checked={isViewed} readOnly tabIndex={-1} />
                   viewed
-                </label>
+                </button>
               )}
             </div>
             {!isCollapsed &&

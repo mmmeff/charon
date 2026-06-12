@@ -394,14 +394,16 @@ h3, h4 {
   border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 2;
   display: flex; gap: 8px; align-items: center;
 }
-/* "viewed" checkbox — right edge of the file header */
-.viewed-toggle {
-  margin-left: auto; display: flex; align-items: center; gap: 5px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--fg-muted); cursor: pointer; user-select: none; white-space: nowrap;
+/* "viewed" toggle — checkbox in a button for a generous hitbox */
+.viewed-toggle-btn {
+  margin-left: auto; display: flex; align-items: center; gap: 6px;
+  padding: 3px 10px; font-size: 9.5px; letter-spacing: 0.1em;
+  background: none; border: 1px solid var(--border-subtle);
+  color: var(--fg-muted); white-space: nowrap;
 }
-.viewed-toggle:hover { color: var(--fg); }
-.viewed-toggle input { accent-color: var(--acid); }
+.viewed-toggle-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--fg-subtle); background: none; }
+.viewed-toggle-btn.on { color: var(--acid); border-color: rgba(207, 242, 77, 0.45); }
+.viewed-toggle-btn input { accent-color: var(--acid); pointer-events: none; margin: 0; }
 
 .diff-scroll { overflow-x: auto; }
 .diff-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; line-height: 20px; }
