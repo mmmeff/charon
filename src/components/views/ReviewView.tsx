@@ -3,14 +3,14 @@ import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
-import { age, sortPrs, useScrollMemory, useScrolledPrTitle, type SortKey } from "../../lib/ui";
+import { age, sortPrs, usePastHero, useScrollMemory, useScrolledPrTitle, type SortKey } from "../../lib/ui";
 import { Badge, BranchBadge, CiBadge, EmptyState, LoadingField, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
 import { ChecksPanel } from "../ChecksPanel";
-import { Composer, RunResults } from "../Composer";
+import { Composer, RunResults, type ComposerMode } from "../Composer";
 import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { Sidebar } from "../Panels";
 import { groupCommentThreads } from "../../lib/threads";
-import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels } from "../PrMeta";
+import { DiffCommentThread, PrActivityPanel, PrDescription, PrHeroRail, PrLabels } from "../PrMeta";
 import { InlineCommentEditor, ReviewStrip } from "../ProposalCard";
 import { useFlow } from "../flow";
 
@@ -99,8 +99,10 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
     null
   );
   const mainRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
   useScrolledPrTitle(mainRef, pr);
   useScrollMemory(mainRef, `pr:${ctx.repo}:${pr.number}`);
+  const condensed = usePastHero(mainRef, heroRef);
 
   useEffect(() => {
     ctx.gh
@@ -190,71 +192,104 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
       : [];
   const anchors = [...threadAnchors, ...proposalAnchors];
 
+  const consoleModes: ComposerMode[] = ["review", "ask"];
+
   return (
     <div className="workspace">
-      <div className="ws-main" ref={mainRef}>
-      {/* ── the PR itself: title, state, description ── */}
-      <Section>
-        <h2 className="viewtitle">
-          <a href={pr.url} title="Open on GitHub">
-            #{pr.number} {pr.title} <span className="ext">↗</span>
-          </a>
-        </h2>
-        <div className="row" style={{ marginBottom: 12 }}>
-          <Badge color="purple">review requested</Badge>
-          <CiBadge checks={checks} />
-          <BranchBadge head={pr.headRef} base={pr.baseRef} />
-          <PrLabels pr={pr} />
-          <span className="subtle">
-            by {pr.author} · {pr.changedFiles} files
-          </span>
-        </div>
-        <PrDescription pr={pr} />
-      </Section>
+      <div className="ws-main pr-shell" ref={mainRef}>
+        <PrHeroRail
+          pr={pr}
+          checks={checks}
+          show={condensed}
+          onTop={() => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+          composerModes={consoleModes}
+          reviewKind="teammate"
+        />
 
-      {/* ── CI state (read-only: logs + retry, no fix agents on others' branches) ── */}
-      {checks.some((c) => c.conclusion !== "skipped") && (
-        <Section label="Status">
-          <ChecksPanel pr={pr} />
-        </Section>
-      )}
+        {/* ── hero: the textured header well — identity, description, CI, agent ── */}
+        <header className="pr-hero" ref={heroRef}>
+          {/* the PR itself: title + state */}
+          <div className="pr-hero-id">
+            <h2 className="viewtitle">
+              <a href={pr.url} title="Open on GitHub">
+                #{pr.number} {pr.title} <span className="ext">↗</span>
+              </a>
+            </h2>
+            <div className="row pr-hero-meta">
+              <Badge color="purple">review requested</Badge>
+              <CiBadge checks={checks} />
+              <BranchBadge head={pr.headRef} base={pr.baseRef} />
+              <PrLabels pr={pr} />
+              <span className="subtle">
+                by {pr.author} · {pr.changedFiles} files
+              </span>
+            </div>
+          </div>
 
-      {/* ── drive the review agent ── */}
-      <Section label="Console">
-        <Composer pr={pr} modes={["review", "ask"]} reviewKind="teammate" />
-        <RunResults pr={pr} />
-        {error && <p style={{ color: "var(--red)" }}>{error}</p>}
-      </Section>
+          {/* teammate PRs may have no body — skip the label rather than show an empty section */}
+          {pr.body?.trim() && (
+            <Section label="Description">
+              <PrDescription pr={pr} />
+            </Section>
+          )}
 
-      {reviewProposal && (
-        <Section label="Proposed review">
-          <ReviewStrip proposal={reviewProposal} />
-        </Section>
-      )}
+          {/* CI state (read-only: logs + retry, no fix agents on others' branches) */}
+          {checks.some((c) => c.conclusion !== "skipped") && (
+            <Section label="CI">
+              <ChecksPanel pr={pr} />
+            </Section>
+          )}
 
-      <Section label="Diff">
-      {!files && !error && <LoadingField label="loading diff…" />}
-      {files && (
-        <DiffViewer
-          files={files}
-          anchors={anchors}
-          selectable
-          remoteViewed={
-            viewedState ? { map: viewedState.states, toggle: toggleFileViewed } : undefined
-          }
-          renderCommentForm={(sel, close) => (
-            <Composer
-              pr={pr}
-              modes={["comment", "review", "ask"]}
-              reviewKind="teammate"
-              compact
-              selection={sel}
-              onClose={close}
+          {/* drive the review agent */}
+          <Section label="Agent">
+            <Composer pr={pr} modes={consoleModes} reviewKind="teammate" />
+            <RunResults pr={pr} />
+            {error && <p style={{ color: "var(--red)" }}>{error}</p>}
+          </Section>
+
+          {reviewProposal && (
+            <Section label="Proposed review">
+              <ReviewStrip proposal={reviewProposal} />
+            </Section>
+          )}
+        </header>
+
+        {/* ── the diff: the main "canvas" view below the hero ── */}
+        <section className="pr-diff">
+          <div className="pr-diff-head">
+            <span className="pr-diff-eyebrow">Diff</span>
+            <span style={{ flex: 1 }} />
+            {files && (
+              <span className="pr-diff-count">
+                {files.length} file{files.length === 1 ? "" : "s"}
+              </span>
+            )}
+            <span className="pr-diff-stat">
+              <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
+            </span>
+          </div>
+          {!files && !error && <LoadingField label="loading diff…" />}
+          {files && (
+            <DiffViewer
+              files={files}
+              anchors={anchors}
+              selectable
+              remoteViewed={
+                viewedState ? { map: viewedState.states, toggle: toggleFileViewed } : undefined
+              }
+              renderCommentForm={(sel, close) => (
+                <Composer
+                  pr={pr}
+                  modes={["comment", "review", "ask"]}
+                  reviewKind="teammate"
+                  compact
+                  selection={sel}
+                  onClose={close}
+                />
+              )}
             />
           )}
-        />
-      )}
-      </Section>
+        </section>
       </div>
       <PrActivityPanel pr={pr} />
     </div>

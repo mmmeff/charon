@@ -3,15 +3,15 @@ import { findLineByText, parseUnifiedDiff } from "../lib/diff";
 import { usePrData } from "../lib/events";
 import { useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
-import { timeAgo, useScrollMemory, useScrolledPrTitle } from "../lib/ui";
-import { Badge, BranchBadge, CiBadge, LoadingField, Section } from "./common";
+import { timeAgo, usePastHero, useScrollMemory, useScrolledPrTitle } from "../lib/ui";
+import { Badge, BranchBadge, LoadingField, Section } from "./common";
 import { ApprovalsMenu, ReviewersMenu } from "./ReviewerMenus";
 import { ChecksPanel } from "./ChecksPanel";
-import { Composer, RunResults } from "./Composer";
+import { Composer, RunResults, type ComposerMode } from "./Composer";
 import { DiffViewer, type DiffAnchor } from "./DiffViewer";
 import { FindingCard, FindingsStrip } from "./Findings";
 import { groupCommentThreads } from "../lib/threads";
-import { DiffCommentThread, PrActivityPanel, PrDescription, PrLabels, PrTitle } from "./PrMeta";
+import { DiffCommentThread, PrActivityPanel, PrDescription, PrHeroRail, PrLabels, PrTitle } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
 import { useFlow } from "./flow";
 
@@ -29,8 +29,10 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [diffErr, setDiffErr] = useState("");
   const mainRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
   useScrolledPrTitle(mainRef, pr);
   useScrollMemory(mainRef, `pr:${ctx.repo}:${pr.number}`);
+  const condensed = usePastHero(mainRef, heroRef);
 
   const loadDiff = async () => {
     setDiffErr("");
@@ -102,81 +104,106 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     ),
   ];
 
+  // drafts lead with Review (the pre-flight ritual); open PRs lead with Ask
+  const consoleModes: ComposerMode[] =
+    variant === "draft" ? ["review", "edit", "ask"] : ["ask", "edit", "review"];
 
   return (
     <div className="workspace">
-      <div className="ws-main" ref={mainRef}>
-
-      {/* ── the PR itself: title, state, description ── */}
-      <Section>
-        <PrTitle pr={pr} />
-        <div className="row" style={{ marginBottom: 12 }}>
-          {pr.draft && <Badge color="gray">draft</Badge>}
-          {pr.autoMerge && (
-            <Badge color="green" title="Auto-merge is armed — merges once all requirements pass">
-              ⏻ automerge
-            </Badge>
-          )}
-          {variant === "babysit" && (
-            <>
-              <ApprovalsMenu pr={pr} />
-              <ReviewersMenu pr={pr} />
-            </>
-          )}
-          <BranchBadge head={pr.headRef} base={pr.baseRef} />
-          <PrLabels pr={pr} />
-          <span className="subtle">
-            +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
-          </span>
-        </div>
-        <PrDescription pr={pr} />
-      </Section>
-
-      {/* ── what needs attention: CI + pending approvals (branch ops moved
-            to the BranchOps block atop the activity panel) ── */}
-      {(checks.some((c) => c.conclusion !== "skipped") || prProposals.length > 0) && (
-        <Section label="Status">
-          <ChecksPanel pr={pr} />
-          {prProposals.map((p) => (
-            <ProposalCard key={p.id} proposal={p} />
-          ))}
-        </Section>
-      )}
-
-      {/* ── drive agents: ask / change / review + their output ── */}
-      <Section label="Console">
-        <Composer
+      <div className="ws-main pr-shell" ref={mainRef}>
+        <PrHeroRail
           pr={pr}
-          // drafts lead with Review (the pre-flight ritual); open PRs lead with Ask
-          modes={variant === "draft" ? ["review", "edit", "ask"] : ["ask", "edit", "review"]}
+          checks={checks}
+          show={condensed}
+          onTop={() => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+          composerModes={consoleModes}
           reviewKind="self"
         />
-        <FindingsStrip pr={pr} />
-        <RunResults pr={pr} onReloadDiff={() => void loadDiff()} />
-      </Section>
 
-      <Section label="Diff">
-      {diffErr && <p style={{ color: "var(--red)" }}>{diffErr}</p>}
-      {!files && !diffErr && <LoadingField label="loading diff…" />}
-      {files && (
-        <DiffViewer
-          files={files}
-          selectable
-          anchors={anchors}
-          viewedKey={variant === "draft" ? `prc-viewed-${ctx.repo}-${pr.number}` : undefined}
-          renderCommentForm={(sel, close) => (
-            <Composer
-              pr={pr}
-              modes={["edit", "comment", "review", "ask"]}
-              reviewKind="self"
-              compact
-              selection={sel}
-              onClose={close}
+        {/* ── hero: the textured header well — identity, description, CI, agent ── */}
+        <header className="pr-hero" ref={heroRef}>
+          {/* the PR itself: title + state */}
+          <div className="pr-hero-id">
+            <PrTitle pr={pr} />
+            <div className="row pr-hero-meta">
+              {pr.draft && <Badge color="gray">draft</Badge>}
+              {pr.autoMerge && (
+                <Badge color="green" title="Auto-merge is armed — merges once all requirements pass">
+                  ⏻ automerge
+                </Badge>
+              )}
+              {variant === "babysit" && (
+                <>
+                  <ApprovalsMenu pr={pr} />
+                  <ReviewersMenu pr={pr} />
+                </>
+              )}
+              <BranchBadge head={pr.headRef} base={pr.baseRef} />
+              <PrLabels pr={pr} />
+              <span className="subtle">
+                +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
+              </span>
+            </div>
+          </div>
+
+          <Section label="Description">
+            <PrDescription pr={pr} />
+          </Section>
+
+          {/* what needs attention: CI + pending approvals (branch ops moved
+              to the BranchOps block atop the activity panel) */}
+          {(checks.some((c) => c.conclusion !== "skipped") || prProposals.length > 0) && (
+            <Section label="CI">
+              <ChecksPanel pr={pr} />
+              {prProposals.map((p) => (
+                <ProposalCard key={p.id} proposal={p} />
+              ))}
+            </Section>
+          )}
+
+          {/* drive agents: ask / change / review + their output */}
+          <Section label="Agent">
+            <Composer pr={pr} modes={consoleModes} reviewKind="self" />
+            <FindingsStrip pr={pr} />
+            <RunResults pr={pr} onReloadDiff={() => void loadDiff()} />
+          </Section>
+        </header>
+
+        {/* ── the diff: the main "canvas" view below the hero ── */}
+        <section className="pr-diff">
+          <div className="pr-diff-head">
+            <span className="pr-diff-eyebrow">Diff</span>
+            <span style={{ flex: 1 }} />
+            {files && (
+              <span className="pr-diff-count">
+                {files.length} file{files.length === 1 ? "" : "s"}
+              </span>
+            )}
+            <span className="pr-diff-stat">
+              <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
+            </span>
+          </div>
+          {diffErr && <p style={{ color: "var(--red)" }}>{diffErr}</p>}
+          {!files && !diffErr && <LoadingField label="loading diff…" />}
+          {files && (
+            <DiffViewer
+              files={files}
+              selectable
+              anchors={anchors}
+              viewedKey={variant === "draft" ? `prc-viewed-${ctx.repo}-${pr.number}` : undefined}
+              renderCommentForm={(sel, close) => (
+                <Composer
+                  pr={pr}
+                  modes={["edit", "comment", "review", "ask"]}
+                  reviewKind="self"
+                  compact
+                  selection={sel}
+                  onClose={close}
+                />
+              )}
             />
           )}
-        />
-      )}
-      </Section>
+        </section>
       </div>
       <PrActivityPanel pr={pr} />
     </div>

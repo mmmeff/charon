@@ -74,6 +74,14 @@ export const IconSidePanel = () => (
   </svg>
 );
 
+/** AI "spark" — opens the agent controls (ask / edit / review). */
+export const IconAgent = () => (
+  <svg {...base}>
+    <path d="M6.4 4C6.7 7.1 7.7 8.3 11 8.6 7.9 8.9 6.7 9.9 6.4 13.2 6.1 10.1 5.1 8.9 1.8 8.6 4.9 8.3 6.1 7.3 6.4 4Z" />
+    <path d="M12.2 1.2C12.4 2.9 13 3.6 14.8 3.8 13.1 4 12.4 4.6 12.2 6.4 12 4.7 11.4 4 9.6 3.8 11.3 3.6 12 3 12.2 1.2Z" />
+  </svg>
+);
+
 /** Brand mark: the moon Charon — bone-gray disk, dusty red polar cap,
  *  equatorial chasm. Filled (not stroked) since it's a mark, not a glyph.
  *  `id` must be unique per render site: clip-path ids are document-global. */

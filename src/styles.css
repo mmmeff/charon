@@ -10,6 +10,8 @@
   --bg: #0e0d0a;
   --bg-raised: #15140f;
   --bg-inset: #090806;
+  /* warm ground beneath the PR hero/rail — a touch brighter than the inset */
+  --hero-ground: #100c07;
   --border: #2e2b21;
   --border-subtle: #1e1c15;
   /* ink */
@@ -55,6 +57,8 @@
 
   /* textures */
   --dotgrid: radial-gradient(rgba(233, 228, 212, 0.045) 1px, transparent 1px);
+  /* the warm ember wash beneath the PR hero/rail and the selected list card */
+  --ember-wash: linear-gradient(180deg, rgba(255, 79, 0, 0.06), rgba(255, 79, 0, 0.022));
   --hatch-orange: repeating-linear-gradient(
     45deg,
     transparent 0 5px,
@@ -324,10 +328,10 @@ h3, h4 {
 .card.selectable:hover { border-color: var(--fg-subtle); }
 .card.selected,
 .card.selected:hover {
-  border-color: rgba(255, 79, 0, 0.45);
+  border-color: rgba(255, 79, 0, 0.4);
   border-left-color: var(--orange);
-  background-color: #181711;
-  box-shadow: inset 16px 0 42px -16px rgba(255, 79, 0, 0.34);
+  background: var(--ember-wash), var(--hero-ground);
+  box-shadow: inset 16px 0 42px -16px rgba(255, 79, 0, 0.16);
 }
 .card.selected h4 { color: var(--fg); }
 .card.selected .meta { color: var(--fg); opacity: 0.75; }
@@ -1014,6 +1018,106 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
 /* ---- PR workspace: main column + full-height activity column ---- */
 .workspace { flex: 1; display: flex; min-width: 0; }
 .ws-main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 20px 60px; }
+
+/* ---- PR shell: a textured "hero" header zone vs the diff "canvas" ----
+   The non-diff elements (identity, status, console) read as one elevated
+   header well on the inset ground (matching the topstrip/rail chrome), so the
+   raised cards inside pop; the diff below sits on plain ground as content.
+   A condensed identity rail pins to the top once the hero scrolls away. */
+.ws-main.pr-shell { padding: 0 0 60px; --prc-rail-h: 38px; }
+
+/* condensed identity rail: collapsed to zero height until the hero leaves */
+.pr-railbar {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 20px;
+  background: var(--ember-wash), var(--dotgrid), var(--hero-ground);
+  background-size: auto, 7px 7px, auto;
+  border-bottom: 1px solid transparent;
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height 0.2s ease, opacity 0.16s ease;
+  user-select: none;
+}
+.pr-railbar.show { max-height: var(--prc-rail-h); opacity: 1; border-bottom-color: var(--border); }
+.pr-railbar-id {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  height: var(--prc-rail-h); padding: 0;
+  background: none; border: none; text-transform: none; letter-spacing: 0; cursor: pointer;
+}
+.pr-railbar-id:hover { background: none; border: none; }
+.pr-railbar-num { flex: none; font-size: 11.5px; font-weight: 800; color: var(--orange); }
+.pr-railbar-title {
+  min-width: 0; font-size: 11.5px; font-weight: 600; color: var(--fg-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pr-railbar-id:hover .pr-railbar-title { color: var(--fg); }
+.pr-railbar-stat { flex: none; font-size: 10.5px; letter-spacing: 0.04em; white-space: nowrap; }
+.pr-railbar-stat .add { color: var(--acid); }
+.pr-railbar-stat .del { color: var(--red); }
+.pr-railbar-act {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 26px; padding: 0; color: var(--fg-muted);
+}
+.pr-railbar-act:hover:not(:disabled) { color: var(--orange); border-color: var(--fg-subtle); }
+.pr-railbar-act.on { color: var(--orange); border-color: var(--orange); background: var(--orange-bg); }
+.pr-railbar-act svg { display: block; }
+
+/* the rail's console button pops the agent composer out as a floating panel */
+.pr-rail-composer {
+  position: fixed; z-index: 120; width: 460px; max-width: calc(100vw - 24px);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6);
+  animation: desc-in 0.14s ease;
+}
+.pr-rail-composer .card.composer { margin-bottom: 0; }
+
+/* hero: the elevated header well — a warm ember-washed charcoal that reads as
+   "header chrome", clearly set apart from the neutral diff canvas below while
+   still staying darker than the cards floating on it */
+.pr-hero {
+  position: relative;
+  padding: 18px 20px 22px;
+  background: var(--ember-wash), var(--dotgrid), var(--hero-ground);
+  background-size: auto, 7px 7px, auto;
+  border-bottom: 1px solid var(--border);
+}
+/* ember weld line separating the hero from the diff canvas below */
+.pr-hero::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: var(--hatch-orange); opacity: 0.45; pointer-events: none;
+}
+.pr-hero-id { margin-bottom: 20px; }
+.pr-hero-id h2.viewtitle { margin-top: 0; }
+.pr-hero-meta { margin-bottom: 12px; }
+.pr-hero .ws-section { margin-bottom: 20px; }
+.pr-hero .ws-section:last-child { margin-bottom: 0; }
+
+/* diff: the main "canvas" view on plain ground — a soft top inset shadow makes
+   it read as a recessed plane below the warm hero */
+.pr-diff {
+  padding: 24px 20px 0;
+  box-shadow: inset 0 13px 22px -18px rgba(0, 0, 0, 0.9);
+}
+.pr-diff-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+.pr-diff-eyebrow {
+  font-family: var(--sans); font-weight: 800; font-size: 15px;
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--fg);
+}
+.pr-diff-eyebrow::before { content: "// "; color: var(--orange); font-family: var(--mono); }
+.pr-diff-count {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+.pr-diff-stat { flex: none; font-size: 11px; letter-spacing: 0.04em; white-space: nowrap; }
+.pr-diff-stat .add { color: var(--acid); }
+.pr-diff-stat .del { color: var(--red); }
+
+/* keep the diff's viewport-sticky chrome clear of the pinned rail. NOTE: the
+   per-file headers are intentionally excluded — their sticky context is their
+   own `overflow:hidden` .diff-file (they don't viewport-pin), so a top offset
+   would just shove each header down and expose a black band above it. They
+   scroll up under the opaque rail instead. */
+.pr-shell .comment-nav-wrap { top: calc(var(--prc-rail-h) + 8px); }
+.pr-shell .filetree { top: calc(var(--prc-rail-h) + 8px); max-height: calc(100vh - 150px); }
 .ws-activity {
   width: 320px; flex-shrink: 0; position: relative;
   display: flex; flex-direction: column;

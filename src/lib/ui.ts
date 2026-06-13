@@ -94,6 +94,34 @@ export function useScrolledPrTitle(
 }
 
 /**
+ * True once the workspace has scrolled far enough that the hero header is
+ * essentially gone — the cue to swap in the condensed sticky rail. Tracks the
+ * live hero height (composer/checks expand) so the handoff stays glued to the
+ * hero's bottom edge.
+ */
+export function usePastHero(
+  mainRef: RefObject<HTMLElement | null>,
+  heroRef: RefObject<HTMLElement | null>
+): boolean {
+  const [past, setPast] = useState(false);
+  useEffect(() => {
+    const main = mainRef.current;
+    const hero = heroRef.current;
+    if (!main || !hero) return;
+    const update = () => setPast(main.scrollTop > Math.max(120, hero.offsetHeight - 80));
+    update();
+    main.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(hero);
+    return () => {
+      main.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [mainRef, heroRef]);
+  return past;
+}
+
+/**
  * Re-render ticker for relative timestamps ("synced 5s ago", elapsed
  * counters). Pass 0 to disable the timer (e.g. for finished agents).
  */

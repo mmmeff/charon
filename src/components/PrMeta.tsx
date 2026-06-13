@@ -3,13 +3,14 @@ import { usePrData } from "../lib/events";
 import { runAddressComment, runDescriptionDraft, runTitleDraft } from "../lib/flows";
 import type { ReviewThreadInfo } from "../lib/github";
 import { useAgentStore, useRepoStore, useUiStore } from "../lib/store";
-import type { CommentInfo, Proposal, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
+import type { CheckInfo, CommentInfo, Proposal, PrSummary, ReviewInfo, TimelineEventInfo } from "../types";
 import { AgentCard } from "./AgentCard";
 import { AgentLaunchForm } from "./AgentLaunchForm";
+import { Composer, type ComposerMode } from "./Composer";
 import { ControlCenter } from "./ControlCenter";
 import { age } from "../lib/ui";
-import { Badge, Spinner } from "./common";
-import { IconDrafts, IconExpand } from "./icons";
+import { Badge, CiBadge, RunningAgentsChip, Spinner } from "./common";
+import { IconAgent, IconDrafts, IconExpand } from "./icons";
 import { Markdown } from "./Markdown";
 import { ProposedReplyCard } from "./ProposalCard";
 import { useResizablePanel } from "./useResizablePanel";
@@ -226,6 +227,109 @@ export function PrLabels({ pr }: { pr: PrSummary }) {
           {l}
         </Badge>
       ))}
+    </>
+  );
+}
+
+/**
+ * Condensed identity strip that pins to the top of the workspace once the
+ * hero header scrolls away: number, title, live agents, CI, and diff size at a
+ * glance. Collapsed (zero-height) until `show`, so it never costs vertical
+ * space while the full hero is in view. Clicking the title jumps back to the
+ * top; the console button reopens the agent composer in a floating popover so
+ * ask/edit/review stays one click away without scrolling up.
+ */
+export function PrHeroRail({
+  pr,
+  checks,
+  show,
+  onTop,
+  composerModes,
+  reviewKind,
+}: {
+  pr: PrSummary;
+  checks: CheckInfo[];
+  show: boolean;
+  onTop: () => void;
+  composerModes: ComposerMode[];
+  reviewKind: "self" | "teammate";
+}) {
+  const hasChecks = checks.some((c) => c.conclusion !== "skipped");
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  const place = () => {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, right: Math.max(10, window.innerWidth - r.right) });
+  };
+  const openComposer = () => {
+    place();
+    setComposerOpen(true);
+  };
+
+  // the popover belongs to the rail — when the rail collapses (scrolled back
+  // to the hero), the floating composer goes with it
+  useEffect(() => {
+    if (!show) setComposerOpen(false);
+  }, [show]);
+
+  // dismiss on outside click / Escape; keep it glued to the trigger on resize
+  useEffect(() => {
+    if (!composerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (popRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
+      setComposerOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setComposerOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+    };
+  }, [composerOpen]);
+
+  return (
+    <>
+      <div className={`pr-railbar ${show ? "show" : ""}`} aria-hidden={!show}>
+        <button className="pr-railbar-id" title="Back to top" tabIndex={show ? undefined : -1} onClick={onTop}>
+          <span className="pr-railbar-num">#{pr.number}</span>
+          <span className="pr-railbar-title">{pr.title}</span>
+        </button>
+        <span style={{ flex: 1 }} />
+        <RunningAgentsChip prNumber={pr.number} />
+        {pr.draft && <Badge color="gray">draft</Badge>}
+        {hasChecks && <CiBadge checks={checks} />}
+        <span className="pr-railbar-stat">
+          <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
+        </span>
+        <button
+          ref={triggerRef}
+          className={`pr-railbar-act ${composerOpen ? "on" : ""}`}
+          title="Open the agent — ask, edit, or review without scrolling up"
+          tabIndex={show ? undefined : -1}
+          onClick={() => (composerOpen ? setComposerOpen(false) : openComposer())}
+        >
+          <IconAgent />
+        </button>
+      </div>
+      {composerOpen && pos && (
+        <div className="pr-rail-composer" ref={popRef} style={{ top: pos.top, right: pos.right }}>
+          <Composer
+            pr={pr}
+            modes={composerModes}
+            reviewKind={reviewKind}
+            onClose={() => setComposerOpen(false)}
+          />
+        </div>
+      )}
     </>
   );
 }
