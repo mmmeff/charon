@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Launcher } from "./components/Launcher";
 import { RepoApp } from "./components/RepoApp";
 import { native } from "./lib/tauri";
+import { initNotificationNav } from "./lib/notify-nav";
 import { useGlobalConfig } from "./lib/store";
 import { dismissUpdateToast, kickOffUpdate, startUpdateLoop, useUpdateStore } from "./lib/updater";
 
@@ -58,6 +59,13 @@ export default function App() {
 
   useEffect(() => {
     startUpdateLoop();
+  }, []);
+
+  // route OS notification clicks → the relevant PR (every window listens;
+  // backend dedups/routes). Covers cold-start: a tap that launched the app is
+  // buffered until this registers.
+  useEffect(() => {
+    void initNotificationNav();
   }, []);
 
   // Route every external link through the OS browser — the webview must

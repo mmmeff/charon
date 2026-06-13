@@ -74,14 +74,20 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
   const convertToDraft = () =>
     guard(async () => {
       await ctx.gh.convertToDraft(ctx.repo, pr.number);
-      void notify("pr_activity", "Converted to draft", `#${pr.number} ${pr.title}`);
+      void notify("pr_activity", "Converted to draft", `#${pr.number} ${pr.title}`, {
+        repo: ctx.repo,
+        prNumber: pr.number,
+      });
       poller.refresh(); // re-buckets the PR from Open into Drafts
     });
 
   const closePr = () =>
     guard(async () => {
       await ctx.gh.closePull(ctx.repo, pr.number);
-      void notify("pr_activity", "PR closed", `#${pr.number} ${pr.title}`);
+      void notify("pr_activity", "PR closed", `#${pr.number} ${pr.title}`, {
+        repo: ctx.repo,
+        prNumber: pr.number,
+      });
       void poller.refreshPr(pr.number);
       setConfirmClose(false);
     });
@@ -94,7 +100,10 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
         event: "APPROVE",
         comments: [],
       });
-      void notify("pr_activity", "PR approved", `#${pr.number} ${pr.title}`);
+      void notify("pr_activity", "PR approved", `#${pr.number} ${pr.title}`, {
+        repo: ctx.repo,
+        prNumber: pr.number,
+      });
       setApproveOpen(false);
       setApproveText("");
       void poller.refreshPr(pr.number);

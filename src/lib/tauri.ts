@@ -91,6 +91,11 @@ export const native = {
     return invoke("open_repo_window", { repo });
   },
 
+  /** Open/focus the repo's window and deep-link it to a PR (notification click). */
+  focusPr(repo: string, prNumber: number): Promise<void> {
+    return invoke("focus_pr", { repo, prNumber });
+  },
+
   openLauncherWindow(): Promise<void> {
     return invoke("open_launcher_window");
   },

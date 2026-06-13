@@ -301,7 +301,10 @@ export async function dispatchEvent(ctx: FlowContext, ev: FiredEvent, pr: PrSumm
   // every occurrence is logged; only enabled handlers notify (quiet by default)
   await useRepoStore.getState().logEvent(ev);
   if (!handler.enabled || !handler.prompt.trim()) return;
-  void notify("automation_event", `${label} — ${ctx.repo}`, `PR #${pr.number} ${pr.title}`);
+  void notify("automation_event", `${label} — ${ctx.repo}`, `PR #${pr.number} ${pr.title}`, {
+    repo: ctx.repo,
+    prNumber: pr.number,
+  });
 
   const vars = eventVars(ctx, pr, ev.vars);
   let prompt = interpolate(handler.prompt, vars);

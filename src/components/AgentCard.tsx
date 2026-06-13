@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { killAgent, steerAgent } from "../lib/agents";
-import { usePrData } from "../lib/events";
-import { useGlobalConfig, useUiStore } from "../lib/store";
+import { navigateToPr } from "../lib/nav";
+import { useGlobalConfig } from "../lib/store";
 import type { AgentEntry, AgentLine, AgentPlanEntry, AgentRun, AgentToolCall, ToolKind } from "../types";
 import { timeAgo, useNow } from "../lib/ui";
 import { Badge, LoadingField, Spinner } from "./common";
@@ -146,16 +146,9 @@ export function AgentCard({
   const active = run.status === "running" || run.status === "starting";
   useNow(active ? 1000 : 0); // tick the elapsed counter while running
 
-  // jump to this PR inside the app (the ↗ stays for web)
-  const openInApp = () => {
-    const d = usePrData.getState();
-    const has = (l: { number: number }[]) => l.some((p) => p.number === run.prNumber);
-    const tab = has(d.myDrafts) ? "drafts" : has(d.myOpen) ? "open" : has(d.reviewQueue) ? "review" : null;
-    if (!tab) return; // PR left the lists (closed/merged) — only the web link remains
-    const ui = useUiStore.getState();
-    ui.setFocusedPr(tab, run.prNumber);
-    ui.requestTab(tab);
-  };
+  // jump to this PR inside the app (the ↗ stays for web). No-op if the PR left
+  // the lists (closed/merged) — only the web link remains.
+  const openInApp = () => void navigateToPr(run.prNumber);
 
   // follow the live stream as entries/tools grow
   useEffect(() => {

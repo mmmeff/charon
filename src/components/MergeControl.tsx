@@ -63,7 +63,10 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
     setError("");
     try {
       await ctx.gh.mergePull(ctx.repo, pr.number, method);
-      void notify("pr_activity", "PR merged", `#${pr.number} ${pr.title}`);
+      void notify("pr_activity", "PR merged", `#${pr.number} ${pr.title}`, {
+        repo: ctx.repo,
+        prNumber: pr.number,
+      });
       void poller.refreshPr(pr.number);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

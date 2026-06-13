@@ -7,6 +7,8 @@ import { loadSkills } from "../lib/skills";
 import { initAgentPersistence } from "../lib/agents";
 import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore, useUiStore } from "../lib/store";
 import { native } from "../lib/tauri";
+import { navigateToPr } from "../lib/nav";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { timeAgo, useNow } from "../lib/ui";
 import { FlowCtx } from "./flow";
 import {
@@ -142,6 +144,26 @@ export function RepoApp({ repo }: { repo: string }) {
     return () => poller.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoStore.loaded, gh]);
+
+  // OS-notification deep-link: the PR this window should jump to. Set on a cold
+  // start by `focus_pr`'s `?pr=` URL, and live by its `navigate-to-pr` event
+  // (scoped to this repo's window). Resolution waits for the PR to show up in a
+  // list, since a freshly opened window may still be loading.
+  const [pendingNavPr, setPendingNavPr] = useState<number | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get("pr");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : null;
+  });
+  useEffect(() => {
+    const un = getCurrentWebviewWindow().listen<number>("navigate-to-pr", (e) => {
+      setPendingNavPr(e.payload);
+    });
+    return () => void un.then((f) => f());
+  }, []);
+  useEffect(() => {
+    if (pendingNavPr == null) return;
+    if (navigateToPr(pendingNavPr)) setPendingNavPr(null);
+  }, [pendingNavPr, prData.myDrafts, prData.myOpen, prData.reviewQueue]);
 
   // ⌘1–⌘5 (ctrl on other platforms) jumps between tabs.
   // Must live above the loading early-returns: hooks can't come after them.

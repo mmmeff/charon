@@ -23,7 +23,8 @@ const agentNotif = (
   void notify(
     category,
     `${icon} Agent ${outcome}: ${run.relation}`,
-    `PR #${run.prNumber} ${run.prTitle} · ${run.repo}${extra}`
+    `PR #${run.prNumber} ${run.prTitle} · ${run.repo}${extra}`,
+    { repo: run.repo, prNumber: run.prNumber }
   );
 };
 

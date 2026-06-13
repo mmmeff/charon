@@ -17,7 +17,10 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-notification = "2"
+# default-features off → native UNUserNotificationCenter backend on macOS
+# (notify-rust has no click callbacks). Requires a .app bundle, so OS
+# notifications are inert under `tauri dev`; they work in bundled builds.
+tauri-plugin-notifications = { version = "0.4", default-features = false }
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }

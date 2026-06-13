@@ -452,29 +452,76 @@ fn save_window_size(app: &tauri::AppHandle, label: &str, w: f64, h: f64) {
     }
 }
 
-#[tauri::command]
-fn open_repo_window(app: tauri::AppHandle, repo: String) -> Result<(), String> {
-    let label: String = format!(
+/// The window label for a repo, e.g. `owner/name` → `repo-owner-name`. The
+/// frontend never sees this; it's how we find/focus an existing repo window.
+fn repo_window_label(repo: &str) -> String {
+    format!(
         "repo-{}",
         repo.chars()
             .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
             .collect::<String>()
-    );
-    if let Some(win) = app.get_webview_window(&label) {
-        win.set_focus().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    let (w, h) = load_window_sizes(&app)
+    )
+}
+
+/// Build a fresh repo window. `pr` deep-links the window straight to a PR on
+/// load (used by the notification-click path when no window is open yet).
+fn build_repo_window(app: &tauri::AppHandle, repo: &str, pr: Option<i64>) -> Result<(), String> {
+    let label = repo_window_label(repo);
+    let (w, h) = load_window_sizes(app)
         .get(&label)
         .copied()
         .unwrap_or((1380.0, 900.0));
-    let url = format!("index.html?repo={}", urlencoding::encode(&repo));
-    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
+    let mut url = format!("index.html?repo={}", urlencoding::encode(repo));
+    if let Some(pr) = pr {
+        url.push_str(&format!("&pr={pr}"));
+    }
+    tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App(url.into()))
         .title(format!("Charon — {repo}"))
         .inner_size(w, h)
         .min_inner_size(900.0, 600.0)
         .build()
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn open_repo_window(app: tauri::AppHandle, repo: String) -> Result<(), String> {
+    let label = repo_window_label(&repo);
+    if let Some(win) = app.get_webview_window(&label) {
+        win.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    build_repo_window(&app, &repo, None)
+}
+
+/// Open/focus the repo's window and navigate it to a specific PR. Backs the
+/// macOS notification-click → "open the app on that PR" flow. The click can be
+/// delivered to any window (the plugin broadcasts), so routing lives here where
+/// there's one view of every window; it's idempotent under duplicate delivery.
+#[tauri::command]
+fn focus_pr(app: tauri::AppHandle, repo: String, pr_number: i64) -> Result<(), String> {
+    let label = repo_window_label(&repo);
+    if let Some(win) = app.get_webview_window(&label) {
+        let _ = win.unminimize();
+        win.show().map_err(|e| e.to_string())?;
+        win.set_focus().map_err(|e| e.to_string())?;
+        // scoped to this repo's window: a bare PR number would otherwise make
+        // sibling repo windows jump to a same-numbered PR of their own
+        app.emit_to(&label, "navigate-to-pr", pr_number)
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    // no window yet — open it pointed straight at the PR. If another opener won
+    // a race to create it, fall back to focusing + emitting the nav event (a
+    // window that already loaded won't pick up the `?pr=` URL).
+    if build_repo_window(&app, &repo, Some(pr_number)).is_err() {
+        if let Some(win) = app.get_webview_window(&label) {
+            let _ = win.show();
+            let _ = win.set_focus();
+            app.emit_to(&label, "navigate-to-pr", pr_number)
+                .map_err(|e| e.to_string())?;
+        }
+    }
     Ok(())
 }
 
@@ -618,7 +665,7 @@ fn install_app_menu(app: &tauri::App) -> tauri::Result<()> {
 pub fn run() {
     fixup_path();
     tauri::Builder::default()
-        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_notifications::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -669,6 +716,7 @@ pub fn run() {
             app_data_dir,
             list_cursor_skills,
             open_repo_window,
+            focus_pr,
             open_launcher_window,
             close_window,
             open_url

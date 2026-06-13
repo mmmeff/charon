@@ -81,7 +81,10 @@ export function SubmitForReview({ pr }: { pr: PrSummary }) {
         await ctx.gh.requestReviewers(ctx.repo, pr.number, users, teams);
       }
       await ctx.gh.markReadyForReview(ctx.repo, pr.number);
-      void notify("pr_activity", "Opened for review", `#${pr.number} ${pr.title}`);
+      void notify("pr_activity", "Opened for review", `#${pr.number} ${pr.title}`, {
+        repo: ctx.repo,
+        prNumber: pr.number,
+      });
       poller.refresh();
       setOpen(false);
       // advance to the next draft after a beat — this one is on its way out

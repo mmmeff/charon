@@ -5,7 +5,7 @@
   "windows": ["*"],
   "permissions": [
     "core:default",
-    "notification:default",
+    "notifications:default",
     "updater:default",
     "process:default",
     "dialog:default"
