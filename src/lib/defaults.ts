@@ -367,12 +367,12 @@ export const FLOW_MODEL_CATALOG: { kind: string; label: string; capability: stri
   {
     kind: "conflict_fix",
     label: "Branch maintenance (conflicts, merge from base)",
-    capability: "prompt from event settings · no launch form",
+    capability: "prompt + model picker per event (Events section)",
   },
   {
     kind: "event",
     label: "Automated event handlers",
-    capability: "prompt per event (Events section) · no model picker at launch",
+    capability: "prompt + model picker per event (Events section)",
   },
   {
     kind: "rewrite",

@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { refreshModels } from "../../lib/agents";
 import { probeHarness, summarizeProbe } from "../../lib/acp";
 import { activeHarness, EVENT_CATALOG, FLOW_MODEL_CATALOG, harnessTemplates, switchHarness } from "../../lib/defaults";
-import { resolveHandler } from "../../lib/events";
+import { eventFlowKind, resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
 import { native } from "../../lib/tauri";
 import { useGlobalConfig, useRepoStore, useSkillStore } from "../../lib/store";
-import type { ClassFilters, GlobalConfig, RepoConfig, SkillSelection } from "../../types";
+import type { ClassFilters, EventHandlerConfig, GlobalConfig, RepoConfig, SkillSelection } from "../../types";
 import { Badge, Spinner } from "../common";
+import { ModelPicker } from "../ModelPicker";
 import { PromptInput } from "../PromptInput";
 
 /**
@@ -499,9 +500,11 @@ export function SettingsView() {
       <div className="settings-section" id="s-events">
         <h3>Automation</h3>
         <p className="subtle">
-          Every event is a toggle plus a prompt template. <strong>All automation ships OFF</strong> — opt in
-          per event when you're ready for the app to react on its own. When an event fires and is enabled,
-          the prompt runs against a Cursor agent — the behavior is whatever the prompt instructs. Variables:{" "}
+          Every event is a toggle, a prompt template, and the model it runs on. <strong>All automation
+          ships OFF</strong> — opt in per event when you're ready for the app to react on its own. When an
+          event fires and is enabled, the prompt runs against your agent (leave the model on its default
+          to inherit the per-flow/repo/global setting) — the behavior is whatever the prompt instructs.
+          Variables:{" "}
           <code>{"{pr-number}"}</code> <code>{"{pr-title}"}</code> <code>{"{branch}"}</code>{" "}
           <code>{"{base-branch}"}</code> <code>{"{comment-body}"}</code> <code>{"{author}"}</code>{" "}
           <code>{"{model}"}</code> <code>{"{filter-criteria}"}</code> <code>{"{check-name}"}</code>{" "}
@@ -680,8 +683,11 @@ function EventCatalogEditor({
 }) {
   const groups = [...new Set(EVENT_CATALOG.map((e) => e.group))];
 
-  const setHandler = (id: string, enabled: boolean, prompt: string) => {
-    update({ events: { ...config.events, [id]: { enabled, prompt } } });
+  // merge a partial onto the resolved handler so toggling one field (model,
+  // enabled, prompt) doesn't drop the others; this pins the event to an override
+  const setHandler = (id: string, patch: Partial<EventHandlerConfig>) => {
+    const current = resolveHandler(config.events, id);
+    update({ events: { ...config.events, [id]: { ...current, ...patch } } });
   };
 
   return (
@@ -692,7 +698,9 @@ function EventCatalogEditor({
           {EVENT_CATALOG.filter((e) => e.group === g).map((def) => {
             const handler = resolveHandler(config.events, def.id);
             const isDefault =
-              handler.enabled === def.defaultEnabled && handler.prompt === def.defaultPrompt;
+              handler.enabled === def.defaultEnabled &&
+              handler.prompt === def.defaultPrompt &&
+              !handler.model;
             return (
               <div key={def.id} className="event-row">
                 <div className="row between">
@@ -700,7 +708,7 @@ function EventCatalogEditor({
                     <input
                       type="checkbox"
                       checked={handler.enabled}
-                      onChange={(e) => setHandler(def.id, e.target.checked, handler.prompt)}
+                      onChange={(e) => setHandler(def.id, { enabled: e.target.checked })}
                     />
                     <strong>{def.label}</strong>
                     <code>{def.id}</code>
@@ -724,8 +732,18 @@ function EventCatalogEditor({
                 <PromptInput
                   rows={2}
                   value={handler.prompt}
-                  onChange={(prompt) => setHandler(def.id, handler.enabled, prompt)}
+                  onChange={(prompt) => setHandler(def.id, { prompt })}
                 />
+                <div className="row" style={{ marginTop: 6 }}>
+                  <span className="subtle" style={{ fontSize: 12 }}>
+                    runs with
+                  </span>
+                  <ModelPicker
+                    value={handler.model ?? ""}
+                    onChange={(model) => setHandler(def.id, { model })}
+                    flowKind={eventFlowKind(def.id)}
+                  />
+                </div>
               </div>
             );
           })}

@@ -274,6 +274,24 @@ const FIX_EVENTS = new Set([
   "teammate_comment_received",
 ]);
 const REVIEW_EVENTS = new Set(["review_requested", "pr_updated_under_review", "draft_marked_ready"]);
+const BRANCH_STATE = new Set(["merge_conflict_detected", "base_branch_updated", "branch_out_of_date"]);
+
+/**
+ * The model-flow kind an event dispatches to. Drives the per-event model
+ * picker's inherited default in Settings; kept in lockstep with dispatchEvent's
+ * branching below so the picker labels the model the event will actually use.
+ */
+export function eventFlowKind(
+  id: string
+): "review" | "ci_fix" | "conflict_fix" | "feedback_fix" | "event" {
+  if (REVIEW_EVENTS.has(id)) return "review";
+  if (FIX_EVENTS.has(id)) {
+    if (id === "ci_failed") return "ci_fix";
+    if (BRANCH_STATE.has(id)) return "conflict_fix";
+    return "feedback_fix";
+  }
+  return "event";
+}
 
 export async function dispatchEvent(ctx: FlowContext, ev: FiredEvent, pr: PrSummary): Promise<void> {
   const def = eventDef(ev.id);
@@ -302,21 +320,22 @@ export async function dispatchEvent(ctx: FlowContext, ev: FiredEvent, pr: PrSumm
     }
   }
 
+  // per-event model override (empty = inherit the flow/repo/global default)
+  const model = handler.model || undefined;
   try {
     if (REVIEW_EVENTS.has(ev.id)) {
-      await runReviewFlow(ctx, pr, prompt);
+      await runReviewFlow(ctx, pr, prompt, model);
     } else if (FIX_EVENTS.has(ev.id) && pr.state === "open") {
       // branch maintenance (conflicts, merging up base) — fix + push, no PR comment
-      const BRANCH_STATE = ["merge_conflict_detected", "base_branch_updated", "branch_out_of_date"];
       const kind =
         ev.id === "ci_failed"
           ? ("ci_fix" as const)
-          : BRANCH_STATE.includes(ev.id)
+          : BRANCH_STATE.has(ev.id)
             ? ("conflict_fix" as const)
             : ("feedback_fix" as const);
-      await runFixFlow(ctx, pr, prompt, label, kind);
+      await runFixFlow(ctx, pr, prompt, label, kind, model);
     } else {
-      await runAnalysisFlow(ctx, pr, prompt, label);
+      await runAnalysisFlow(ctx, pr, prompt, label, model);
     }
   } catch (e) {
     console.error(`dispatch ${ev.id} on #${pr.number} failed`, e);

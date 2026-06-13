@@ -93,6 +93,8 @@ export interface ClassFilters {
 export interface EventHandlerConfig {
   enabled: boolean;
   prompt: string;
+  /** per-event model override; "" / undefined = inherit the flow default */
+  model?: string;
 }
 
 export interface SkillSelection {
