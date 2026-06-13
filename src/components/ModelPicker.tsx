@@ -42,25 +42,40 @@ export function ModelPicker({
 
 /**
  * Reasoning-effort selection, shown beside the model picker wherever the
- * active harness exposes a reasoning axis (e.g. codex). Bound to the global
- * reasoning effort — a persistent dial, applied to every run — so it reads
- * and writes the same value everywhere it appears. Renders nothing for
- * harnesses without the axis (cursor bakes it into the model id; opencode
+ * active harness exposes a reasoning axis (e.g. codex). A persistent dial:
+ * with a flowKind it edits that flow's per-flow override (empty = inherit the
+ * global default); without one it edits the global default. Renders nothing
+ * for harnesses without the axis (cursor bakes it into the model id; opencode
  * has none).
  */
-export function ReasoningPicker() {
+export function ReasoningPicker({ flowKind }: { flowKind?: string }) {
   const global = useGlobalConfig((s) => s.config);
   const save = useGlobalConfig((s) => s.save);
   const options = global?.reasoningOptions ?? [];
   if (!global || options.length === 0) return null;
   const labels = global.reasoningLabels ?? {};
+  const globalDefault = global.reasoningEffort;
+  const value = flowKind ? (global.reasoningOverrides?.[flowKind] ?? "") : globalDefault;
+
+  const set = (v: string) => {
+    if (flowKind) {
+      const next = { ...(global.reasoningOverrides ?? {}) };
+      if (v) next[flowKind] = v;
+      else delete next[flowKind];
+      void save({ ...global, reasoningOverrides: next });
+    } else {
+      void save({ ...global, reasoningEffort: v });
+    }
+  };
+
+  // the "inherit" label names what it falls back to
+  const defaultLabel = flowKind
+    ? `reasoning: ${globalDefault ? labels[globalDefault] ?? globalDefault : "harness default"}`
+    : "reasoning: harness default";
+
   return (
-    <select
-      value={global.reasoningEffort}
-      title="Reasoning effort (applies to every run)"
-      onChange={(e) => void save({ ...global, reasoningEffort: e.target.value })}
-    >
-      <option value="">reasoning: harness default</option>
+    <select value={value} title="Reasoning effort" onChange={(e) => set(e.target.value)}>
+      <option value="">{defaultLabel}{flowKind ? " (default)" : ""}</option>
       {options.map((r) => (
         <option key={r} value={r}>
           reasoning: {labels[r] ?? r}

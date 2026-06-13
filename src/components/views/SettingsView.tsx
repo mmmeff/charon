@@ -208,83 +208,105 @@ export function SettingsView() {
       </div>
       <div className="settings-section" id="s-defmodels">
         <h3>Default models (global)</h3>
-        <label className="field">
-          <span>Global default model</span>
-          <select
-            value={global.defaultModel}
-            onChange={(e) => void saveGlobal({ ...global, defaultModel: e.target.value })}
-          >
-            {global.models
-              .filter((m) => !(global.disabledModels ?? []).includes(m) || m === global.defaultModel)
-              .map((m) => (
-                <option key={m} value={m}>
-                  {global.modelLabels[m] ?? m}
-                </option>
-              ))}
-          </select>
-          <small>
-            Applies to every flow in every repo unless overridden — by a per-flow default below, a
-            per-repo default (Agent section), or an explicit pick in a launch form.
-          </small>
-        </label>
-        {global.reasoningOptions.length > 0 && (
-          <label className="field">
-            <span>Reasoning effort</span>
-            <select
-              value={global.reasoningEffort}
-              onChange={(e) => void saveGlobal({ ...global, reasoningEffort: e.target.value })}
-            >
-              <option value="">harness default</option>
-              {global.reasoningOptions.map((r) => (
-                <option key={r} value={r}>
-                  {global.reasoningLabels[r] ?? r}
-                </option>
-              ))}
-            </select>
-            <small>
-              A separate axis from the model, applied to every run on harnesses that expose it (e.g.
-              Codex). Harnesses that bake reasoning into the model don't show this.
-            </small>
-          </label>
-        )}
-        <p className="subtle" style={{ maxWidth: "76ch" }}>
-          Every AI-driven flow, with what you can steer at launch. Set a per-flow default to route a
-          flow to a different model without touching the launch forms.
-        </p>
-        {FLOW_MODEL_CATALOG.map((f) => {
-          const current = global.modelOverrides?.[f.kind] ?? "";
-          const options = global.models.filter(
-            (m) => !(global.disabledModels ?? []).includes(m) || m === current
-          );
-          // keep a configured id listed even when the CLI doesn't know it
-          // (install defaults / pre-refresh) so the select reports truthfully
-          if (current && !options.includes(current)) options.push(current);
-          return (
-            <label key={f.kind} className="field flow-model-row">
-              <span>
-                {f.label} <em className="flow-cap">{f.capability}</em>
-              </span>
-              <select
-                value={current}
-                onChange={(e) => {
-                  const next = { ...(global.modelOverrides ?? {}) };
-                  if (e.target.value) next[f.kind] = e.target.value;
-                  else delete next[f.kind];
-                  void saveGlobal({ ...global, modelOverrides: next });
-                }}
-              >
-                <option value="">
-                  global default ({global.modelLabels[global.defaultModel] ?? global.defaultModel})
-                </option>
-                {options.map((m) => (
-                  <option key={m} value={m}>
-                    {global.modelLabels[m] ?? m}
+        {(() => {
+          const hasReasoning = global.reasoningOptions.length > 0;
+          const reasoningSelect = (value: string, onChange: (v: string) => void, inheritLabel: string) =>
+            hasReasoning ? (
+              <select value={value} title="Reasoning effort" onChange={(e) => onChange(e.target.value)}>
+                <option value="">{inheritLabel}</option>
+                {global.reasoningOptions.map((r) => (
+                  <option key={r} value={r}>
+                    reasoning: {global.reasoningLabels[r] ?? r}
                   </option>
                 ))}
               </select>
-            </label>
+            ) : null;
+          const globalReasoningLabel = global.reasoningEffort
+            ? global.reasoningLabels[global.reasoningEffort] ?? global.reasoningEffort
+            : "harness default";
+          return (
+            <>
+              <label className="field">
+                <span>Global default {hasReasoning ? "model + reasoning" : "model"}</span>
+                <div className="row" style={{ gap: 6 }}>
+                  <select
+                    value={global.defaultModel}
+                    onChange={(e) => void saveGlobal({ ...global, defaultModel: e.target.value })}
+                  >
+                    {global.models
+                      .filter((m) => !(global.disabledModels ?? []).includes(m) || m === global.defaultModel)
+                      .map((m) => (
+                        <option key={m} value={m}>
+                          {global.modelLabels[m] ?? m}
+                        </option>
+                      ))}
+                  </select>
+                  {reasoningSelect(
+                    global.reasoningEffort,
+                    (v) => void saveGlobal({ ...global, reasoningEffort: v }),
+                    "reasoning: harness default"
+                  )}
+                </div>
+                <small>
+                  Applies to every flow in every repo unless overridden — by a per-flow default
+                  below, a per-repo default (Agent section), or an explicit pick in a launch form.
+                  {hasReasoning && " Reasoning is a separate axis on harnesses that expose it (e.g. Codex)."}
+                </small>
+              </label>
+              <p className="subtle" style={{ maxWidth: "76ch" }}>
+                Every AI-driven flow, with what you can steer at launch. Set a per-flow default to
+                route a flow to a different model{hasReasoning ? " or reasoning effort" : ""} without
+                touching the launch forms.
+              </p>
+              {FLOW_MODEL_CATALOG.map((f) => {
+                const current = global.modelOverrides?.[f.kind] ?? "";
+                const options = global.models.filter(
+                  (m) => !(global.disabledModels ?? []).includes(m) || m === current
+                );
+                // keep a configured id listed even when the harness doesn't list
+                // it (install defaults / pre-refresh) so the select reports truthfully
+                if (current && !options.includes(current)) options.push(current);
+                return (
+                  <label key={f.kind} className="field flow-model-row">
+                    <span>
+                      {f.label} <em className="flow-cap">{f.capability}</em>
+                    </span>
+                    <div className="row" style={{ gap: 6 }}>
+                      <select
+                        value={current}
+                        onChange={(e) => {
+                          const next = { ...(global.modelOverrides ?? {}) };
+                          if (e.target.value) next[f.kind] = e.target.value;
+                          else delete next[f.kind];
+                          void saveGlobal({ ...global, modelOverrides: next });
+                        }}
+                      >
+                        <option value="">
+                          model: {global.modelLabels[global.defaultModel] ?? global.defaultModel} (default)
+                        </option>
+                        {options.map((m) => (
+                          <option key={m} value={m}>
+                            {global.modelLabels[m] ?? m}
+                          </option>
+                        ))}
+                      </select>
+                      {reasoningSelect(
+                        global.reasoningOverrides?.[f.kind] ?? "",
+                        (v) => {
+                          const next = { ...(global.reasoningOverrides ?? {}) };
+                          if (v) next[f.kind] = v;
+                          else delete next[f.kind];
+                          void saveGlobal({ ...global, reasoningOverrides: next });
+                        },
+                        `reasoning: ${globalReasoningLabel} (default)`
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </>
           );
-        })}
+        })()}
       </div>
       <div className="settings-section" id="s-skills">
         <h3>Skills</h3>

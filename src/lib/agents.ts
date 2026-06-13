@@ -235,8 +235,9 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
         }
       }
       // reasoning effort — a separate config-option axis where the harness
-      // exposes it (codex); global default, applied to every run
-      const reasoning = useGlobalConfig.getState().config?.reasoningEffort;
+      // exposes it (codex). Per-flow override > global default.
+      const cfg = useGlobalConfig.getState().config;
+      const reasoning = cfg?.reasoningOverrides?.[opts.kind] || cfg?.reasoningEffort;
       const rc = reasoningConfigOption(ns);
       if (reasoning && rc && rc.options!.some((o) => o.value === reasoning)) {
         await conn.setConfigOption(sessionId, rc.id, reasoning).catch(() => {});

@@ -59,7 +59,7 @@ export function AgentLaunchForm({
           {busy ? <Spinner /> : null} {label}
         </button>
         <ModelPicker value={model} onChange={setModel} flowKind={flowKind} />
-        <ReasoningPicker />
+        <ReasoningPicker flowKind={flowKind} />
         <button className="small" onClick={onClose}>
           Cancel
         </button>

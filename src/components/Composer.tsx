@@ -196,7 +196,9 @@ export function Composer({
                   onChange={setModel}
                   flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
                 />
-                <ReasoningPicker />
+                <ReasoningPicker
+                  flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+                />
               </>
             )}
             {onClose && <button onClick={onClose}>Cancel</button>}

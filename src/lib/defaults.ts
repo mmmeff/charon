@@ -421,6 +421,7 @@ export function defaultGlobalConfig(): GlobalConfig {
     reasoningLabels: {},
     reasoningEffort: "",
     modelOverrides: { ...DEFAULT_MODEL_OVERRIDES },
+    reasoningOverrides: {},
     modelPrefs: {},
     repos: [],
     lastRepo: "",
@@ -447,6 +448,7 @@ export function syncActiveModelPrefs(cfg: GlobalConfig): GlobalConfig {
     reasoningOptions: cfg.reasoningOptions ?? [],
     reasoningLabels: cfg.reasoningLabels ?? {},
     reasoningEffort: cfg.reasoningEffort ?? "",
+    reasoningOverrides: cfg.reasoningOverrides ?? {},
   };
   return { ...cfg, modelPrefs: { ...(cfg.modelPrefs ?? {}), [cfg.activeHarness]: prefs } };
 }
@@ -470,6 +472,7 @@ export function switchHarness(cfg: GlobalConfig, h: Harness): GlobalConfig {
     reasoningOptions: [],
     reasoningLabels: {},
     reasoningEffort: "",
+    reasoningOverrides: {},
   };
   const p = saved ?? seed;
   return {
@@ -484,6 +487,7 @@ export function switchHarness(cfg: GlobalConfig, h: Harness): GlobalConfig {
     reasoningOptions: p.reasoningOptions,
     reasoningLabels: p.reasoningLabels,
     reasoningEffort: p.reasoningEffort,
+    reasoningOverrides: p.reasoningOverrides ?? {},
   };
 }
 

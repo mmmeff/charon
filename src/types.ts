@@ -14,6 +14,7 @@ export interface HarnessModelPrefs {
   reasoningOptions: string[];
   reasoningLabels: Record<string, string>;
   reasoningEffort: string;
+  reasoningOverrides: Record<string, string>;
 }
 
 /** An ACP agent harness: a command that speaks Agent Client Protocol. */
@@ -59,6 +60,8 @@ export interface GlobalConfig {
   reasoningEffort: string;
   /** Per-flow default model overrides, keyed by AgentKind; empty = global default */
   modelOverrides: Record<string, string>;
+  /** Per-flow reasoning-effort overrides, keyed by AgentKind; "" = global default */
+  reasoningOverrides: Record<string, string>;
   /** Per-harness saved model selections, keyed by harness id. The flat model
    *  fields above mirror modelPrefs[activeHarness]; switching harness swaps
    *  them so each agent remembers its own default / overrides / reasoning. */
