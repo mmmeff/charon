@@ -1,4 +1,4 @@
-import { AcpConnection, probeHarness, type AcpSessionUpdate } from "./acp";
+import { AcpConnection, modelConfigOption, probeHarness, type AcpSessionUpdate } from "./acp";
 import { activeHarness } from "./defaults";
 import { native } from "./tauri";
 import { notify } from "./notify";
@@ -217,10 +217,15 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
           ns.modes.availableModes.some((m) => m.id === targetMode)) {
         await conn.setMode(sessionId, targetMode).catch(() => {});
       }
-      // set model — opts.model is already an ACP modelId (sourced from the
-      // harness); skip "auto" and tolerate harnesses that don't take a model
+      // set model — opts.model is already in the active harness's id space;
+      // apply via whichever mechanism this harness exposes (native models →
+      // set_model; a `model` config option → set_config_option, e.g. codex)
       if (opts.model && opts.model !== "auto") {
-        await conn.setModel(sessionId, opts.model).catch(() => {});
+        if (ns.models?.availableModels?.length) {
+          await conn.setModel(sessionId, opts.model).catch(() => {});
+        } else if (modelConfigOption(ns)) {
+          await conn.setConfigOption(sessionId, "model", opts.model).catch(() => {});
+        }
       }
 
       // prompt turn loop — steering re-prompts the same session
@@ -435,10 +440,13 @@ export async function refreshModels(
     JSON.stringify(models) !== JSON.stringify(global.models) ||
     JSON.stringify(modelLabels) !== JSON.stringify(global.modelLabels);
   if (changed) {
-    // keep the configured default if still offered, else first non-auto, else auto
+    // keep the configured default if still offered; else the harness's own
+    // current/default model; else the first listed
     const defaultModel = models.includes(global.defaultModel)
       ? global.defaultModel
-      : models[1] ?? "auto";
+      : probe.currentId && models.includes(probe.currentId)
+        ? probe.currentId
+        : models[1] ?? "auto";
     await save({ ...global, models, modelLabels, defaultModel });
   }
 }

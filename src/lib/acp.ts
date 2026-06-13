@@ -62,10 +62,46 @@ export interface AcpMode {
   name: string;
   description?: string;
 }
+/** A session config select (e.g. codex's `model` / `reasoning_effort`). */
+export interface AcpConfigOption {
+  id: string;
+  name?: string;
+  category?: string;
+  type?: string;
+  currentValue?: string;
+  options?: { value: string; name?: string }[];
+}
 export interface NewSessionResult {
   sessionId: string;
   modes?: { currentModeId: string; availableModes: AcpMode[] };
   models?: { currentModelId: string; availableModels: AcpModel[] };
+  configOptions?: AcpConfigOption[];
+}
+
+/** The `model` config option, if the harness exposes models that way (codex). */
+export function modelConfigOption(ns: NewSessionResult): AcpConfigOption | undefined {
+  return ns.configOptions?.find(
+    (o) => (o.id === "model" || o.category === "model") && o.type === "select" && o.options?.length
+  );
+}
+
+/**
+ * The model list + current id for a session, sourced from whichever mechanism
+ * the harness uses: native ACP models (cursor) or a `model` config option
+ * (codex). Empty when the harness manages its own model (opencode).
+ */
+export function sessionModels(ns: NewSessionResult): { models: AcpModel[]; currentId?: string } {
+  if (ns.models?.availableModels?.length) {
+    return { models: ns.models.availableModels, currentId: ns.models.currentModelId };
+  }
+  const opt = modelConfigOption(ns);
+  if (opt) {
+    return {
+      models: opt.options!.map((o) => ({ modelId: o.value, name: o.name ?? o.value })),
+      currentId: opt.currentValue,
+    };
+  }
+  return { models: [] };
 }
 
 interface JsonRpcMsg {
@@ -243,6 +279,11 @@ export class AcpConnection {
     return this.request("session/set_model", { sessionId, modelId });
   }
 
+  /** Set a session config option (codex's model/reasoning selectors). */
+  setConfigOption(sessionId: string, configId: string, value: string) {
+    return this.request("session/set_config_option", { sessionId, configId, value });
+  }
+
   /** Run one prompt turn; resolves with the stop reason. */
   async prompt(sessionId: string, blocks: AcpContentBlock[]): Promise<string> {
     const res = await this.request<{ stopReason?: string }>("session/prompt", {
@@ -272,13 +313,14 @@ export class AcpConnection {
 export interface HarnessProbe {
   ok: boolean;
   error?: string;
-  /** models exposed via session/new (cursor does; opencode/codex don't) */
+  /** unified model list — native ACP models or a `model` config option */
   models: AcpModel[];
+  /** the harness's default/current model id, if any */
+  currentId?: string;
   modes: AcpMode[];
 }
 
-/** Human-readable verify result — avoids a scary "0 models" for harnesses
- *  that manage their own model (codex, opencode). */
+/** Human-readable verify result. */
 export function summarizeProbe(p: HarnessProbe): string {
   if (!p.ok) return p.error ?? "could not connect";
   if (p.models.length === 0) return "Connected — this agent manages its own model";
@@ -304,11 +346,8 @@ export async function probeHarness(
         await conn.spawn(command, args, cwd);
         await conn.initialize();
         const ns = await conn.newSession(cwd);
-        return {
-          ok: true,
-          models: ns.models?.availableModels ?? [],
-          modes: ns.modes?.availableModes ?? [],
-        };
+        const { models, currentId } = sessionModels(ns);
+        return { ok: true, models, currentId, modes: ns.modes?.availableModes ?? [] };
       })(),
       new Promise<HarnessProbe>((_, rej) =>
         setTimeout(() => rej(new Error("timed out — is the command an ACP server?")), timeoutMs)

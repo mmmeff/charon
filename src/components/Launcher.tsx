@@ -100,8 +100,9 @@ function Onboarding({
         models = ["auto", ...probe.models.map((m) => m.modelId)];
         modelLabels = { auto: "Auto" };
         for (const m of probe.models) modelLabels[m.modelId] = m.name;
-        defaultModel = models[1] ?? "auto";
-        if (h.id === "cursor") h.verified = true;
+        defaultModel =
+          probe.currentId && models.includes(probe.currentId) ? probe.currentId : models[1] ?? "auto";
+        h.verified = true;
       }
       const cfg: GlobalConfig = {
         ...defaults,
