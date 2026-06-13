@@ -1,8 +1,9 @@
-import { AcpConnection, type AcpModel, type AcpSessionUpdate } from "./acp";
+import { AcpConnection, probeHarness, type AcpSessionUpdate } from "./acp";
+import { activeHarness } from "./defaults";
 import { native } from "./tauri";
 import { notify } from "./notify";
 import { uid } from "./template";
-import { useAgentStore } from "./store";
+import { useAgentStore, useGlobalConfig } from "./store";
 import type { AgentKind, AgentRun, ToolKind, ToolStatus } from "../types";
 
 const agentNotif = (run: AgentRun, outcome: "started" | "finished" | "failed", extra = "") => {
@@ -133,19 +134,6 @@ function applyUpdate(id: string, u: AcpSessionUpdate): void {
   }
 }
 
-/** Map the app's resolved model id to an ACP modelId by name-root (best effort). */
-function matchAcpModel(appModel: string, models: AcpModel[]): string | undefined {
-  if (!appModel || appModel === "auto") return undefined;
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const target = norm(appModel);
-  let best: { id: string; len: number } | null = null;
-  for (const m of models) {
-    const n = norm(m.name);
-    if (n && target.startsWith(n) && (!best || n.length > best.len)) best = { id: m.modelId, len: n.length };
-  }
-  return best?.id;
-}
-
 // ---------------------------------------------------------------------------
 // startAgent — spawn an ACP agent, run the prompt turn(s), finalize
 // ---------------------------------------------------------------------------
@@ -207,7 +195,12 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
   void (async () => {
     try {
       const sessionCwd = opts.cwd || (await native.appDataDir());
-      await conn.spawn(opts.binary, ["acp"], opts.cwd);
+      // spawn the configured ACP harness (cursor by default); opts.binary is a
+      // legacy fallback for callers that predate the harness config
+      const harness = activeHarness(useGlobalConfig.getState().config!);
+      const command = harness?.command || opts.binary;
+      const args = harness?.args ?? ["acp"];
+      await conn.spawn(command, args, opts.cwd);
       await conn.initialize();
       const ns = await conn.newSession(sessionCwd);
       const sessionId = ns.sessionId;
@@ -224,9 +217,11 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
           ns.modes.availableModes.some((m) => m.id === targetMode)) {
         await conn.setMode(sessionId, targetMode).catch(() => {});
       }
-      // set model (best-effort name match against the ACP model list)
-      const acpModelId = ns.models ? matchAcpModel(opts.model, ns.models.availableModels) : undefined;
-      if (acpModelId) await conn.setModel(sessionId, acpModelId).catch(() => {});
+      // set model — opts.model is already an ACP modelId (sourced from the
+      // harness); skip "auto" and tolerate harnesses that don't take a model
+      if (opts.model && opts.model !== "auto") {
+        await conn.setModel(sessionId, opts.model).catch(() => {});
+      }
 
       // prompt turn loop — steering re-prompts the same session
       let text = opts.prompt;
@@ -418,51 +413,32 @@ export function cleanResultText(text: string): string {
     .trim();
 }
 
-export interface CursorModel {
-  id: string;
-  label: string;
-}
-
-/** Parse `cursor-agent models` output: one `id - Display Name` per line. */
-export async function listCursorModels(binary: string): Promise<CursorModel[]> {
-  try {
-    const res = await native.runExec(binary, ["models"]);
-    if (res.code !== 0) return [];
-    const out: CursorModel[] = [];
-    for (const line of res.stdout.split("\n")) {
-      const m = /^([\w.\/:-]+)\s+-\s+(.+)$/.exec(line.trim());
-      if (m) out.push({ id: m[1], label: m[2].trim() });
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
 /**
- * Refresh the available-model list from the Cursor CLI (called on startup of
- * each window so the picker is never stale).
+ * Refresh the available-model list from the ACTIVE harness over ACP (the
+ * model list `session/new` returns). Harness-agnostic: cursor exposes models
+ * here, others (e.g. opencode) don't — those keep an empty list and run on
+ * their own default. Called on each window's startup so the picker is fresh.
  */
 export async function refreshModels(
   global: import("../types").GlobalConfig,
   save: (cfg: import("../types").GlobalConfig) => Promise<void>
 ): Promise<void> {
-  const found = await listCursorModels(global.cursorBinary);
-  if (found.length === 0) return;
-  const models = found.map((f) => f.id);
-  const modelLabels = Object.fromEntries(found.map((f) => [f.id, f.label]));
+  const harness = activeHarness(global);
+  if (!harness) return;
+  const cwd = await native.appDataDir();
+  const probe = await probeHarness(harness.command, harness.args, cwd);
+  if (!probe.ok || probe.models.length === 0) return; // harness exposes no model list
+  const models = ["auto", ...probe.models.map((m) => m.modelId)];
+  const modelLabels: Record<string, string> = { auto: "Auto" };
+  for (const m of probe.models) modelLabels[m.modelId] = m.name;
   const changed =
     JSON.stringify(models) !== JSON.stringify(global.models) ||
     JSON.stringify(modelLabels) !== JSON.stringify(global.modelLabels);
   if (changed) {
-    // keep the configured default when the CLI still lists it; otherwise
-    // prefer the install default, then "auto"
-    const { DEFAULT_MODEL_ID } = await import("./defaults");
+    // keep the configured default if still offered, else first non-auto, else auto
     const defaultModel = models.includes(global.defaultModel)
       ? global.defaultModel
-      : models.includes(DEFAULT_MODEL_ID)
-        ? DEFAULT_MODEL_ID
-        : "auto";
+      : models[1] ?? "auto";
     await save({ ...global, models, modelLabels, defaultModel });
   }
 }

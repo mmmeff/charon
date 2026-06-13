@@ -1,4 +1,4 @@
-import type { ClassFilters, EventDef, GlobalConfig, RepoConfig } from "../types";
+import type { ClassFilters, EventDef, GlobalConfig, Harness, RepoConfig } from "../types";
 
 // ---------------------------------------------------------------------------
 // Event catalog. Forward-compatible by design: detectors fire event ids and
@@ -381,6 +381,25 @@ export const FLOW_MODEL_CATALOG: { kind: string; label: string; capability: stri
   },
 ];
 
+/**
+ * Built-in harness templates (ACP servers). `cursor` and `opencode` are
+ * verified firsthand (`cursor-agent acp`, `opencode acp`); claude-code uses
+ * Zed's documented adapter; codex has no native ACP server and needs a bridge
+ * — onboarding's live verify is the source of truth for the unverified ones.
+ */
+export function harnessTemplates(cursorBinary = "cursor-agent"): Harness[] {
+  return [
+    { id: "cursor", name: "Cursor", command: cursorBinary, args: ["acp"], verified: true,
+      note: "Run `cursor-agent login` if prompts fail with an auth error." },
+    { id: "opencode", name: "opencode", command: "opencode", args: ["acp"], verified: true,
+      note: "Configure a provider/API key in opencode first." },
+    { id: "claude-code", name: "Claude Code", command: "npx", args: ["-y", "@zed-industries/claude-code-acp"],
+      note: "Adapter via npx; needs ANTHROPIC_API_KEY in the environment." },
+    { id: "codex", name: "Codex CLI", command: "codex", args: ["acp"],
+      note: "Codex has no native ACP server yet — point this at a Codex ACP bridge, then verify." },
+  ];
+}
+
 export function defaultGlobalConfig(): GlobalConfig {
   return {
     githubUrl: "https://github.com",
@@ -388,7 +407,9 @@ export function defaultGlobalConfig(): GlobalConfig {
     insecureTls: false,
     login: "",
     cursorBinary: "cursor-agent",
-    // placeholder until `cursor-agent models` is queried on startup
+    harnesses: [harnessTemplates()[0]], // cursor by default; more added in onboarding
+    activeHarness: "cursor",
+    // model list is sourced from the active harness over ACP on startup
     models: ["auto", DEFAULT_MODEL_ID],
     modelLabels: { auto: "Auto", [DEFAULT_MODEL_ID]: "Composer 2.5 Fast" },
     disabledModels: [],
@@ -398,6 +419,12 @@ export function defaultGlobalConfig(): GlobalConfig {
     lastRepo: "",
     extraSkillDirs: [],
   };
+}
+
+/** Resolve the active harness, tolerating older configs that predate harnesses. */
+export function activeHarness(cfg: GlobalConfig): Harness {
+  const list = cfg.harnesses?.length ? cfg.harnesses : [harnessTemplates(cfg.cursorBinary)[0]];
+  return list.find((h) => h.id === cfg.activeHarness) ?? list[0];
 }
 
 // ---------------------------------------------------------------------------

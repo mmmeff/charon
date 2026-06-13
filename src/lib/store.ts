@@ -28,12 +28,24 @@ interface GlobalState {
   setLastRepo(repo: string): Promise<void>;
 }
 
+/** Forward-migrate a loaded global config: seed the cursor harness from a
+ *  legacy cursorBinary when the harness fields are absent. */
+function migrateGlobal(cfg: GlobalConfig): GlobalConfig {
+  if (!cfg.harnesses || cfg.harnesses.length === 0) {
+    cfg.harnesses = [
+      { id: "cursor", name: "Cursor", command: cfg.cursorBinary || "cursor-agent", args: ["acp"], verified: true },
+    ];
+    cfg.activeHarness = "cursor";
+  }
+  return cfg;
+}
+
 export const useGlobalConfig = create<GlobalState>((set) => ({
   config: null,
   loaded: false,
   async load() {
     const raw = await native.loadBlob("global.json");
-    const config = raw ? { ...defaultGlobalConfig(), ...JSON.parse(raw) } : null;
+    const config = raw ? migrateGlobal({ ...defaultGlobalConfig(), ...JSON.parse(raw) }) : null;
     set({ config, loaded: true });
     return config;
   },

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { listCursorModels, refreshModels } from "../lib/agents";
+import { refreshModels } from "../lib/agents";
+import { probeHarness } from "../lib/acp";
 import { AsciiField } from "./AsciiField";
 import { IconCharonMoon } from "./icons";
-import { defaultGlobalConfig } from "../lib/defaults";
+import { defaultGlobalConfig, harnessTemplates } from "../lib/defaults";
 import { GitHubClient } from "../lib/github";
 import { native } from "../lib/tauri";
 import { useGlobalConfig } from "../lib/store";
-import type { GlobalConfig } from "../types";
+import type { GlobalConfig, Harness } from "../types";
 
 /**
  * The launcher window: first-boot onboarding (GitHub instance + auth +
@@ -33,9 +34,51 @@ function Onboarding({
   const [url, setUrl] = useState(existing?.githubUrl || "https://github.com");
   const [token, setToken] = useState(existing?.token ?? "");
   const [insecure, setInsecure] = useState(existing?.insecureTls ?? false);
-  const [binary, setBinary] = useState(existing?.cursorBinary ?? "cursor-agent");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  // harness selection
+  const templates = harnessTemplates(existing?.cursorBinary || "cursor-agent");
+  const [harnessId, setHarnessId] = useState(existing?.activeHarness || "cursor");
+  const picked = templates.find((t) => t.id === harnessId) ?? templates[0];
+  const [command, setCommand] = useState(picked.command);
+  const [args, setArgs] = useState(picked.args.join(" "));
+  const [verify, setVerify] = useState<
+    null | { busy: true } | { busy: false; ok: boolean; msg: string; models: number }
+  >(null);
+  const selectHarness = (id: string) => {
+    setHarnessId(id);
+    const t = templates.find((x) => x.id === id);
+    if (t) {
+      setCommand(t.command);
+      setArgs(t.args.join(" "));
+    }
+    setVerify(null);
+  };
+  const harness = (): Harness => ({
+    id: harnessId,
+    name: picked.name,
+    command: command.trim(),
+    args: args.trim() ? args.trim().split(/\s+/) : [],
+    note: picked.note,
+  });
+
+  const runVerify = async () => {
+    setVerify({ busy: true });
+    const h = harness();
+    const cwd = await native.appDataDir();
+    const r = await probeHarness(h.command, h.args, cwd);
+    setVerify({
+      busy: false,
+      ok: r.ok,
+      msg: r.ok
+        ? `Connected — ${r.models.length} model${r.models.length === 1 ? "" : "s"}${
+            r.modes.length ? `, ${r.modes.length} modes` : ""
+          }`
+        : r.error || "could not connect",
+      models: r.models.length,
+    });
+  };
 
   // valid host URL → deep link to the classic-token page, scopes prefilled
   const tokenUrl = (() => {
@@ -56,14 +99,18 @@ function Onboarding({
     try {
       const gh = new GitHubClient({ githubUrl: url, token, insecureTls: insecure, login: "" });
       const login = await gh.connect();
-      // verify the agent binary while we're at it (non-fatal)
       const defaults = defaultGlobalConfig();
-      let models = defaults.models;
-      let modelLabels = defaults.modelLabels;
-      const discovered = await listCursorModels(binary);
-      if (discovered.length > 0) {
-        models = discovered.map((m) => m.id);
-        modelLabels = Object.fromEntries(discovered.map((m) => [m.id, m.label]));
+      const h = harness();
+      // source the model list from the chosen harness over ACP (best-effort)
+      const cwd = await native.appDataDir();
+      const probe = await probeHarness(h.command, h.args, cwd).catch(() => null);
+      let { models, modelLabels, defaultModel } = defaults;
+      if (probe?.ok && probe.models.length) {
+        models = ["auto", ...probe.models.map((m) => m.modelId)];
+        modelLabels = { auto: "Auto" };
+        for (const m of probe.models) modelLabels[m.modelId] = m.name;
+        defaultModel = models[1] ?? "auto";
+        if (h.id === "cursor") h.verified = true;
       }
       const cfg: GlobalConfig = {
         ...defaults,
@@ -72,10 +119,13 @@ function Onboarding({
         token,
         insecureTls: insecure,
         login,
-        cursorBinary: binary,
+        cursorBinary: h.id === "cursor" ? h.command : existing?.cursorBinary || "cursor-agent",
+        harnesses: [h],
+        activeHarness: h.id,
         models,
         modelLabels,
-        defaultModel: existing?.defaultModel || "auto",
+        defaultModel,
+        modelOverrides: {}, // ACP modelIds differ from any legacy CLI ids
       };
       await onDone(cfg);
     } catch (e) {
@@ -131,11 +181,60 @@ function Onboarding({
         </small>
       </label>
       <label className="field">
-        <span>Cursor agent binary</span>
-        <input type="text" value={binary} onChange={(e) => setBinary(e.target.value)} />
+        <span>Agent harness</span>
+        <div className="seg" style={{ marginBottom: 8, flexWrap: "wrap" }}>
+          {templates.map((t) => (
+            <button
+              key={t.id}
+              className={`small ${harnessId === t.id ? "primary" : ""}`}
+              onClick={() => selectHarness(t.id)}
+            >
+              {t.name}
+              {t.verified ? " ✓" : ""}
+            </button>
+          ))}
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <input
+            type="text"
+            value={command}
+            onChange={(e) => {
+              setCommand(e.target.value);
+              setVerify(null);
+            }}
+            placeholder="command"
+            style={{ flex: "0 0 38%" }}
+          />
+          <input
+            type="text"
+            value={args}
+            onChange={(e) => {
+              setArgs(e.target.value);
+              setVerify(null);
+            }}
+            placeholder="args (space-separated)"
+            style={{ flex: 1 }}
+          />
+        </div>
         <small>
-          Path or name of the Cursor CLI (<code>cursor-agent</code>). Used for every LLM run.
+          The ACP agent Charon drives — spawned as <code>{command || "…"} {args}</code>. {picked.note}{" "}
+          Other harnesses are configurable later in Settings.
         </small>
+        <div className="row" style={{ marginTop: 6 }}>
+          <button
+            className="small"
+            disabled={!command.trim() || (verify != null && verify.busy)}
+            onClick={() => void runVerify()}
+          >
+            {verify?.busy ? "Verifying…" : "Verify connection"}
+          </button>
+          {verify && !verify.busy && (
+            <span style={{ color: verify.ok ? "var(--acid)" : "var(--red)", fontSize: 12 }}>
+              {verify.ok ? "✓ " : "✗ "}
+              {verify.msg}
+            </span>
+          )}
+        </div>
       </label>
       <label className="switch">
         <input type="checkbox" checked={insecure} onChange={(e) => setInsecure(e.target.checked)} />

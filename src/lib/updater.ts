@@ -18,7 +18,14 @@ import { isTauri } from "./tauri";
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const LOCK_KEY = "charon-update-lock";
 const READY_KEY = "charon-update-ready";
+const SNOOZE_KEY = "charon-update-snooze";
 const LOCK_TTL_MS = 15 * 60 * 1000;
+
+// Dismissing the toast hides it for an hour, doubling each subsequent
+// dismissal (1h → 2h → 4h … capped at 24h). The download still proceeds in
+// the background; snooze only governs the toast's visibility.
+const SNOOZE_BASE_MS = 60 * 60 * 1000;
+const SNOOZE_MAX_MS = 24 * 60 * 60 * 1000;
 
 interface UpdateState {
   /** version string as soon as a newer release is detected */
@@ -27,13 +34,57 @@ interface UpdateState {
   ready: string | null;
   /** true while a user-requested update is waiting on the download */
   updating: boolean;
+  /** epoch ms until which the toast stays hidden (0 = visible) */
+  snoozedUntil: number;
 }
 
 export const useUpdateStore = create<UpdateState>(() => ({
   available: null,
   ready: null,
   updating: false,
+  snoozedUntil: 0,
 }));
+
+/** persisted snooze: which version, how many dismissals, until when */
+interface Snooze {
+  version: string;
+  count: number;
+  until: number;
+}
+
+function readSnooze(): Snooze | null {
+  try {
+    const raw = localStorage.getItem(SNOOZE_KEY);
+    return raw ? (JSON.parse(raw) as Snooze) : null;
+  } catch {
+    return null;
+  }
+}
+
+let unsnoozeTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Reflect the persisted snooze for `version` into the store + schedule its expiry. */
+function applySnooze(version: string): void {
+  const s = readSnooze();
+  const active = s && s.version === version && s.until > Date.now() ? s.until : 0;
+  useUpdateStore.setState({ snoozedUntil: active });
+  clearTimeout(unsnoozeTimer);
+  if (active) {
+    unsnoozeTimer = setTimeout(() => useUpdateStore.setState({ snoozedUntil: 0 }), active - Date.now());
+  }
+}
+
+/** Hide the toast with exponential backoff; it reappears when the snooze lapses. */
+export function dismissUpdateToast(): void {
+  const version = useUpdateStore.getState().available;
+  if (!version) return;
+  const prev = readSnooze();
+  const count = prev && prev.version === version ? prev.count + 1 : 1;
+  const delay = Math.min(SNOOZE_BASE_MS * 2 ** (count - 1), SNOOZE_MAX_MS);
+  const until = Date.now() + delay;
+  localStorage.setItem(SNOOZE_KEY, JSON.stringify({ version, count, until } satisfies Snooze));
+  applySnooze(version);
+}
 
 /** set when the user clicks the toast before the download has finished */
 let applyWhenReady = false;
@@ -43,6 +94,7 @@ async function checkOnce(): Promise<void> {
     const update = await check();
     if (!update) return;
     useUpdateStore.setState({ available: update.version });
+    applySnooze(update.version);
 
     // another window may already be downloading this version
     const lock = localStorage.getItem(LOCK_KEY);

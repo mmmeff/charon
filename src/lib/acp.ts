@@ -1,4 +1,5 @@
 import { native, type AgentStreamEvent } from "./tauri";
+import { uid } from "./template";
 
 /**
  * Agent Client Protocol (ACP) client — the host side of agentclientprotocol.com.
@@ -265,5 +266,49 @@ export class AcpConnection {
     this.exitResolve(-9);
     connections.delete(this.id);
     void native.killAgent(this.id).catch(() => {});
+  }
+}
+
+export interface HarnessProbe {
+  ok: boolean;
+  error?: string;
+  /** models exposed via session/new (cursor does; opencode doesn't) */
+  models: AcpModel[];
+  modes: AcpMode[];
+}
+
+/**
+ * One-shot connectivity check for a harness: spawn, initialize, open a session
+ * in the given cwd, and report whether it speaks ACP plus any model list it
+ * exposes. Used by onboarding's live verify and by the startup model refresh.
+ */
+export async function probeHarness(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeoutMs = 15000
+): Promise<HarnessProbe> {
+  const conn = new AcpConnection(uid("probe-"), { onUpdate: () => {}, choosePermission: () => null });
+  try {
+    const result = await Promise.race([
+      (async (): Promise<HarnessProbe> => {
+        await conn.spawn(command, args, cwd);
+        await conn.initialize();
+        const ns = await conn.newSession(cwd);
+        return {
+          ok: true,
+          models: ns.models?.availableModels ?? [],
+          modes: ns.modes?.availableModes ?? [],
+        };
+      })(),
+      new Promise<HarnessProbe>((_, rej) =>
+        setTimeout(() => rej(new Error("timed out — is the command an ACP server?")), timeoutMs)
+      ),
+    ]);
+    return result;
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e), models: [], modes: [] };
+  } finally {
+    conn.kill();
   }
 }

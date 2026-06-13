@@ -3,6 +3,21 @@
 // connect to GitHub and launch per-repo windows. Everything else is per-repo.
 // ---------------------------------------------------------------------------
 
+/** An ACP agent harness: a command that speaks Agent Client Protocol. */
+export interface Harness {
+  /** stable id, e.g. "cursor" | "opencode" | "claude-code" | "codex" | "custom-…" */
+  id: string;
+  name: string;
+  /** executable to spawn (e.g. "cursor-agent", "opencode", "npx") */
+  command: string;
+  /** args that start the ACP server (e.g. ["acp"] or ["-y","@…/claude-code-acp"]) */
+  args: string[];
+  /** confirmed working firsthand (vs. an unverified template) */
+  verified?: boolean;
+  /** auth / setup hint shown when a connection probe fails */
+  note?: string;
+}
+
 export interface GlobalConfig {
   /** Base web URL, e.g. "https://github.com" or "https://ghe.corp.example" */
   githubUrl: string;
@@ -11,9 +26,13 @@ export interface GlobalConfig {
   insecureTls: boolean;
   /** Resolved at connect time */
   login: string;
-  /** Path or name of the cursor agent binary */
+  /** Path or name of the cursor agent binary (legacy; seeds the cursor harness) */
   cursorBinary: string;
-  /** Model ids available for runs (refreshed from `cursor-agent models` on startup) */
+  /** Configured agent harnesses (ACP servers) */
+  harnesses: Harness[];
+  /** id of the harness used for every agent run */
+  activeHarness: string;
+  /** Model ids available for runs (sourced from the active harness over ACP) */
   models: string[];
   /** Display labels keyed by model id */
   modelLabels: Record<string, string>;

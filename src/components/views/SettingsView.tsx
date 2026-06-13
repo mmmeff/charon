@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { EVENT_CATALOG, FLOW_MODEL_CATALOG } from "../../lib/defaults";
+import { refreshModels } from "../../lib/agents";
+import { probeHarness } from "../../lib/acp";
+import { activeHarness, EVENT_CATALOG, FLOW_MODEL_CATALOG, harnessTemplates } from "../../lib/defaults";
 import { resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
+import { native } from "../../lib/tauri";
 import { useGlobalConfig, useRepoStore, useSkillStore } from "../../lib/store";
-import type { ClassFilters, RepoConfig, SkillSelection } from "../../types";
-import { Badge } from "../common";
+import type { ClassFilters, GlobalConfig, RepoConfig, SkillSelection } from "../../types";
+import { Badge, Spinner } from "../common";
 import { PromptInput } from "../PromptInput";
 
 const NAV_SECTIONS = [
@@ -16,6 +19,7 @@ const NAV_SECTIONS = [
   { id: "s-skills", label: "Skills" },
   { id: "s-defmodels", label: "Default models" },
   { id: "s-models", label: "Models" },
+  { id: "s-harness", label: "Harness" },
   { id: "s-conn", label: "Connection" },
 ];
 
@@ -425,16 +429,123 @@ export function SettingsView() {
         </div>
       </div>
 
+      <div className="settings-section" id="s-harness">
+        <h3>Harness (global)</h3>
+        <HarnessSettings global={global} save={saveGlobal} />
+      </div>
+
       <div className="settings-section" id="s-conn">
         <h3>Connection (global)</h3>
         <p className="subtle">
-          {global.login} @ {global.githubUrl} · agent binary <code>{global.cursorBinary}</code>. Reconfigure
-          from the launcher window.
+          {global.login} @ {global.githubUrl}. Reconfigure the GitHub connection from the launcher window.
         </p>
       </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** Switch / reconfigure the active ACP harness; verify and re-source models. */
+function HarnessSettings({
+  global,
+  save,
+}: {
+  global: GlobalConfig;
+  save: (cfg: GlobalConfig) => Promise<void>;
+}) {
+  const cur = activeHarness(global);
+  const templates = harnessTemplates(global.cursorBinary);
+  const [id, setId] = useState(cur.id);
+  const [command, setCommand] = useState(cur.command);
+  const [args, setArgs] = useState(cur.args.join(" "));
+  const [state, setState] = useState<null | "verifying" | "saving" | { ok: boolean; msg: string }>(null);
+  const picked = templates.find((t) => t.id === id);
+
+  const select = (tid: string) => {
+    setId(tid);
+    const t = templates.find((x) => x.id === tid);
+    if (t) {
+      setCommand(t.command);
+      setArgs(t.args.join(" "));
+    }
+    setState(null);
+  };
+  const harness = () => ({
+    id,
+    name: picked?.name ?? id,
+    command: command.trim(),
+    args: args.trim() ? args.trim().split(/\s+/) : [],
+    note: picked?.note,
+  });
+
+  const verify = async () => {
+    setState("verifying");
+    const h = harness();
+    const r = await probeHarness(h.command, h.args, await native.appDataDir());
+    setState({
+      ok: r.ok,
+      msg: r.ok ? `Connected — ${r.models.length} models, ${r.modes.length} modes` : r.error || "failed",
+    });
+  };
+  const apply = async () => {
+    setState("saving");
+    const h = harness();
+    await save({ ...global, harnesses: [h], activeHarness: h.id });
+    // re-source the model list from the newly active harness
+    await refreshModels(useGlobalConfig.getState().config!, save);
+    setState({ ok: true, msg: "saved — models refreshed from this harness" });
+  };
+
+  return (
+    <>
+      <p className="subtle" style={{ maxWidth: "76ch" }}>
+        Charon drives a coding agent over Agent Client Protocol. cursor and opencode are verified;
+        Claude Code uses Zed's adapter; Codex needs an ACP bridge. Switch agents without touching
+        the rest of the app.
+      </p>
+      <div className="seg" style={{ marginBottom: 8, flexWrap: "wrap" }}>
+        {templates.map((t) => (
+          <button key={t.id} className={`small ${id === t.id ? "primary" : ""}`} onClick={() => select(t.id)}>
+            {t.name}
+            {t.verified ? " ✓" : ""}
+          </button>
+        ))}
+      </div>
+      <div className="row" style={{ gap: 6 }}>
+        <input
+          type="text"
+          value={command}
+          onChange={(e) => { setCommand(e.target.value); setState(null); }}
+          placeholder="command"
+          style={{ flex: "0 0 38%" }}
+        />
+        <input
+          type="text"
+          value={args}
+          onChange={(e) => { setArgs(e.target.value); setState(null); }}
+          placeholder="args"
+          style={{ flex: 1 }}
+        />
+      </div>
+      {picked?.note && <small style={{ display: "block", color: "var(--fg-subtle)", marginTop: 5 }}>{picked.note}</small>}
+      <div className="row" style={{ marginTop: 8 }}>
+        <button className="small" disabled={state === "verifying" || !command.trim()} onClick={() => void verify()}>
+          {state === "verifying" ? <Spinner /> : null} Verify
+        </button>
+        <button className="small primary" disabled={state === "saving" || !command.trim()} onClick={() => void apply()}>
+          {state === "saving" ? <Spinner /> : null} Save &amp; use
+        </button>
+        {state && typeof state === "object" && (
+          <span style={{ color: state.ok ? "var(--acid)" : "var(--red)", fontSize: 12 }}>
+            {state.ok ? "✓ " : "✗ "}
+            {state.msg}
+          </span>
+        )}
+      </div>
+    </>
   );
 }
 
