@@ -3,7 +3,7 @@ import { findLineByText, parseUnifiedDiff } from "../lib/diff";
 import { usePrData } from "../lib/events";
 import { useRepoStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
-import { timeAgo, useScrolledPrTitle } from "../lib/ui";
+import { timeAgo, useScrollMemory, useScrolledPrTitle } from "../lib/ui";
 import { Badge, BranchBadge, CiBadge, LoadingField, Section } from "./common";
 import { ApprovalsMenu, ReviewersMenu } from "./ReviewerMenus";
 import { ChecksPanel } from "./ChecksPanel";
@@ -30,6 +30,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   const [diffErr, setDiffErr] = useState("");
   const mainRef = useRef<HTMLDivElement>(null);
   useScrolledPrTitle(mainRef, pr);
+  useScrollMemory(mainRef, `pr:${ctx.repo}:${pr.number}`);
 
   const loadDiff = async () => {
     setDiffErr("");

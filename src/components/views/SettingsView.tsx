@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { refreshModels } from "../../lib/agents";
 import { probeHarness, summarizeProbe } from "../../lib/acp";
 import { activeHarness, EVENT_CATALOG, FLOW_MODEL_CATALOG, harnessTemplates, switchHarness } from "../../lib/defaults";
 import { eventFlowKind, resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
 import { native } from "../../lib/tauri";
+import { useScrollMemory } from "../../lib/ui";
 import { useGlobalConfig, useRepoStore, useSkillStore } from "../../lib/store";
 import type { ClassFilters, EventHandlerConfig, GlobalConfig, RepoConfig, SkillSelection } from "../../types";
 import { Badge, Spinner } from "../common";
@@ -130,6 +131,8 @@ export function SettingsView() {
   const saveGlobal = useGlobalConfig((s) => s.save);
   const skills = useSkillStore((s) => s.skills);
   const [saved, setSaved] = useState(false);
+  const mainRef = useRef<HTMLDivElement>(null);
+  useScrollMemory(mainRef, `settings:${repo}`);
 
   if (!global) return null;
 
@@ -140,7 +143,7 @@ export function SettingsView() {
   };
 
   return (
-    <div className="main">
+    <div className="main" ref={mainRef}>
       <div className="settings-layout">
         <SettingsNav />
         <div className="settings-body">
@@ -165,9 +168,9 @@ export function SettingsView() {
       <div className="settings-section" id="s-models">
         <h3>Models (global)</h3>
         <p className="subtle" style={{ maxWidth: "72ch" }}>
-          Untick a model to hide it from every model picker, in all repos. The list refreshes from{" "}
-          <code>cursor-agent models</code> on startup; newly discovered models arrive enabled. Default
-          models keep working even if hidden here.
+          Untick a model to hide it from every model picker, in all repos. The list is sourced from the
+          active harness over ACP on startup; newly discovered models arrive enabled. Default models keep
+          working even if hidden here.
         </p>
         <div className="row" style={{ marginBottom: 8 }}>
           <button
@@ -250,7 +253,7 @@ export function SettingsView() {
                 </div>
                 <small>
                   Applies to every flow in every repo unless overridden — by a per-flow default
-                  below, a per-repo default (Agent section), or an explicit pick in a launch form.
+                  below or an explicit pick in a launch form.
                   {hasReasoning && " Reasoning is a separate axis on harnesses that expose it (e.g. Codex)."}
                 </small>
               </label>
@@ -364,19 +367,6 @@ export function SettingsView() {
       <div className="settings-section" id="s-agent">
         <h3>Behavior</h3>
         <label className="field">
-          <span>Default model for this repo</span>
-          <select value={config.model} onChange={(e) => update({ model: e.target.value })}>
-            <option value="">global default ({global.defaultModel})</option>
-            {global.models
-              .filter((m) => !(global.disabledModels ?? []).includes(m) || m === config.model)
-              .map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label className="field">
           <span>Default review prompt</span>
           <PromptInput
             rows={2}
@@ -471,6 +461,26 @@ export function SettingsView() {
             — a fast read-only agent summarizes each failure in one or two sentences
           </span>
         </label>
+        {config.ciAutoAnalysis !== false && (
+          <label className="field">
+            <span>Analysis model</span>
+            <ModelPicker
+              value={global.modelOverrides?.["ci_analysis"] ?? ""}
+              onChange={(m) => {
+                const next = { ...(global.modelOverrides ?? {}) };
+                if (m) next["ci_analysis"] = m;
+                else delete next["ci_analysis"];
+                void saveGlobal({ ...global, modelOverrides: next });
+              }}
+              flowKind="ci_analysis"
+            />
+            <small>
+              The model behind each failure summary. A fast, cheap model is usually right here —
+              leave it on the default to inherit your global default. (Also editable in Agent →
+              Default models.)
+            </small>
+          </label>
+        )}
         <label className="field">
           <span>Ignored checks</span>
           {(config.ignoredChecks ?? []).length === 0 ? (

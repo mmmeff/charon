@@ -3,7 +3,7 @@ import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
-import { age, sortPrs, useScrolledPrTitle, type SortKey } from "../../lib/ui";
+import { age, sortPrs, useScrollMemory, useScrolledPrTitle, type SortKey } from "../../lib/ui";
 import { Badge, BranchBadge, CiBadge, EmptyState, LoadingField, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
 import { ChecksPanel } from "../ChecksPanel";
 import { Composer, RunResults } from "../Composer";
@@ -100,6 +100,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   );
   const mainRef = useRef<HTMLDivElement>(null);
   useScrolledPrTitle(mainRef, pr);
+  useScrollMemory(mainRef, `pr:${ctx.repo}:${pr.number}`);
 
   useEffect(() => {
     ctx.gh

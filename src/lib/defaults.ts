@@ -309,7 +309,6 @@ export function defaultRepoConfig(): RepoConfig {
   return {
     localClonePath: "",
     pollIntervalSec: 60,
-    model: "",
     reviewPrompt: DEFAULT_REVIEW_PROMPT,
     fixPolicy: DEFAULT_FIX_POLICY,
     babysitFilters: { ...DEFAULT_BABYSIT_FILTERS },
@@ -347,6 +346,7 @@ export const DEFAULT_MODEL_OVERRIDES: Record<string, string> = {
   rewrite: "claude-4.6-sonnet-medium",
   draft_edit: DEFAULT_MODEL_ID,
   feedback_fix: DEFAULT_MODEL_ID,
+  ci_analysis: DEFAULT_MODEL_ID,
 };
 
 /**
@@ -364,6 +364,11 @@ export const FLOW_MODEL_CATALOG: { kind: string; label: string; capability: stri
     capability: "guidance ✓ · model picker ✓",
   },
   { kind: "ci_fix", label: "CI fix", capability: "guidance ✓ · model picker ✓" },
+  {
+    kind: "ci_analysis",
+    label: "CI failure analysis",
+    capability: "auto-summary · model picker ✓ (also in Checks)",
+  },
   {
     kind: "conflict_fix",
     label: "Branch maintenance (conflicts, merge from base)",

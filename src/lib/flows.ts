@@ -11,7 +11,6 @@ import type {
   Skill,
 } from "../types";
 import { cleanResultText, extractProposalJson, startAgent } from "./agents";
-import { DEFAULT_MODEL_ID } from "./defaults";
 import { lineInDiff, lineTextAt, nearestDiffLine, parseUnifiedDiff } from "./diff";
 import type { GitHubClient } from "./github";
 import { applySkills } from "./skills";
@@ -55,7 +54,7 @@ const MAX_DIFF_CHARS = 90_000;
 
 /**
  * Model resolution, most specific wins:
- * explicit pick at launch > per-flow override > repo default > global default.
+ * explicit pick at launch > per-flow override > global default.
  * Configured ids the CLI doesn't list are skipped (install defaults may
  * reference models a given Cursor setup doesn't have).
  */
@@ -65,7 +64,6 @@ export function resolveModel(ctx: FlowContext, explicit?: string, kind?: string)
   return (
     explicit ||
     known(kind ? ctx.global.modelOverrides?.[kind] : "") ||
-    known(ctx.config.model) ||
     known(ctx.global.defaultModel) ||
     "auto"
   );
@@ -697,10 +695,10 @@ After the work, draft a response to the thread${
 }
 
 /**
- * Auto CI triage: a fast read-only agent boils a failing check's log down to
- * one or two sentences for the checks panel. Default model is the install
- * default (Composer 2.5 Fast); falls back to normal resolution if the CLI
- * doesn't list it. Resolves with the summary text.
+ * Auto CI triage: a read-only agent boils a failing check's log down to one or
+ * two sentences for the checks panel. Model resolves via the `ci_analysis`
+ * flow default (Settings → Checks, or the Default-models table) — seeded to the
+ * fast install default but user-pickable. Resolves with the summary text.
  */
 export async function runCheckAnalysis(
   ctx: FlowContext,
@@ -708,9 +706,7 @@ export async function runCheckAnalysis(
   check: { name: string; url: string; id?: number; outputTitle?: string; outputSummary?: string }
 ): Promise<string> {
   const log = (await ctx.gh.getCheckLog(ctx.repo, check).catch(() => "")) || "(no log available)";
-  const model = ctx.global.models.includes(DEFAULT_MODEL_ID)
-    ? DEFAULT_MODEL_ID
-    : resolveModel(ctx, undefined, "event");
+  const model = resolveModel(ctx, undefined, "ci_analysis");
   return new Promise((resolve, reject) => {
     const prompt = `You are a CI triage bot. A check failed on PR #${pr.number} in ${ctx.repo}.
 Summarize WHY it failed in ONE or TWO short sentences — absolute maximum. Plain text only: no markdown,

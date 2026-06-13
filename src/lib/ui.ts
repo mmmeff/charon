@@ -6,6 +6,62 @@ import type { PrSummary } from "../types";
 // file) so component files export only components — mixed exports break
 // Vite Fast Refresh and force full-state reloads in dev.
 
+// Per-page scroll positions, keyed by a stable page id. In-memory (session
+// scoped) — restores when the user navigates back to a page they left.
+const scrollMemory = new Map<string, number>();
+
+/**
+ * Remember a scroll container's position under `key` and restore it on
+ * remount. Tolerates async content (diffs load after mount) by re-applying
+ * the saved offset over a short window as the page grows, and bails the
+ * moment the user scrolls/wheels so it never fights them.
+ */
+export function useScrollMemory(
+  ref: RefObject<HTMLElement | null>,
+  key: string | null | undefined
+): void {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !key) return;
+    let restoring = (scrollMemory.get(key) ?? 0) > 0;
+
+    const stopRestoring = () => {
+      restoring = false;
+    };
+    const onScroll = () => {
+      if (!restoring) scrollMemory.set(key, el.scrollTop);
+    };
+    // any explicit user gesture cancels an in-flight restore
+    el.addEventListener("wheel", stopRestoring, { passive: true });
+    el.addEventListener("touchstart", stopRestoring, { passive: true });
+    el.addEventListener("keydown", stopRestoring);
+    el.addEventListener("scroll", onScroll, { passive: true });
+
+    if (restoring) {
+      const target = scrollMemory.get(key) ?? 0;
+      let tries = 0;
+      const tick = () => {
+        if (!restoring) return;
+        el.scrollTop = target;
+        // settled (content tall enough and offset applied) or timed out (~0.8s)
+        if (Math.abs(el.scrollTop - target) < 2 || tries++ > 48) {
+          restoring = false;
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    return () => {
+      el.removeEventListener("wheel", stopRestoring);
+      el.removeEventListener("touchstart", stopRestoring);
+      el.removeEventListener("keydown", stopRestoring);
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [ref, key]);
+}
+
 /**
  * Report when the workspace's PR title scrolls out of view so the topstrip
  * can show a breadcrumb (`/ #1234 title`) that jumps back to the top.

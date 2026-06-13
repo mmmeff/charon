@@ -112,7 +112,6 @@ export interface RepoConfig {
   /** Local clone path; empty = app-managed clone under appData/clones */
   localClonePath: string;
   pollIntervalSec: number;
-  model: string; // default model for this repo ("" = global default)
   /** default instructions prefilled in the composer's Review mode */
   reviewPrompt: string;
   /** dependency/validation policy injected into every fix-flow prompt */
