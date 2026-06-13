@@ -10,28 +10,44 @@ import type { ClassFilters, GlobalConfig, RepoConfig, SkillSelection } from "../
 import { Badge, Spinner } from "../common";
 import { PromptInput } from "../PromptInput";
 
-const NAV_SECTIONS = [
-  { id: "s-agent", label: "Agent" },
-  { id: "s-babysit", label: "My PRs · filters" },
-  { id: "s-review", label: "Teammate · filters" },
-  { id: "s-events", label: "Events" },
-  { id: "s-ci", label: "CI" },
-  { id: "s-skills", label: "Skills" },
-  { id: "s-defmodels", label: "Default models" },
-  { id: "s-models", label: "Models" },
-  { id: "s-harness", label: "Harness" },
-  { id: "s-conn", label: "Connection" },
+/**
+ * Settings outline: top-level groups, each with its sections in document order.
+ * A group whose single section shares its name (Connection/Checks/Automation)
+ * renders flat; multi-section groups (Agent/Views) get a header + children.
+ */
+const NAV_GROUPS: { group: string; items: { id: string; label: string }[] }[] = [
+  { group: "Connection", items: [{ id: "s-conn", label: "Connection" }] },
+  {
+    group: "Agent",
+    items: [
+      { id: "s-harness", label: "Harness" },
+      { id: "s-models", label: "Models" },
+      { id: "s-defmodels", label: "Default models" },
+      { id: "s-skills", label: "Skills" },
+      { id: "s-agent", label: "Behavior" },
+    ],
+  },
+  {
+    group: "Views",
+    items: [
+      { id: "s-babysit", label: "My PRs" },
+      { id: "s-review", label: "To Review" },
+    ],
+  },
+  { group: "Checks", items: [{ id: "s-ci", label: "Checks" }] },
+  { group: "Automation", items: [{ id: "s-events", label: "Automation" }] },
 ];
 
 const groupId = (g: string) => "g-" + g.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
 /** Sticky outline nav with scroll-spy for the settings sections. */
 function SettingsNav() {
-  const groups = [...new Set(EVENT_CATALOG.map((e) => e.group))];
-  const [active, setActive] = useState("s-agent");
+  const eventGroups = [...new Set(EVENT_CATALOG.map((e) => e.group))];
+  const allIds = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id));
+  const [active, setActive] = useState(allIds[0]);
 
   useEffect(() => {
-    const ids = [...NAV_SECTIONS.map((s) => s.id), ...groups.map(groupId)];
+    const ids = [...allIds, ...eventGroups.map(groupId)];
     const visible = new Set<string>();
     const io = new IntersectionObserver(
       (entries) => {
@@ -58,26 +74,44 @@ function SettingsNav() {
 
   return (
     <nav className="settings-nav">
-      {NAV_SECTIONS.map((s) => (
-        <div key={s.id}>
-          <button
-            className={`settings-nav-item ${active === s.id ? "active" : ""}`}
-            onClick={() => jump(s.id)}
-          >
-            {s.label}
-          </button>
-          {s.id === "s-events" &&
-            groups.map((g) => (
+      {NAV_GROUPS.map(({ group, items }) => {
+        const flat = items.length === 1 && items[0].label === group;
+        return (
+          <div key={group} className="settings-nav-group">
+            {flat ? (
               <button
-                key={g}
-                className={`settings-nav-item sub ${active === groupId(g) ? "active" : ""}`}
-                onClick={() => jump(groupId(g))}
+                className={`settings-nav-item ${active === items[0].id ? "active" : ""}`}
+                onClick={() => jump(items[0].id)}
               >
-                {g.replace(/^(My PRs|Teammate PRs) — /, "")}
+                {group}
               </button>
-            ))}
-        </div>
-      ))}
+            ) : (
+              <div className="settings-nav-header">{group}</div>
+            )}
+            {!flat &&
+              items.map((it) => (
+                <button
+                  key={it.id}
+                  className={`settings-nav-item sub ${active === it.id ? "active" : ""}`}
+                  onClick={() => jump(it.id)}
+                >
+                  {it.label}
+                </button>
+              ))}
+            {/* Automation expands to the event-catalog groups */}
+            {group === "Automation" &&
+              eventGroups.map((g) => (
+                <button
+                  key={g}
+                  className={`settings-nav-item sub ${active === groupId(g) ? "active" : ""}`}
+                  onClick={() => jump(groupId(g))}
+                >
+                  {g.replace(/^(My PRs|Teammate PRs) — /, "")}
+                </button>
+              ))}
+          </div>
+        );
+      })}
     </nav>
   );
 }
@@ -114,8 +148,175 @@ export function SettingsView() {
         {saved && <Badge color="green">saved</Badge>}
       </div>
 
+      <div className="settings-section" id="s-conn">
+        <h3>Connection (global)</h3>
+        <p className="subtle">
+          {global.login} @ {global.githubUrl}. Reconfigure the GitHub connection from the launcher window.
+        </p>
+      </div>
+      <div className="settings-section" id="s-harness">
+        <h3>Harness (global)</h3>
+        <HarnessSettings global={global} save={saveGlobal} />
+      </div>
+      <div className="settings-section" id="s-models">
+        <h3>Models (global)</h3>
+        <p className="subtle" style={{ maxWidth: "72ch" }}>
+          Untick a model to hide it from every model picker, in all repos. The list refreshes from{" "}
+          <code>cursor-agent models</code> on startup; newly discovered models arrive enabled. Default
+          models keep working even if hidden here.
+        </p>
+        <div className="row" style={{ marginBottom: 8 }}>
+          <button
+            className="small"
+            onClick={() => void saveGlobal({ ...global, disabledModels: [] })}
+          >
+            Select all
+          </button>
+          <button
+            className="small"
+            onClick={() => void saveGlobal({ ...global, disabledModels: [...global.models] })}
+          >
+            Deselect all
+          </button>
+          <span className="subtle">
+            {global.models.length - (global.disabledModels ?? []).length}/{global.models.length} enabled
+          </span>
+        </div>
+        <div className="model-list">
+          {global.models.map((m) => {
+            const off = (global.disabledModels ?? []).includes(m);
+            return (
+              <label key={m} className="switch" style={{ display: "flex", marginBottom: 5 }}>
+                <input
+                  type="checkbox"
+                  checked={!off}
+                  onChange={(e) => {
+                    const next = new Set(global.disabledModels ?? []);
+                    if (e.target.checked) next.delete(m);
+                    else next.add(m);
+                    void saveGlobal({ ...global, disabledModels: [...next] });
+                  }}
+                />
+                {global.modelLabels[m] ?? m} <span className="subtle">({m})</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+      <div className="settings-section" id="s-defmodels">
+        <h3>Default models (global)</h3>
+        <label className="field">
+          <span>Global default model</span>
+          <select
+            value={global.defaultModel}
+            onChange={(e) => void saveGlobal({ ...global, defaultModel: e.target.value })}
+          >
+            {global.models
+              .filter((m) => !(global.disabledModels ?? []).includes(m) || m === global.defaultModel)
+              .map((m) => (
+                <option key={m} value={m}>
+                  {global.modelLabels[m] ?? m}
+                </option>
+              ))}
+          </select>
+          <small>
+            Applies to every flow in every repo unless overridden — by a per-flow default below, a
+            per-repo default (Agent section), or an explicit pick in a launch form.
+          </small>
+        </label>
+        <p className="subtle" style={{ maxWidth: "76ch" }}>
+          Every AI-driven flow, with what you can steer at launch. Set a per-flow default to route a
+          flow to a different model without touching the launch forms.
+        </p>
+        {FLOW_MODEL_CATALOG.map((f) => {
+          const current = global.modelOverrides?.[f.kind] ?? "";
+          const options = global.models.filter(
+            (m) => !(global.disabledModels ?? []).includes(m) || m === current
+          );
+          // keep a configured id listed even when the CLI doesn't know it
+          // (install defaults / pre-refresh) so the select reports truthfully
+          if (current && !options.includes(current)) options.push(current);
+          return (
+            <label key={f.kind} className="field flow-model-row">
+              <span>
+                {f.label} <em className="flow-cap">{f.capability}</em>
+              </span>
+              <select
+                value={current}
+                onChange={(e) => {
+                  const next = { ...(global.modelOverrides ?? {}) };
+                  if (e.target.value) next[f.kind] = e.target.value;
+                  else delete next[f.kind];
+                  void saveGlobal({ ...global, modelOverrides: next });
+                }}
+              >
+                <option value="">
+                  global default ({global.modelLabels[global.defaultModel] ?? global.defaultModel})
+                </option>
+                {options.map((m) => (
+                  <option key={m} value={m}>
+                    {global.modelLabels[m] ?? m}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        })}
+      </div>
+      <div className="settings-section" id="s-skills">
+        <h3>Skills</h3>
+        <p className="subtle">
+          Imported from <code>~/.cursor</code> (commands, skills) plus any extra directories. Select which
+          skills apply at each stage; they're appended to the agent prompt for that stage.
+        </p>
+        {(
+          [
+            ["review", "Review (teammate PRs)"],
+            ["fix", "Fix flows (CI, conflicts, feedback)"],
+            ["draft", "Draft edits"],
+            ["rewrite", "Rewrites / regeneration"],
+          ] as [keyof SkillSelection, string][]
+        ).map(([cat, label]) => (
+          <div key={cat} className="event-row">
+            <strong>{label}</strong>
+            <div className="row" style={{ marginTop: 6 }}>
+              {skills.map((s) => (
+                <label key={s.name + s.source} className="switch" title={`${s.source}: ${s.path}`}>
+                  <input
+                    type="checkbox"
+                    checked={config.skills[cat].includes(s.name)}
+                    onChange={(e) => {
+                      const cur = config.skills[cat];
+                      update({
+                        skills: {
+                          ...config.skills,
+                          [cat]: e.target.checked ? [...cur, s.name] : cur.filter((n) => n !== s.name),
+                        },
+                      });
+                    }}
+                  />
+                  {s.name} <Badge color="gray">{s.source}</Badge>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+        <label className="field" style={{ marginTop: 10 }}>
+          <span>Extra skill directories (global)</span>
+          <input
+            type="text"
+            value={global.extraSkillDirs.join(", ")}
+            onChange={(e) => {
+              const extraSkillDirs = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+              void saveGlobal({ ...global, extraSkillDirs }).then(() => loadSkills(extraSkillDirs));
+            }}
+            placeholder="/path/to/my/skills, /another/dir"
+          />
+          <small>Folders of .md files (or dirs containing SKILL.md) to load as additional skills.</small>
+        </label>
+      </div>
       <div className="settings-section" id="s-agent">
-        <h3>Agent</h3>
+        <h3>Behavior</h3>
         <label className="field">
           <span>Default model for this repo</span>
           <select value={config.model} onChange={(e) => update({ model: e.target.value })}>
@@ -195,42 +396,24 @@ export function SettingsView() {
           />
         </label>
       </div>
-
       <div className="settings-section" id="s-babysit">
-        <h3>My PRs (Babysit) — filters</h3>
+        <h3>My PRs</h3>
         <FilterEditor
           filters={config.babysitFilters}
           onChange={(babysitFilters) => update({ babysitFilters })}
           draftsHint="Also watch your draft PRs (they always show in the Drafts tab regardless)."
         />
       </div>
-
       <div className="settings-section" id="s-review">
-        <h3>Teammate PRs (Review) — filters</h3>
+        <h3>To Review</h3>
         <FilterEditor
           filters={config.reviewFilters}
           onChange={(reviewFilters) => update({ reviewFilters })}
           draftsHint="Also process teammate drafts you've been asked to review."
         />
       </div>
-
-      <div className="settings-section" id="s-events">
-        <h3>Events</h3>
-        <p className="subtle">
-          Every event is a toggle plus a prompt template. <strong>All automation ships OFF</strong> — opt in
-          per event when you're ready for the app to react on its own. When an event fires and is enabled,
-          the prompt runs against a Cursor agent — the behavior is whatever the prompt instructs. Variables:{" "}
-          <code>{"{pr-number}"}</code> <code>{"{pr-title}"}</code> <code>{"{branch}"}</code>{" "}
-          <code>{"{base-branch}"}</code> <code>{"{comment-body}"}</code> <code>{"{author}"}</code>{" "}
-          <code>{"{model}"}</code> <code>{"{filter-criteria}"}</code> <code>{"{check-name}"}</code>{" "}
-          <code>{"{label}"}</code>. Skill references like <code>/fix-merge-conflicts</code> expand to the
-          skill's content when it exists.
-        </p>
-        <EventCatalogEditor config={config} update={update} />
-      </div>
-
       <div className="settings-section" id="s-ci">
-        <h3>CI</h3>
+        <h3>Checks</h3>
         <label className="switch" style={{ marginBottom: 14 }}>
           <input
             type="checkbox"
@@ -268,177 +451,19 @@ export function SettingsView() {
           )}
         </label>
       </div>
-
-      <div className="settings-section" id="s-skills">
-        <h3>Skills</h3>
+      <div className="settings-section" id="s-events">
+        <h3>Automation</h3>
         <p className="subtle">
-          Imported from <code>~/.cursor</code> (commands, skills) plus any extra directories. Select which
-          skills apply at each stage; they're appended to the agent prompt for that stage.
+          Every event is a toggle plus a prompt template. <strong>All automation ships OFF</strong> — opt in
+          per event when you're ready for the app to react on its own. When an event fires and is enabled,
+          the prompt runs against a Cursor agent — the behavior is whatever the prompt instructs. Variables:{" "}
+          <code>{"{pr-number}"}</code> <code>{"{pr-title}"}</code> <code>{"{branch}"}</code>{" "}
+          <code>{"{base-branch}"}</code> <code>{"{comment-body}"}</code> <code>{"{author}"}</code>{" "}
+          <code>{"{model}"}</code> <code>{"{filter-criteria}"}</code> <code>{"{check-name}"}</code>{" "}
+          <code>{"{label}"}</code>. Skill references like <code>/fix-merge-conflicts</code> expand to the
+          skill's content when it exists.
         </p>
-        {(
-          [
-            ["review", "Review (teammate PRs)"],
-            ["fix", "Fix flows (CI, conflicts, feedback)"],
-            ["draft", "Draft edits"],
-            ["rewrite", "Rewrites / regeneration"],
-          ] as [keyof SkillSelection, string][]
-        ).map(([cat, label]) => (
-          <div key={cat} className="event-row">
-            <strong>{label}</strong>
-            <div className="row" style={{ marginTop: 6 }}>
-              {skills.map((s) => (
-                <label key={s.name + s.source} className="switch" title={`${s.source}: ${s.path}`}>
-                  <input
-                    type="checkbox"
-                    checked={config.skills[cat].includes(s.name)}
-                    onChange={(e) => {
-                      const cur = config.skills[cat];
-                      update({
-                        skills: {
-                          ...config.skills,
-                          [cat]: e.target.checked ? [...cur, s.name] : cur.filter((n) => n !== s.name),
-                        },
-                      });
-                    }}
-                  />
-                  {s.name} <Badge color="gray">{s.source}</Badge>
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
-        <label className="field" style={{ marginTop: 10 }}>
-          <span>Extra skill directories (global)</span>
-          <input
-            type="text"
-            value={global.extraSkillDirs.join(", ")}
-            onChange={(e) => {
-              const extraSkillDirs = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
-              void saveGlobal({ ...global, extraSkillDirs }).then(() => loadSkills(extraSkillDirs));
-            }}
-            placeholder="/path/to/my/skills, /another/dir"
-          />
-          <small>Folders of .md files (or dirs containing SKILL.md) to load as additional skills.</small>
-        </label>
-      </div>
-
-      <div className="settings-section" id="s-defmodels">
-        <h3>Default models (global)</h3>
-        <label className="field">
-          <span>Global default model</span>
-          <select
-            value={global.defaultModel}
-            onChange={(e) => void saveGlobal({ ...global, defaultModel: e.target.value })}
-          >
-            {global.models
-              .filter((m) => !(global.disabledModels ?? []).includes(m) || m === global.defaultModel)
-              .map((m) => (
-                <option key={m} value={m}>
-                  {global.modelLabels[m] ?? m}
-                </option>
-              ))}
-          </select>
-          <small>
-            Applies to every flow in every repo unless overridden — by a per-flow default below, a
-            per-repo default (Agent section), or an explicit pick in a launch form.
-          </small>
-        </label>
-        <p className="subtle" style={{ maxWidth: "76ch" }}>
-          Every AI-driven flow, with what you can steer at launch. Set a per-flow default to route a
-          flow to a different model without touching the launch forms.
-        </p>
-        {FLOW_MODEL_CATALOG.map((f) => {
-          const current = global.modelOverrides?.[f.kind] ?? "";
-          const options = global.models.filter(
-            (m) => !(global.disabledModels ?? []).includes(m) || m === current
-          );
-          // keep a configured id listed even when the CLI doesn't know it
-          // (install defaults / pre-refresh) so the select reports truthfully
-          if (current && !options.includes(current)) options.push(current);
-          return (
-            <label key={f.kind} className="field flow-model-row">
-              <span>
-                {f.label} <em className="flow-cap">{f.capability}</em>
-              </span>
-              <select
-                value={current}
-                onChange={(e) => {
-                  const next = { ...(global.modelOverrides ?? {}) };
-                  if (e.target.value) next[f.kind] = e.target.value;
-                  else delete next[f.kind];
-                  void saveGlobal({ ...global, modelOverrides: next });
-                }}
-              >
-                <option value="">
-                  global default ({global.modelLabels[global.defaultModel] ?? global.defaultModel})
-                </option>
-                {options.map((m) => (
-                  <option key={m} value={m}>
-                    {global.modelLabels[m] ?? m}
-                  </option>
-                ))}
-              </select>
-            </label>
-          );
-        })}
-      </div>
-
-      <div className="settings-section" id="s-models">
-        <h3>Models (global)</h3>
-        <p className="subtle" style={{ maxWidth: "72ch" }}>
-          Untick a model to hide it from every model picker, in all repos. The list refreshes from{" "}
-          <code>cursor-agent models</code> on startup; newly discovered models arrive enabled. Default
-          models keep working even if hidden here.
-        </p>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <button
-            className="small"
-            onClick={() => void saveGlobal({ ...global, disabledModels: [] })}
-          >
-            Select all
-          </button>
-          <button
-            className="small"
-            onClick={() => void saveGlobal({ ...global, disabledModels: [...global.models] })}
-          >
-            Deselect all
-          </button>
-          <span className="subtle">
-            {global.models.length - (global.disabledModels ?? []).length}/{global.models.length} enabled
-          </span>
-        </div>
-        <div className="model-list">
-          {global.models.map((m) => {
-            const off = (global.disabledModels ?? []).includes(m);
-            return (
-              <label key={m} className="switch" style={{ display: "flex", marginBottom: 5 }}>
-                <input
-                  type="checkbox"
-                  checked={!off}
-                  onChange={(e) => {
-                    const next = new Set(global.disabledModels ?? []);
-                    if (e.target.checked) next.delete(m);
-                    else next.add(m);
-                    void saveGlobal({ ...global, disabledModels: [...next] });
-                  }}
-                />
-                {global.modelLabels[m] ?? m} <span className="subtle">({m})</span>
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="settings-section" id="s-harness">
-        <h3>Harness (global)</h3>
-        <HarnessSettings global={global} save={saveGlobal} />
-      </div>
-
-      <div className="settings-section" id="s-conn">
-        <h3>Connection (global)</h3>
-        <p className="subtle">
-          {global.login} @ {global.githubUrl}. Reconfigure the GitHub connection from the launcher window.
-        </p>
+        <EventCatalogEditor config={config} update={update} />
       </div>
         </div>
       </div>
