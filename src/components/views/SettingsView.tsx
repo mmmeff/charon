@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { refreshModels } from "../../lib/agents";
-import { probeHarness } from "../../lib/acp";
+import { probeHarness, summarizeProbe } from "../../lib/acp";
 import { activeHarness, EVENT_CATALOG, FLOW_MODEL_CATALOG, harnessTemplates } from "../../lib/defaults";
 import { resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
@@ -513,10 +513,7 @@ function HarnessSettings({
     setState("verifying");
     const h = harness();
     const r = await probeHarness(h.command, h.args, await native.appDataDir());
-    setState({
-      ok: r.ok,
-      msg: r.ok ? `Connected — ${r.models.length} models, ${r.modes.length} modes` : r.error || "failed",
-    });
+    setState({ ok: r.ok, msg: summarizeProbe(r) });
   };
   const apply = async () => {
     setState("saving");

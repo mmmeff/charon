@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { refreshModels } from "../lib/agents";
-import { probeHarness } from "../lib/acp";
+import { probeHarness, summarizeProbe } from "../lib/acp";
 import { AsciiField } from "./AsciiField";
 import { IconCharonMoon } from "./icons";
 import { defaultGlobalConfig, harnessTemplates } from "../lib/defaults";
@@ -68,16 +68,7 @@ function Onboarding({
     const h = harness();
     const cwd = await native.appDataDir();
     const r = await probeHarness(h.command, h.args, cwd);
-    setVerify({
-      busy: false,
-      ok: r.ok,
-      msg: r.ok
-        ? `Connected — ${r.models.length} model${r.models.length === 1 ? "" : "s"}${
-            r.modes.length ? `, ${r.modes.length} modes` : ""
-          }`
-        : r.error || "could not connect",
-      models: r.models.length,
-    });
+    setVerify({ busy: false, ok: r.ok, msg: summarizeProbe(r), models: r.models.length });
   };
 
   // valid host URL → deep link to the classic-token page, scopes prefilled

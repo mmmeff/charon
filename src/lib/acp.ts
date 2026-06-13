@@ -272,9 +272,18 @@ export class AcpConnection {
 export interface HarnessProbe {
   ok: boolean;
   error?: string;
-  /** models exposed via session/new (cursor does; opencode doesn't) */
+  /** models exposed via session/new (cursor does; opencode/codex don't) */
   models: AcpModel[];
   modes: AcpMode[];
+}
+
+/** Human-readable verify result — avoids a scary "0 models" for harnesses
+ *  that manage their own model (codex, opencode). */
+export function summarizeProbe(p: HarnessProbe): string {
+  if (!p.ok) return p.error ?? "could not connect";
+  if (p.models.length === 0) return "Connected — this agent manages its own model";
+  const m = `${p.models.length} model${p.models.length === 1 ? "" : "s"}`;
+  return `Connected — ${m}${p.modes.length ? `, ${p.modes.length} modes` : ""}`;
 }
 
 /**
