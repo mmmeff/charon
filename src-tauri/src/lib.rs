@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager, State};
 
@@ -13,6 +14,10 @@ use tauri::{Emitter, Manager, State};
 #[derive(Default)]
 struct AgentRegistry {
     children: Mutex<HashMap<String, Arc<Mutex<Option<Child>>>>>,
+    // per-agent stdin writer channel: agent_send pushes a line, a dedicated
+    // writer thread drains it to the child's stdin (non-blocking sends,
+    // order-preserved, never stalls the IPC thread on a full pipe)
+    writers: Mutex<HashMap<String, Sender<String>>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -37,7 +42,9 @@ fn spawn_agent(
 ) -> Result<(), String> {
     let mut cmd = Command::new(&binary);
     cmd.args(&args)
-        .stdin(Stdio::null())
+        // stdin is piped (not null) so ACP agents can be driven over JSON-RPC
+        // via agent_send; processes that don't read stdin simply ignore it
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(dir) = &cwd {
@@ -65,6 +72,7 @@ fn spawn_agent(
         }
     };
 
+    let stdin = child.stdin.take();
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let shared = Arc::new(Mutex::new(Some(child)));
@@ -73,6 +81,23 @@ fn spawn_agent(
         .lock()
         .unwrap()
         .insert(id.clone(), shared.clone());
+
+    // dedicated writer thread: owns stdin, drains the channel. Dropping the
+    // sender (on kill / completion) ends the loop and closes the pipe.
+    if let Some(mut stdin) = stdin {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        registry.writers.lock().unwrap().insert(id.clone(), tx);
+        std::thread::spawn(move || {
+            while let Ok(line) = rx.recv() {
+                if stdin.write_all(line.as_bytes()).is_err()
+                    || stdin.write_all(b"\n").is_err()
+                    || stdin.flush().is_err()
+                {
+                    break;
+                }
+            }
+        });
+    }
 
     // Reader threads stream each line to the frontend.
     for (pipe_kind, reader) in [("stdout", stdout.map(|s| Box::new(s) as Box<dyn std::io::Read + Send>)),
@@ -150,10 +175,23 @@ fn spawn_agent(
     Ok(())
 }
 
+/// Queue one framed message (a line) to an agent's stdin — the client→agent
+/// half of ACP's JSON-RPC-over-stdio. Non-blocking: hands off to the writer
+/// thread, which appends the newline and drains to the pipe.
+#[tauri::command]
+fn agent_send(registry: State<'_, AgentRegistry>, id: String, line: String) -> Result<(), String> {
+    let map = registry.writers.lock().unwrap();
+    let tx = map.get(&id).ok_or_else(|| format!("no agent stdin for {id}"))?;
+    tx.send(line).map_err(|_| "agent stdin closed".to_string())
+}
+
 #[tauri::command]
 fn kill_agent(registry: State<'_, AgentRegistry>, id: String) -> Result<(), String> {
-    let map = registry.children.lock().unwrap();
-    if let Some(shared) = map.get(&id) {
+    // drop the writer sender → writer thread ends, stdin pipe closes
+    registry.writers.lock().unwrap().remove(&id);
+    // remove from the map first so the map lock isn't held across wait()
+    let shared = registry.children.lock().unwrap().remove(&id);
+    if let Some(shared) = shared {
         let mut guard = shared.lock().unwrap();
         if let Some(child) = guard.as_mut() {
             child.kill().map_err(|e| e.to_string())?;
@@ -621,6 +659,7 @@ pub fn run() {
         .manage(AgentRegistry::default())
         .invoke_handler(tauri::generate_handler![
             spawn_agent,
+            agent_send,
             kill_agent,
             run_git,
             run_exec,

@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import type {
-  AgentLine,
+  AgentPlanEntry,
   AgentRun,
+  AgentToolCall,
   FiredEvent,
   GlobalConfig,
   Proposal,
@@ -198,16 +199,18 @@ function persistFindings(
 // Agent runs (in-memory; the Activity Feed renders this)
 // ---------------------------------------------------------------------------
 
-const MAX_LINES = 2000;
+const MAX_ENTRIES = 1000;
 
 interface AgentState {
   runs: Record<string, AgentRun>;
   order: string[]; // newest first
   register(run: AgentRun): void;
   update(id: string, patch: Partial<AgentRun>): void;
-  appendLine(id: string, line: AgentLine): void;
-  /** Append a stream piece; consecutive text/thinking chunks merge into one entry. */
-  appendStream(id: string, kind: AgentLine["kind"], text: string): void;
+  /** Append agent prose / a user steer; consecutive message|thought chunks merge. */
+  appendChunk(id: string, kind: "message" | "thought" | "steer", text: string): void;
+  /** Insert or patch a tool call by id (ACP tool_call / tool_call_update). */
+  upsertTool(id: string, tool: Partial<AgentToolCall> & { toolCallId: string }): void;
+  setPlan(id: string, plan: AgentPlanEntry[]): void;
   appendResultText(id: string, text: string): void;
   /** restore persisted history (app start) — keeps newest-first order */
   hydrate(history: AgentRun[]): void;
@@ -231,29 +234,51 @@ export const useAgentStore = create<AgentState>((set) => ({
       return { runs: { ...s.runs, [id]: { ...run, ...patch } } };
     });
   },
-  appendLine(id, line) {
+  appendChunk(id, kind, text) {
     set((s) => {
       const run = s.runs[id];
       if (!run) return s;
-      const lines =
-        run.lines.length >= MAX_LINES ? [...run.lines.slice(-MAX_LINES + 1), line] : [...run.lines, line];
-      return { runs: { ...s.runs, [id]: { ...run, lines } } };
+      const last = run.entries[run.entries.length - 1];
+      // merge consecutive message/thought chunks; steers stay discrete
+      if (last && last.type === kind && kind !== "steer") {
+        const entries = [...run.entries.slice(0, -1), { ...last, text: last.text + text }];
+        return { runs: { ...s.runs, [id]: { ...run, entries } } };
+      }
+      const entry = { type: kind, at: Date.now(), text } as AgentRun["entries"][number];
+      const entries =
+        run.entries.length >= MAX_ENTRIES
+          ? [...run.entries.slice(-MAX_ENTRIES + 1), entry]
+          : [...run.entries, entry];
+      return { runs: { ...s.runs, [id]: { ...run, entries } } };
     });
   },
-  appendStream(id, kind, text) {
+  upsertTool(id, tool) {
     set((s) => {
       const run = s.runs[id];
       if (!run) return s;
-      const last = run.lines[run.lines.length - 1];
-      // chunks of one streamed message arrive as separate events — merge them
-      if (last && last.kind === kind && (kind === "text" || kind === "thinking")) {
-        const lines = [...run.lines.slice(0, -1), { ...last, text: last.text + text }];
-        return { runs: { ...s.runs, [id]: { ...run, lines } } };
-      }
-      const line: AgentLine = { kind, text, at: Date.now() };
-      const lines =
-        run.lines.length >= MAX_LINES ? [...run.lines.slice(-MAX_LINES + 1), line] : [...run.lines, line];
-      return { runs: { ...s.runs, [id]: { ...run, lines } } };
+      const existing = run.tools[tool.toolCallId];
+      const merged: AgentToolCall = {
+        toolCallId: tool.toolCallId,
+        title: tool.title ?? existing?.title ?? tool.toolCallId,
+        kind: tool.kind ?? existing?.kind ?? "other",
+        status: tool.status ?? existing?.status ?? "pending",
+        locations: tool.locations ?? existing?.locations ?? [],
+        input: tool.input ?? existing?.input,
+        output: tool.output ?? existing?.output,
+      };
+      const tools = { ...run.tools, [tool.toolCallId]: merged };
+      // first sighting → append an ordered entry referencing it
+      const entries = existing
+        ? run.entries
+        : [...run.entries, { type: "tool", at: Date.now(), toolCallId: tool.toolCallId } as const];
+      return { runs: { ...s.runs, [id]: { ...run, tools, entries } } };
+    });
+  },
+  setPlan(id, plan) {
+    set((s) => {
+      const run = s.runs[id];
+      if (!run) return s;
+      return { runs: { ...s.runs, [id]: { ...run, plan } } };
     });
   },
   appendResultText(id, text) {

@@ -62,6 +62,11 @@ export const native = {
     });
   },
 
+  /** Write one JSON-RPC line to an ACP agent's stdin (newline appended in Rust). */
+  agentSend(id: string, line: string): Promise<void> {
+    return invoke("agent_send", { id, line });
+  },
+
   killAgent(id: string): Promise<void> {
     return invoke("kill_agent", { id });
   },

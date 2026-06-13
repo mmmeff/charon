@@ -1,8 +1,9 @@
-import { native, type AgentStreamEvent } from "./tauri";
+import { AcpConnection, type AcpModel, type AcpSessionUpdate } from "./acp";
+import { native } from "./tauri";
 import { notify } from "./notify";
 import { uid } from "./template";
 import { useAgentStore } from "./store";
-import type { AgentKind, AgentRun } from "../types";
+import type { AgentKind, AgentRun, ToolKind, ToolStatus } from "../types";
 
 const agentNotif = (run: AgentRun, outcome: "started" | "finished" | "failed", extra = "") => {
   const icon = outcome === "started" ? "▶" : outcome === "finished" ? "✓" : "✗";
@@ -27,183 +28,129 @@ export interface StartAgentOptions {
   onDone?: (run: AgentRun) => void | Promise<void>;
 }
 
+// app mode → ACP session mode (cursor exposes agent/plan/ask)
+const ACP_MODE: Record<string, string> = { write: "agent", plan: "plan", ask: "ask" };
+
+interface ActiveRun {
+  conn: AcpConnection;
+  sessionId: string;
+  pendingSteer: string | null;
+  cancelRequested: boolean;
+}
+const active = new Map<string, ActiveRun>();
 const doneCallbacks = new Map<string, (run: AgentRun) => void | Promise<void>>();
-let listenerInstalled = false;
 
-async function ensureListener() {
-  if (listenerInstalled) return;
-  listenerInstalled = true;
-  await native.onAgentStream(handleStreamEvent);
-}
+// ---------------------------------------------------------------------------
+// session/update → store translation
+// ---------------------------------------------------------------------------
 
-function handleStreamEvent(ev: AgentStreamEvent) {
-  const store = useAgentStore.getState();
-  const run = store.runs[ev.id];
-  if (!run) return;
+const textOf = (content: any): string =>
+  typeof content === "string" ? content : (content?.text ?? "");
 
-  if (ev.kind === "stdout" && ev.line) {
-    const parsed = parseStreamLine(ev.line);
-    for (const p of parsed.pieces) store.appendStream(ev.id, p.kind, p.text);
-    if (parsed.assistantText) store.appendResultText(ev.id, parsed.assistantText);
-    if (parsed.finalResult) {
-      // the final result usually repeats the streamed text — only display it
-      // when nothing streamed (short runs sometimes emit result-only)
-      const cur = useAgentStore.getState().runs[ev.id];
-      if (cur && !cur.resultText.trim()) store.appendStream(ev.id, "text", parsed.finalResult);
-      store.appendResultText(ev.id, "\n" + parsed.finalResult);
-    }
-    if (run.status === "starting") store.update(ev.id, { status: "running" });
-    return;
-  }
-  if (ev.kind === "stderr" && ev.line) {
-    store.appendStream(ev.id, "stderr", ev.line);
-    return;
-  }
-  if (ev.kind === "spawn-error") {
-    store.update(ev.id, {
-      status: "error",
-      error: ev.line ?? "spawn failed",
-      endedAt: Date.now(),
-    });
-    doneCallbacks.delete(ev.id);
-    agentNotif(run, "failed", " — could not start the Cursor agent");
-    return;
-  }
-  if (ev.kind === "exit") {
-    if (run.status === "killed") {
-      doneCallbacks.delete(ev.id);
-      return;
-    }
-    const ok = ev.code === 0;
-    const wasKilled = ev.code === -9;
-    store.update(ev.id, {
-      status: wasKilled ? "killed" : ok ? "done" : "error",
-      exitCode: ev.code,
-      endedAt: Date.now(),
-      ...(ok ? {} : wasKilled ? {} : { error: `agent exited with code ${ev.code}` }),
-    });
-    const elapsed = ` — ${Math.round((Date.now() - run.startedAt) / 1000)}s`;
-    if (ok) agentNotif(run, "finished", elapsed);
-    else if (!wasKilled) agentNotif(run, "failed", ` — exit code ${ev.code}`);
-    // killed-by-user stays silent: they did it themselves
-
-    const cb = doneCallbacks.get(ev.id);
-    doneCallbacks.delete(ev.id);
-    if (cb && ok) {
-      const finished = useAgentStore.getState().runs[ev.id];
-      Promise.resolve(cb(finished)).catch((e) => {
-        useAgentStore.getState().update(ev.id, {
-          status: "error",
-          error: `post-processing failed: ${e instanceof Error ? e.message : String(e)}`,
-        });
-        agentNotif(run, "failed", " — post-processing failed");
-      });
-    }
-  }
-}
-
-interface StreamPiece {
-  kind: "text" | "thinking" | "tool" | "system" | "stderr";
-  text: string;
-}
-
-interface ParsedStreamLine {
-  pieces: StreamPiece[];
-  assistantText: string | null;
-  /** authoritative full text from a `result` event (often repeats the stream) */
-  finalResult: string | null;
-}
-
-const NOTHING: ParsedStreamLine = { pieces: [], assistantText: null, finalResult: null };
-
-/** The most human-meaningful bit of a tool call's arguments. */
-function toolSummary(name: string, rawArgs: any): string {
-  const args = rawArgs && typeof rawArgs === "object" ? rawArgs : {};
+/** The most human-meaningful bit of a tool call's raw arguments. */
+function toolSummary(rawArgs: any): string | undefined {
+  if (!rawArgs || typeof rawArgs !== "object") return undefined;
   const interesting =
-    args.command ??
-    args.cmd ??
-    args.path ??
-    args.file_path ??
-    args.filePath ??
-    args.pattern ??
-    args.query ??
-    args.url ??
-    Object.values(args).find((v) => typeof v === "string" && v.trim());
-  const detail = (
-    typeof interesting === "string" ? interesting : JSON.stringify(rawArgs ?? {})
-  ).replace(/\s+/g, " ").trim();
-  return `${name}  ${detail.length > 180 ? detail.slice(0, 180) + "…" : detail}`.trim();
+    rawArgs.command ??
+    rawArgs.cmd ??
+    rawArgs.path ??
+    rawArgs.file_path ??
+    rawArgs.filePath ??
+    rawArgs.pattern ??
+    rawArgs.query ??
+    rawArgs.url ??
+    Object.values(rawArgs).find((v) => typeof v === "string" && v.trim());
+  if (typeof interesting !== "string") return undefined;
+  const s = interesting.replace(/\s+/g, " ").trim();
+  return s ? (s.length > 200 ? s.slice(0, 200) + "…" : s) : undefined;
 }
 
-/**
- * Parse one NDJSON line of `cursor-agent --output-format stream-json` into
- * typed display pieces. The schema is treated defensively: assistant text is
- * extracted wherever it lives; chunk merging happens in the store.
- */
-function parseStreamLine(line: string): ParsedStreamLine {
-  const trimmed = line.trim();
-  if (!trimmed) return NOTHING;
-  let obj: any;
-  try {
-    obj = JSON.parse(trimmed);
-  } catch {
-    // plain-text output (e.g. --output-format text fallback)
-    return { pieces: [{ kind: "text", text: trimmed + "\n" }], assistantText: trimmed + "\n", finalResult: null };
+/** Pull readable output from a tool call's content blocks. */
+function toolOutput(content: any): string | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const parts: string[] = [];
+  for (const b of content) {
+    if (b?.type === "content") {
+      const t = textOf(b.content);
+      if (t) parts.push(t);
+    } else if (b?.type === "diff") {
+      parts.push(`${b.path ? `${b.path}\n` : ""}${b.newText ?? b.oldText ?? ""}`);
+    } else if (typeof b?.text === "string") {
+      parts.push(b.text);
+    }
   }
+  const s = parts.join("\n").trim();
+  return s ? s.slice(0, 6000) : undefined;
+}
 
-  const collectText = (content: any): string => {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content))
-      return content
-        .map((c) => (typeof c === "string" ? c : c?.text ?? c?.content ?? ""))
-        .filter(Boolean)
-        .join("");
-    return content?.text ?? "";
-  };
-
-  switch (obj?.type) {
-    case "system": {
-      const text = `${obj.subtype ?? "session"} ${obj.model ?? ""}`.trim();
-      return { pieces: [{ kind: "system", text }], assistantText: null, finalResult: null };
+function applyUpdate(id: string, u: AcpSessionUpdate): void {
+  const store = useAgentStore.getState();
+  switch (u.sessionUpdate) {
+    case "agent_message_chunk": {
+      const t = textOf((u as any).content);
+      if (t) {
+        store.appendChunk(id, "message", t);
+        store.appendResultText(id, t); // drives proposal/finding extraction
+      }
+      break;
     }
-    case "user":
-      return NOTHING;
-    case "assistant": {
-      const text = collectText(obj.message?.content ?? obj.content ?? obj.text);
-      if (!text) return NOTHING;
-      return { pieces: [{ kind: "text", text }], assistantText: text, finalResult: null };
+    case "agent_thought_chunk": {
+      const t = textOf((u as any).content);
+      if (t) store.appendChunk(id, "thought", t);
+      break;
     }
-    case "thinking": {
-      const text = obj.text ?? collectText(obj.message?.content ?? obj.content);
-      if (!text) return NOTHING;
-      return { pieces: [{ kind: "thinking", text }], assistantText: null, finalResult: null };
+    case "tool_call":
+    case "tool_call_update": {
+      const tc = u as any;
+      store.upsertTool(id, {
+        toolCallId: tc.toolCallId,
+        title: tc.title,
+        kind: tc.kind as ToolKind | undefined,
+        status: tc.status as ToolStatus | undefined,
+        locations: Array.isArray(tc.locations)
+          ? tc.locations.map((l: any) => (l.line ? `${l.path}:${l.line}` : l.path))
+          : undefined,
+        input: toolSummary(tc.rawInput),
+        output: toolOutput(tc.content),
+      });
+      break;
     }
-    case "tool_call": {
-      const name =
-        obj.tool_call?.name ?? obj.name ?? obj.subtype ?? Object.keys(obj.tool_call ?? {})[0] ?? "tool";
-      const args = obj.tool_call?.args ?? obj.args ?? obj.tool_call;
-      return {
-        pieces: [{ kind: "tool", text: toolSummary(String(name), args) }],
-        assistantText: null,
-        finalResult: null,
-      };
+    case "plan": {
+      const entries = (u as any).entries ?? [];
+      store.setPlan(
+        id,
+        entries.map((e: any) => ({ content: e.content, status: e.status, priority: e.priority }))
+      );
+      break;
     }
-    case "tool_result":
-      return NOTHING; // completion is implied by the next event; "[tool done]" was noise
-    case "result": {
-      const text = typeof obj.result === "string" ? obj.result : collectText(obj.result);
-      return { pieces: [], assistantText: null, finalResult: text || null };
-    }
-    default: {
-      const text = collectText(obj?.message?.content ?? obj?.text);
-      if (text) return { pieces: [{ kind: "text", text }], assistantText: text, finalResult: null };
-      return NOTHING;
-    }
+    case "current_mode_update":
+      store.update(id, { mode: (u as any).modeId });
+      break;
+    case "session_info_update":
+      if ((u as any).title) store.update(id, { sessionTitle: (u as any).title });
+      break;
+    // available_commands_update / user_message_chunk: not surfaced
   }
 }
+
+/** Map the app's resolved model id to an ACP modelId by name-root (best effort). */
+function matchAcpModel(appModel: string, models: AcpModel[]): string | undefined {
+  if (!appModel || appModel === "auto") return undefined;
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const target = norm(appModel);
+  let best: { id: string; len: number } | null = null;
+  for (const m of models) {
+    const n = norm(m.name);
+    if (n && target.startsWith(n) && (!best || n.length > best.len)) best = { id: m.modelId, len: n.length };
+  }
+  return best?.id;
+}
+
+// ---------------------------------------------------------------------------
+// startAgent — spawn an ACP agent, run the prompt turn(s), finalize
+// ---------------------------------------------------------------------------
 
 export async function startAgent(opts: StartAgentOptions): Promise<string> {
-  await ensureListener();
   const id = uid("agent-");
   const run: AgentRun = {
     id,
@@ -219,7 +166,10 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     startedAt: Date.now(),
     endedAt: null,
     exitCode: null,
-    lines: [],
+    entries: [],
+    tools: {},
+    plan: [],
+    steerable: false,
     resultText: "",
     proposalIds: [],
   };
@@ -227,36 +177,153 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
   if (opts.onDone) doneCallbacks.set(id, opts.onDone);
   agentNotif(run, "started");
 
-  const args = ["--print", "--output-format", "stream-json", "--trust"];
-  if (opts.mode === "ask" || opts.mode === "plan") {
-    args.push("--mode", opts.mode);
-  } else {
-    args.push("--force"); // fix flows / draft edits need shell + write access
-  }
-  if (opts.model && opts.model !== "auto") args.push("--model", opts.model);
-  args.push(opts.prompt);
-
-  try {
-    await native.spawnAgent({ id, binary: opts.binary, args, cwd: opts.cwd });
-  } catch (e) {
-    useAgentStore.getState().update(id, {
-      status: "error",
-      error: e instanceof Error ? e.message : String(e),
-      endedAt: Date.now(),
-    });
+  const fail = (msg: string) => {
+    const cur = useAgentStore.getState().runs[id];
+    // don't clobber a run already finalized (e.g. by a graceful-cancel race)
+    if (cur && cur.status !== "running" && cur.status !== "starting") {
+      active.delete(id);
+      return;
+    }
+    useAgentStore.getState().update(id, { status: "error", error: msg, endedAt: Date.now(), steerable: false });
     doneCallbacks.delete(id);
-  }
+    active.delete(id);
+    agentNotif(run, "failed", " — " + msg.slice(0, 80));
+  };
+
+  const conn = new AcpConnection(id, {
+    onUpdate: (u) => applyUpdate(id, u),
+    // auto-approve tool calls (mirrors the old --force/--trust); read-only
+    // ask/plan modes prevent writes regardless, so this is safe
+    choosePermission: (options) => {
+      const allow =
+        options.find((o) => o.kind === "allow_once") ??
+        options.find((o) => o.kind === "allow_always") ??
+        options.find((o) => o.kind?.startsWith("allow"));
+      return allow?.optionId ?? null;
+    },
+  });
+
+  // drive the session asynchronously; startAgent returns the id immediately
+  void (async () => {
+    try {
+      const sessionCwd = opts.cwd || (await native.appDataDir());
+      await conn.spawn(opts.binary, ["acp"], opts.cwd);
+      await conn.initialize();
+      const ns = await conn.newSession(sessionCwd);
+      const sessionId = ns.sessionId;
+      active.set(id, { conn, sessionId, pendingSteer: null, cancelRequested: false });
+      useAgentStore.getState().update(id, {
+        status: "running",
+        steerable: true,
+        mode: ns.modes?.currentModeId,
+      });
+
+      // set mode (default session mode is "agent")
+      const targetMode = ACP_MODE[opts.mode ?? "write"];
+      if (targetMode && ns.modes && ns.modes.currentModeId !== targetMode &&
+          ns.modes.availableModes.some((m) => m.id === targetMode)) {
+        await conn.setMode(sessionId, targetMode).catch(() => {});
+      }
+      // set model (best-effort name match against the ACP model list)
+      const acpModelId = ns.models ? matchAcpModel(opts.model, ns.models.availableModels) : undefined;
+      if (acpModelId) await conn.setModel(sessionId, acpModelId).catch(() => {});
+
+      // prompt turn loop — steering re-prompts the same session
+      let text = opts.prompt;
+      let stop = "end_turn";
+      for (;;) {
+        stop = await conn.prompt(sessionId, [{ type: "text", text }]);
+        const a = active.get(id);
+        if (a && a.pendingSteer != null && !a.cancelRequested) {
+          text = a.pendingSteer;
+          a.pendingSteer = null;
+          continue;
+        }
+        break;
+      }
+
+      const cancelled = active.get(id)?.cancelRequested || stop === "cancelled";
+      conn.kill();
+      active.delete(id);
+      finalize(id, cancelled ? "killed" : "done");
+    } catch (e) {
+      conn.kill();
+      fail(e instanceof Error ? e.message : String(e));
+    }
+  })();
+
   return id;
 }
 
+/** Run the onDone contract + status transition when a turn settles. */
+function finalize(id: string, status: "done" | "killed") {
+  const store = useAgentStore.getState();
+  const run = store.runs[id];
+  if (!run) return;
+  store.update(id, {
+    status,
+    endedAt: Date.now(),
+    exitCode: status === "done" ? 0 : -9,
+    steerable: false,
+  });
+  if (status === "done") {
+    agentNotif(run, "finished", ` — ${Math.round((Date.now() - run.startedAt) / 1000)}s`);
+    // onDone runs only on clean completion (matches pre-ACP semantics)
+    const cb = doneCallbacks.get(id);
+    doneCallbacks.delete(id);
+    if (cb) {
+      Promise.resolve(cb(useAgentStore.getState().runs[id])).catch((e) => {
+        useAgentStore.getState().update(id, {
+          status: "error",
+          error: `post-processing failed: ${e instanceof Error ? e.message : String(e)}`,
+        });
+        agentNotif(run, "failed", " — post-processing failed");
+      });
+    }
+  } else {
+    doneCallbacks.delete(id); // killed-by-user stays silent
+  }
+}
+
+/** Send a follow-up prompt to steer a running agent (cancel+reprompt). */
+export function steerAgent(id: string, text: string): void {
+  const a = active.get(id);
+  if (!a || !text.trim()) return;
+  useAgentStore.getState().appendChunk(id, "steer", text.trim());
+  a.pendingSteer = a.pendingSteer ? `${a.pendingSteer}\n\n${text.trim()}` : text.trim();
+  a.conn.cancel(a.sessionId); // end the current turn so the loop applies the steer
+}
+
+/** Interrupt a running agent gracefully (ACP session/cancel); hard-kill fallback. */
+export async function killAgent(id: string): Promise<void> {
+  const a = active.get(id);
+  if (a) {
+    a.cancelRequested = true;
+    useAgentStore.getState().update(id, { steerable: false });
+    a.conn.cancel(a.sessionId);
+    // fallback: if the agent ignores cancel, force the process down
+    setTimeout(() => {
+      if (active.has(id)) {
+        a.conn.kill();
+        active.delete(id);
+        finalize(id, "killed");
+      }
+    }, 5000);
+  } else {
+    await native.killAgent(id).catch(() => {});
+    useAgentStore.getState().update(id, { status: "killed", endedAt: Date.now() });
+    doneCallbacks.delete(id);
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Persistence: the Activity Feed survives app restarts. Stream pipes can't be
+// Persistence: the Activity Feed survives app restarts. Live sessions can't be
 // re-attached after a restart, so runs that were mid-flight are restored as
-// "killed — interrupted by app restart" with their full prompt/log intact.
+// "killed — interrupted by app restart" with their full transcript intact.
 // ---------------------------------------------------------------------------
 
 const MAX_PERSISTED_RUNS = 120;
-const MAX_PERSISTED_LINES = 250;
+const MAX_PERSISTED_ENTRIES = 250;
 
 const agentHistoryPath = (repo: string) =>
   `repos/${repo.replace(/[^a-zA-Z0-9_.-]/g, "__")}/agents.json`;
@@ -269,16 +336,25 @@ export async function initAgentPersistence(repo: string): Promise<() => void> {
   try {
     const raw = await native.loadBlob(agentHistoryPath(repo));
     if (raw) {
-      const history: AgentRun[] = JSON.parse(raw).map((r: AgentRun) =>
-        r.status === "running" || r.status === "starting"
+      const history: AgentRun[] = JSON.parse(raw).map((r: AgentRun) => {
+        // normalize: pre-ACP runs lack entries/tools/plan
+        const base: AgentRun = {
+          ...r,
+          entries: r.entries ?? [],
+          tools: r.tools ?? {},
+          plan: r.plan ?? [],
+          steerable: false,
+        };
+        return base.status === "running" || base.status === "starting"
           ? {
-              ...r,
+              ...base,
               status: "killed" as const,
+              steerable: false,
               error: "interrupted by app restart",
-              endedAt: r.endedAt ?? Date.now(),
+              endedAt: base.endedAt ?? Date.now(),
             }
-          : r
-      );
+          : base;
+      });
       useAgentStore.getState().hydrate(history);
     }
   } catch (e) {
@@ -292,7 +368,7 @@ export async function initAgentPersistence(repo: string): Promise<() => void> {
       .map((id) => s.runs[id])
       .filter((r) => r && r.repo === repo)
       .slice(0, MAX_PERSISTED_RUNS)
-      .map((r) => ({ ...r, lines: r.lines.slice(-MAX_PERSISTED_LINES) }));
+      .map((r) => ({ ...r, entries: r.entries.slice(-MAX_PERSISTED_ENTRIES) }));
     void native
       .saveBlob(agentHistoryPath(repo), JSON.stringify(runs))
       .catch((e) => console.error("agent history save failed", e));
@@ -305,12 +381,6 @@ export async function initAgentPersistence(repo: string): Promise<() => void> {
     if (timer) clearTimeout(timer);
     unsubscribe();
   };
-}
-
-export async function killAgent(id: string): Promise<void> {
-  await native.killAgent(id);
-  useAgentStore.getState().update(id, { status: "killed", endedAt: Date.now() });
-  doneCallbacks.delete(id);
 }
 
 // ---------------------------------------------------------------------------

@@ -232,6 +232,41 @@ export type AgentKind =
 
 export type AgentStatus = "starting" | "running" | "done" | "error" | "killed";
 
+export type ToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "other";
+export type ToolStatus = "pending" | "in_progress" | "completed" | "failed";
+
+/** A tool invocation reported over ACP (tool_call + tool_call_update merged). */
+export interface AgentToolCall {
+  toolCallId: string;
+  title: string;
+  kind: ToolKind;
+  status: ToolStatus;
+  /** "path:line" of affected files, for follow-along display */
+  locations: string[];
+  /** short human summary of the call's arguments (command / path / query) */
+  input?: string;
+  /** text or diff output captured from the tool's content blocks */
+  output?: string;
+}
+
+/** One ACP plan item (the agent's running to-do list; replaced wholesale). */
+export interface AgentPlanEntry {
+  content: string;
+  status: string; // pending | in_progress | completed
+  priority?: string;
+}
+
+/**
+ * An ordered entry in an agent run's transcript. Messages/thoughts carry their
+ * text inline (chunks merge); tool entries reference the tools map by id so
+ * later tool_call_update patches are O(1).
+ */
+export type AgentEntry =
+  | { type: "message"; at: number; text: string }
+  | { type: "thought"; at: number; text: string }
+  | { type: "steer"; at: number; text: string }
+  | { type: "tool"; at: number; toolCallId: string };
+
 export interface AgentRun {
   id: string;
   kind: AgentKind;
@@ -247,17 +282,29 @@ export interface AgentRun {
   startedAt: number;
   endedAt: number | null;
   exitCode: number | null;
-  /** Raw streamed lines (capped) */
-  lines: AgentLine[];
-  /** Accumulated assistant text extracted from the stream */
+  /** ACP transcript: ordered messages / thoughts / tool refs */
+  entries: AgentEntry[];
+  /** tool calls keyed by toolCallId (referenced from entries) */
+  tools: Record<string, AgentToolCall>;
+  /** the agent's current plan (ACP `plan` updates; replaced wholesale) */
+  plan: AgentPlanEntry[];
+  /** current ACP session mode (agent | plan | ask) */
+  mode?: string;
+  /** agent-assigned session title */
+  sessionTitle?: string;
+  /** true while a turn is in flight and the user can steer/interrupt */
+  steerable: boolean;
+  /** legacy raw lines — only on runs persisted before the ACP migration */
+  lines?: AgentLine[];
+  /** Accumulated assistant message text (drives proposal/finding extraction) */
   resultText: string;
   /** Proposal ids produced by this run */
   proposalIds: string[];
   error?: string;
 }
 
+/** Legacy pre-ACP transcript line (kept for hydrated old runs). */
 export interface AgentLine {
-  /** text/thinking stream-merge across chunks; stdout/info are legacy raw lines */
   kind: "stdout" | "stderr" | "info" | "text" | "thinking" | "tool" | "system";
   text: string;
   at: number;

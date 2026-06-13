@@ -800,13 +800,56 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   white-space: pre-wrap; word-break: break-word;
   border-left: 1px dashed var(--border); padding: 3px 0 3px 9px; margin: 3px 0;
 }
-/* tool calls: one-line mono entries in steel */
+/* tool calls: one-line mono entries in steel (legacy line renderer) */
 .agent-tool {
   display: flex; align-items: baseline; gap: 7px; min-width: 0;
   font-family: var(--mono); font-size: 10.5px; color: var(--steel); padding: 2px 0;
 }
 .agent-tool-glyph { flex: none; color: var(--fg-subtle); }
 .agent-tool-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ACP tool-call rows: glyph · title · arg, expandable to output/locations */
+.agent-tool-row { font-family: var(--mono); font-size: 11px; padding: 2px 0; }
+.agent-tool-head { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.agent-tool-row .agent-tool-glyph { width: 12px; text-align: center; font-size: 11px; }
+.agent-tool-title { color: var(--fg); flex: none; }
+.agent-tool-arg {
+  color: var(--steel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0; flex: 1;
+}
+.agent-tool-caret { flex: none; color: var(--fg-subtle); font-size: 9px; }
+.agent-tool-detail {
+  margin: 3px 0 5px 19px; border-left: 1px solid var(--border-subtle); padding-left: 9px;
+}
+.agent-tool-loc { color: var(--steel); font-size: 10.5px; }
+.agent-tool-detail pre {
+  margin: 4px 0 0; max-height: 220px; overflow: auto;
+  font-size: 10.5px; color: var(--fg-muted); white-space: pre-wrap; word-break: break-word;
+}
+
+/* the agent's running plan */
+.agent-plan {
+  margin: 6px 0; padding: 7px 10px; background: var(--bg-inset);
+  border-left: 2px solid var(--steel);
+}
+.agent-plan-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--fg-subtle); margin-bottom: 4px;
+}
+.agent-plan-item { font-size: 11.5px; line-height: 1.5; color: var(--fg-muted); }
+.agent-plan-item.completed { color: var(--fg-subtle); text-decoration: line-through; opacity: 0.7; }
+.agent-plan-item.in_progress { color: var(--fg); }
+.agent-plan-glyph { display: inline-block; width: 14px; color: var(--steel); }
+
+/* a user steer echoed into the transcript */
+.agent-steer-echo {
+  color: var(--orange); font-size: 11.5px; padding: 4px 0; font-weight: 500;
+  border-top: 1px dashed var(--border-subtle); margin-top: 4px;
+}
+
+/* steer composer under a running agent */
+.agent-steer { display: flex; gap: 6px; margin-top: 8px; }
+.agent-steer input { flex: 1; font-size: 12px; }
 /* session/system markers */
 .agent-sys {
   color: var(--fg-subtle); font-size: 9.5px; letter-spacing: 0.12em;

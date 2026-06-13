@@ -1,42 +1,132 @@
 import { useEffect, useRef, useState } from "react";
-import { killAgent } from "../lib/agents";
+import { killAgent, steerAgent } from "../lib/agents";
 import { usePrData } from "../lib/events";
 import { useGlobalConfig, useUiStore } from "../lib/store";
-import type { AgentLine, AgentRun } from "../types";
+import type { AgentEntry, AgentLine, AgentPlanEntry, AgentRun, AgentToolCall, ToolKind } from "../types";
 import { timeAgo, useNow } from "../lib/ui";
 import { Badge, LoadingField, Spinner } from "./common";
 import { Markdown } from "./Markdown";
 
-/** One typed stream entry: assistant prose as markdown, the rest as chrome. */
-function StreamLine({ line }: { line: AgentLine }) {
-  switch (line.kind) {
-    case "text":
-      return (
-        <div className="agent-msg">
-          <Markdown text={line.text} className="compact" />
-        </div>
-      );
-    case "thinking":
-      return <div className="agent-thinking">{line.text}</div>;
-    case "tool":
-      return (
-        <div className="agent-tool" title={line.text}>
-          <span className="agent-tool-glyph">⚙</span>
-          <span className="agent-tool-text">{line.text}</span>
-        </div>
-      );
-    case "system":
-      return <div className="agent-sys">{line.text}</div>;
-    default:
-      // stderr + legacy persisted stdout/info lines
-      return <div className={`agent-line ${line.kind === "stderr" ? "stderr" : ""}`}>{line.text}</div>;
-  }
-}
-
 const statusColor = (s: AgentRun["status"]) =>
   s === "running" || s === "starting" ? "blue" : s === "done" ? "green" : s === "killed" ? "gray" : "red";
 
-/** One agent run in the Activity Feed: relation, prompt, and live work view. */
+const TOOL_GLYPH: Record<ToolKind, string> = {
+  read: "≡",
+  edit: "✎",
+  delete: "✕",
+  move: "→",
+  search: "⌕",
+  execute: "$",
+  think: "✻",
+  fetch: "↓",
+  other: "⚙",
+};
+const TOOL_STATUS_COLOR: Record<string, string> = {
+  pending: "var(--fg-subtle)",
+  in_progress: "var(--amber)",
+  completed: "var(--acid)",
+  failed: "var(--red)",
+};
+
+/** A rich tool-call row: kind glyph, title, status, expandable input/output. */
+function ToolRow({ tool }: { tool: AgentToolCall }) {
+  const [open, setOpen] = useState(false);
+  const hasDetail = !!(tool.input || tool.output || tool.locations.length);
+  return (
+    <div className={`agent-tool-row ${tool.status}`}>
+      <div
+        className="agent-tool-head"
+        onClick={() => hasDetail && setOpen(!open)}
+        style={{ cursor: hasDetail ? "pointer" : "default" }}
+      >
+        <span className="agent-tool-glyph" style={{ color: TOOL_STATUS_COLOR[tool.status] }}>
+          {tool.status === "in_progress" ? <Spinner /> : TOOL_GLYPH[tool.kind] ?? "⚙"}
+        </span>
+        <span className="agent-tool-title">{tool.title}</span>
+        {tool.input && <span className="agent-tool-arg">{tool.input}</span>}
+        {tool.status === "failed" && <Badge color="red">failed</Badge>}
+        {hasDetail && <span className="agent-tool-caret">{open ? "▾" : "▸"}</span>}
+      </div>
+      {open && (
+        <div className="agent-tool-detail">
+          {tool.locations.map((l) => (
+            <div key={l} className="agent-tool-loc">
+              {l}
+            </div>
+          ))}
+          {tool.output && <pre>{tool.output}</pre>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanView({ plan }: { plan: AgentPlanEntry[] }) {
+  if (plan.length === 0) return null;
+  const glyph = (s: string) => (s === "completed" ? "✓" : s === "in_progress" ? "▸" : "○");
+  return (
+    <div className="agent-plan">
+      <div className="agent-plan-label">Plan</div>
+      {plan.map((e, i) => (
+        <div key={i} className={`agent-plan-item ${e.status}`}>
+          <span className="agent-plan-glyph">{glyph(e.status)}</span> {e.content}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Render the structured ACP transcript (or legacy lines for hydrated runs). */
+function Transcript({ run }: { run: AgentRun }) {
+  // legacy pre-ACP runs persisted `lines` and no entries
+  if ((!run.entries || run.entries.length === 0) && run.lines && run.lines.length > 0) {
+    return (
+      <>
+        {run.lines.map((l: AgentLine, i) =>
+          l.kind === "tool" ? (
+            <div key={i} className="agent-tool-row">
+              <div className="agent-tool-head">
+                <span className="agent-tool-glyph">⚙</span>
+                <span className="agent-tool-arg">{l.text}</span>
+              </div>
+            </div>
+          ) : l.kind === "thinking" ? (
+            <div key={i} className="agent-thinking">{l.text}</div>
+          ) : l.kind === "text" ? (
+            <div key={i} className="agent-msg">
+              <Markdown text={l.text} className="compact" />
+            </div>
+          ) : (
+            <div key={i} className={`agent-line ${l.kind === "stderr" ? "stderr" : ""}`}>{l.text}</div>
+          )
+        )}
+      </>
+    );
+  }
+  return (
+    <>
+      {run.entries.map((e: AgentEntry, i) => {
+        if (e.type === "message")
+          return (
+            <div key={i} className="agent-msg">
+              <Markdown text={e.text} className="compact" />
+            </div>
+          );
+        if (e.type === "thought") return <div key={i} className="agent-thinking">{e.text}</div>;
+        if (e.type === "steer")
+          return (
+            <div key={i} className="agent-steer-echo">
+              ↪ {e.text}
+            </div>
+          );
+        const tool = run.tools[e.toolCallId];
+        return tool ? <ToolRow key={i} tool={tool} /> : null;
+      })}
+    </>
+  );
+}
+
+/** One agent run in the Activity Feed: relation, transcript, steering. */
 export function AgentCard({
   run,
   defaultOpen = false,
@@ -49,6 +139,7 @@ export function AgentCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [steer, setSteer] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const githubUrl = useGlobalConfig((s) => s.config?.githubUrl ?? "https://github.com");
   const prUrl = `${githubUrl}/${run.repo}/pull/${run.prNumber}`;
@@ -66,19 +157,29 @@ export function AgentCard({
     ui.requestTab(tab);
   };
 
-  // follow the live stream (depends on the array identity, not its length —
-  // chunk merges grow the last entry without adding lines)
+  // follow the live stream as entries/tools grow
   useEffect(() => {
     if (open && active && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [run.lines, open, active]);
+  }, [run.entries, run.tools, open, active]);
 
   const elapsed = Math.round(((run.endedAt ?? Date.now()) - run.startedAt) / 1000);
+  const isEmpty = run.entries.length === 0 && !(run.lines && run.lines.length > 0);
+
+  const submitSteer = () => {
+    if (!steer.trim()) return;
+    steerAgent(run.id, steer);
+    setSteer("");
+  };
 
   return (
     <div className={embedded ? "agent-embedded" : `card ${active ? "agent-running" : ""}`}>
-      <div className="row between agent-head" onClick={() => setOpen(!open)} title={open ? "Collapse stream" : "Expand stream"}>
+      <div
+        className="row between agent-head"
+        onClick={() => setOpen(!open)}
+        title={open ? "Collapse stream" : "Expand stream"}
+      >
         <div className="row">
           <span className="agent-caret">{open ? "▾" : "▸"}</span>
           {active && <Spinner />}
@@ -107,11 +208,13 @@ export function AgentCard({
         </div>
         <div className="row">
           <span className="subtle">
+            {run.mode ? `${run.mode} · ` : ""}
             {run.model} · {elapsed}s · {timeAgo(run.startedAt)}
           </span>
           {active && (
             <button
               className="small danger"
+              title="Interrupt this agent"
               onClick={(e) => {
                 e.stopPropagation();
                 void killAgent(run.id);
@@ -132,17 +235,32 @@ export function AgentCard({
             {run.cwd && <span className="subtle">worktree: {run.cwd}</span>}
           </div>
           {showPrompt && <div className="prompt-box">{run.prompt}</div>}
+          <PlanView plan={run.plan} />
           <div className="agent-log" ref={logRef}>
-            {run.lines.length === 0 &&
+            {isEmpty &&
               (active ? (
                 <LoadingField label="waiting for output…" height={44} />
               ) : (
                 <span className="subtle">no output</span>
               ))}
-            {run.lines.map((l, i) => (
-              <StreamLine key={i} line={l} />
-            ))}
+            <Transcript run={run} />
           </div>
+          {run.steerable && (
+            <div className="agent-steer">
+              <input
+                type="text"
+                placeholder="Steer the agent — add guidance or redirect…"
+                value={steer}
+                onChange={(e) => setSteer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitSteer();
+                }}
+              />
+              <button className="small" disabled={!steer.trim()} onClick={submitSteer}>
+                Steer
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
