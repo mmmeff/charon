@@ -3,7 +3,7 @@ import { Launcher } from "./components/Launcher";
 import { RepoApp } from "./components/RepoApp";
 import { native } from "./lib/tauri";
 import { useGlobalConfig } from "./lib/store";
-import { kickOffUpdate, startUpdateLoop, useUpdateStore } from "./lib/updater";
+import { dismissUpdateToast, kickOffUpdate, startUpdateLoop, useUpdateStore } from "./lib/updater";
 
 /**
  * Bottom-left toast shown as soon as a newer release is detected. The link
@@ -11,9 +11,9 @@ import { kickOffUpdate, startUpdateLoop, useUpdateStore } from "./lib/updater";
  * restarts the moment it lands.
  */
 function UpdateToast() {
-  const { available, ready, updating } = useUpdateStore();
+  const { available, ready, updating, snoozedUntil } = useUpdateStore();
   const version = ready ?? available;
-  if (!version) return null;
+  if (!version || snoozedUntil > Date.now()) return null;
   return (
     <div className="update-toast">
       <span>
@@ -26,6 +26,16 @@ function UpdateToast() {
       ) : (
         <button className="update-toast-link" onClick={() => void kickOffUpdate()}>
           {ready ? "Restart & update" : "Update now"}
+        </button>
+      )}
+      {!updating && (
+        <button
+          className="update-toast-dismiss"
+          aria-label="Dismiss"
+          title="Remind me later"
+          onClick={() => dismissUpdateToast()}
+        >
+          ✕
         </button>
       )}
     </div>

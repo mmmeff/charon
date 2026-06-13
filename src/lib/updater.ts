@@ -122,6 +122,8 @@ export async function kickOffUpdate(): Promise<void> {
   if (useUpdateStore.getState().ready) return applyUpdate();
   applyWhenReady = true;
   useUpdateStore.setState({ updating: true });
+  // user opted in — drop any snooze so the staged toast shows immediately
+  localStorage.removeItem(SNOOZE_KEY);
   // fresh lock → a download is already running here or in another window;
   // it will apply via applyWhenReady / the storage mirror when it lands
   const lock = localStorage.getItem(LOCK_KEY);
@@ -141,7 +143,10 @@ export function startUpdateLoop(): void {
   if (staged) {
     void getVersion().then((current) => {
       if (cmpVersions(current, staged) >= 0) localStorage.removeItem(READY_KEY);
-      else useUpdateStore.setState({ available: staged, ready: staged });
+      else {
+        useUpdateStore.setState({ available: staged, ready: staged });
+        applySnooze(staged);
+      }
     });
   }
 
@@ -149,7 +154,13 @@ export function startUpdateLoop(): void {
   window.addEventListener("storage", (e) => {
     if (e.key === READY_KEY && e.newValue) {
       useUpdateStore.setState({ available: e.newValue, ready: e.newValue });
+      applySnooze(e.newValue);
       if (applyWhenReady) void applyUpdate();
+    }
+    // another window dismissed/cleared the toast — mirror the new schedule
+    if (e.key === SNOOZE_KEY) {
+      const v = useUpdateStore.getState().available;
+      if (v) applySnooze(v);
     }
   });
 
@@ -192,6 +203,7 @@ export async function checkForUpdatesManually(): Promise<void> {
       return;
     }
     useUpdateStore.setState({ available: update.version });
+    applySnooze(update.version);
 
     // ...or be mid-download in another window
     const lock = localStorage.getItem(LOCK_KEY);

@@ -1132,3 +1132,8 @@ a.act-event-detail:hover { color: var(--orange); }
 }
 .update-toast-link:hover { color: var(--fg); }
 .update-toast-busy { display: flex; align-items: center; gap: 6px; }
+.update-toast-dismiss {
+  background: none; border: none; cursor: pointer; padding: 0 2px;
+  font-size: 12px; line-height: 1; color: var(--fg-faint, var(--fg-muted));
+}
+.update-toast-dismiss:hover { color: var(--fg); }
