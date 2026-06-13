@@ -395,11 +395,11 @@ export function harnessTemplates(cursorBinary = "cursor-agent"): Harness[] {
       note: "Configure a provider/API key in opencode first." },
     { id: "claude-code", name: "Claude Code", command: "npx", args: ["-y", "@zed-industries/claude-code-acp"],
       note: "Adapter via npx; needs ANTHROPIC_API_KEY in the environment." },
-    // Codex has NO native ACP server — `codex acp` just opens the interactive
-    // REPL (which fails on piped stdin: "stdin is not a terminal"). Ship an
-    // empty command so the user must supply a real ACP bridge before verify.
-    { id: "codex", name: "Codex CLI", command: "", args: [],
-      note: "Codex has no native ACP server — enter the command for a Codex ACP bridge, then Verify." },
+    // Codex has no native ACP server, so it runs through Zed's codex-acp
+    // bridge (a Rust binary shipped via npx). `codex acp` would just open the
+    // interactive REPL and fail on piped stdin. Verified firsthand.
+    { id: "codex", name: "Codex CLI", command: "npx", args: ["-y", "@zed-industries/codex-acp"], verified: true,
+      note: "ACP bridge via npx (@zed-industries/codex-acp); uses your Codex login / OPENAI_API_KEY." },
   ];
 }
 
