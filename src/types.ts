@@ -72,7 +72,26 @@ export interface GlobalConfig {
   lastRepo: string;
   /** Extra directories to scan for skills, beyond ~/.cursor */
   extraSkillDirs: string[];
+  /** OS-notification prefs keyed by NotificationCategory; a missing key falls
+   *  back to the category's catalog default. Gated centrally in notify() so no
+   *  call site can bypass them. */
+  notifications: Record<string, boolean>;
 }
+
+/**
+ * Every distinct reason the app raises an OS notification. notify() requires
+ * one of these, and Settings → Notifications toggles them — so preferences are
+ * enforced in exactly one place and can't be silently bypassed.
+ */
+export type NotificationCategory =
+  | "agent_started"
+  | "agent_finished"
+  | "agent_failed"
+  | "ci_analysis"
+  | "automation_event"
+  | "pr_activity"
+  | "app_update"
+  | "clone_setup";
 
 // ---------------------------------------------------------------------------
 // Per-repo configuration
@@ -339,6 +358,8 @@ export interface AgentRun {
   sessionTitle?: string;
   /** true while a turn is in flight and the user can steer/interrupt */
   steerable: boolean;
+  /** overrides the lifecycle notification category (e.g. CI triage → "ci_analysis") */
+  notifyCategory?: NotificationCategory;
   /** legacy raw lines — only on runs persisted before the ACP migration */
   lines?: AgentLine[];
   /** Accumulated assistant message text (drives proposal/finding extraction) */

@@ -11,15 +11,31 @@ import { native } from "./tauri";
 import { notify } from "./notify";
 import { uid } from "./template";
 import { useAgentStore, useGlobalConfig } from "./store";
-import type { AgentKind, AgentRun, ToolKind, ToolStatus } from "../types";
+import type { AgentKind, AgentRun, NotificationCategory, ToolKind, ToolStatus } from "../types";
 
-const agentNotif = (run: AgentRun, outcome: "started" | "finished" | "failed", extra = "") => {
+const agentNotif = (
+  run: AgentRun,
+  outcome: "started" | "finished" | "failed",
+  category: NotificationCategory,
+  extra = ""
+) => {
   const icon = outcome === "started" ? "▶" : outcome === "finished" ? "✓" : "✗";
   void notify(
+    category,
     `${icon} Agent ${outcome}: ${run.relation}`,
     `PR #${run.prNumber} ${run.prTitle} · ${run.repo}${extra}`
   );
 };
+
+// lifecycle notification category for a run: an explicit per-run override
+// (e.g. CI triage → "ci_analysis") wins, else it's keyed by outcome — so each
+// gates independently in Settings → Notifications
+const lifecycleCategory = (
+  run: AgentRun,
+  outcome: "started" | "finished" | "failed"
+): NotificationCategory =>
+  run.notifyCategory ??
+  (outcome === "started" ? "agent_started" : outcome === "finished" ? "agent_finished" : "agent_failed");
 
 export interface StartAgentOptions {
   kind: AgentKind;
@@ -33,6 +49,9 @@ export interface StartAgentOptions {
   cwd?: string;
   /** "ask" runs read-only (questions/feedback); default is full access. */
   mode?: "ask" | "plan" | "write";
+  /** Override the lifecycle notification category for this run (e.g. CI triage
+   *  runs use "ci_analysis" so they gate separately). Defaults by outcome. */
+  notifyCategory?: NotificationCategory;
   onDone?: (run: AgentRun) => void | Promise<void>;
 }
 
@@ -167,10 +186,11 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     steerable: false,
     resultText: "",
     proposalIds: [],
+    notifyCategory: opts.notifyCategory,
   };
   useAgentStore.getState().register(run);
   if (opts.onDone) doneCallbacks.set(id, opts.onDone);
-  agentNotif(run, "started");
+  agentNotif(run, "started", lifecycleCategory(run, "started"));
 
   const fail = (msg: string) => {
     const cur = useAgentStore.getState().runs[id];
@@ -182,7 +202,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     useAgentStore.getState().update(id, { status: "error", error: msg, endedAt: Date.now(), steerable: false });
     doneCallbacks.delete(id);
     active.delete(id);
-    agentNotif(run, "failed", " — " + msg.slice(0, 80));
+    agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — " + msg.slice(0, 80));
   };
 
   const conn = new AcpConnection(id, {
@@ -282,7 +302,7 @@ function finalize(id: string, status: "done" | "killed") {
     steerable: false,
   });
   if (status === "done") {
-    agentNotif(run, "finished", ` — ${Math.round((Date.now() - run.startedAt) / 1000)}s`);
+    agentNotif(run, "finished", lifecycleCategory(run, "finished"), ` — ${Math.round((Date.now() - run.startedAt) / 1000)}s`);
     // onDone runs only on clean completion (matches pre-ACP semantics)
     const cb = doneCallbacks.get(id);
     doneCallbacks.delete(id);
@@ -292,7 +312,7 @@ function finalize(id: string, status: "done" | "killed") {
           status: "error",
           error: `post-processing failed: ${e instanceof Error ? e.message : String(e)}`,
         });
-        agentNotif(run, "failed", " — post-processing failed");
+        agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — post-processing failed");
       });
     }
   } else {

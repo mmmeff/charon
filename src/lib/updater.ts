@@ -199,7 +199,7 @@ export async function checkForUpdatesManually(): Promise<void> {
     const update = await check();
     if (!update) {
       const current = await getVersion();
-      await notify("Charon is up to date", `v${current} is the latest version.`);
+      await notify("app_update", "Charon is up to date", `v${current} is the latest version.`);
       return;
     }
     useUpdateStore.setState({ available: update.version });
@@ -209,6 +209,7 @@ export async function checkForUpdatesManually(): Promise<void> {
     const lock = localStorage.getItem(LOCK_KEY);
     if (lock && Date.now() - Number(lock) < LOCK_TTL_MS) {
       await notify(
+        "app_update",
         `Charon v${update.version} is downloading`,
         "You'll be prompted to restart when it's ready.",
       );
@@ -236,7 +237,7 @@ export async function checkForUpdatesManually(): Promise<void> {
   } catch (e) {
     localStorage.removeItem(LOCK_KEY);
     console.warn("manual update check failed", e);
-    await notify("Update check failed", String(e));
+    await notify("app_update", "Update check failed", String(e));
   } finally {
     manualCheckActive = false;
   }

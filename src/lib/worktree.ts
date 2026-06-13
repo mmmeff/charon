@@ -70,7 +70,7 @@ export async function ensureClone(
   if (!(await isGitRepo(clonePath))) {
     // first use: create the managed clone. Blobless partial clone keeps this
     // fast even on huge repos — worktree checkouts fetch blobs on demand.
-    void notify("Preparing local clone", `${repo} — first agent run sets up a working copy`);
+    void notify("clone_setup", "Preparing local clone", `${repo} — first agent run sets up a working copy`);
     await git(["clone", "--filter=blob:none", "--no-checkout", gh.authedCloneUrl(repo), clonePath]);
   } else {
     // keep the remote URL fresh in case the token rotated

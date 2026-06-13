@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { refreshModels } from "../../lib/agents";
 import { probeHarness, summarizeProbe } from "../../lib/acp";
-import { activeHarness, EVENT_CATALOG, FLOW_MODEL_CATALOG, harnessTemplates, switchHarness } from "../../lib/defaults";
+import {
+  activeHarness,
+  EVENT_CATALOG,
+  FLOW_MODEL_CATALOG,
+  harnessTemplates,
+  NOTIFICATION_CATALOG,
+  notificationEnabled,
+  switchHarness,
+} from "../../lib/defaults";
 import { eventFlowKind, resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
 import { native } from "../../lib/tauri";
@@ -37,6 +45,7 @@ const NAV_GROUPS: { group: string; items: { id: string; label: string }[] }[] = 
     ],
   },
   { group: "Checks", items: [{ id: "s-ci", label: "Checks" }] },
+  { group: "Notifications", items: [{ id: "s-notifications", label: "Notifications" }] },
   { group: "Automation", items: [{ id: "s-events", label: "Automation" }] },
 ];
 
@@ -506,6 +515,31 @@ export function SettingsView() {
             </>
           )}
         </label>
+      </div>
+      <div className="settings-section" id="s-notifications">
+        <h3>Notifications (global)</h3>
+        <p className="subtle" style={{ maxWidth: "76ch" }}>
+          Which desktop notifications Charon raises. Every notification in the app is gated here, so
+          turning one off silences it everywhere — across all repos and windows.
+        </p>
+        {NOTIFICATION_CATALOG.map((n) => (
+          <div key={n.id} className="event-row">
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={notificationEnabled(global.notifications, n.id)}
+                onChange={(e) =>
+                  void saveGlobal({
+                    ...global,
+                    notifications: { ...(global.notifications ?? {}), [n.id]: e.target.checked },
+                  })
+                }
+              />
+              <strong>{n.label}</strong>
+            </label>
+            <div className="desc">{n.description}</div>
+          </div>
+        ))}
       </div>
       <div className="settings-section" id="s-events">
         <h3>Automation</h3>

@@ -1,4 +1,12 @@
-import type { ClassFilters, EventDef, GlobalConfig, Harness, HarnessModelPrefs, RepoConfig } from "../types";
+import type {
+  ClassFilters,
+  EventDef,
+  GlobalConfig,
+  Harness,
+  HarnessModelPrefs,
+  NotificationCategory,
+  RepoConfig,
+} from "../types";
 
 // ---------------------------------------------------------------------------
 // Event catalog. Forward-compatible by design: detectors fire event ids and
@@ -387,6 +395,64 @@ export const FLOW_MODEL_CATALOG: { kind: string; label: string; capability: stri
 ];
 
 /**
+ * Every OS-notification category, with its user-facing label, description, and
+ * out-of-the-box default. The single source of truth for both notify()'s gate
+ * and the Settings → Notifications toggles. CI triage defaults OFF — it fires
+ * on every failing check and is low-signal.
+ */
+export const NOTIFICATION_CATALOG: {
+  id: NotificationCategory;
+  label: string;
+  description: string;
+  defaultEnabled: boolean;
+}[] = [
+  { id: "agent_finished", label: "Agent finished", description: "An agent run completes.", defaultEnabled: true },
+  { id: "agent_failed", label: "Agent failed", description: "An agent run errors out.", defaultEnabled: true },
+  { id: "agent_started", label: "Agent started", description: "An agent run begins.", defaultEnabled: true },
+  {
+    id: "ci_analysis",
+    label: "CI failure analysis",
+    description: "The read-only CI triage agent starts or finishes. Fires on every failing check — low-signal, off by default.",
+    defaultEnabled: false,
+  },
+  {
+    id: "automation_event",
+    label: "Automation events",
+    description: "An enabled automation event fires (CI failed, review submitted, conflict detected, …).",
+    defaultEnabled: true,
+  },
+  {
+    id: "pr_activity",
+    label: "PR activity",
+    description: "A PR you acted on is merged, approved, closed, converted to draft, or opened for review.",
+    defaultEnabled: true,
+  },
+  {
+    id: "app_update",
+    label: "App updates",
+    description: "An update is available, installed, or the check failed.",
+    defaultEnabled: true,
+  },
+  {
+    id: "clone_setup",
+    label: "Workspace setup",
+    description: "First-run local clone preparation for a repo.",
+    defaultEnabled: true,
+  },
+];
+
+/** Whether `category` is enabled in `prefs`, defaulting to the catalog value
+ *  when unset. The one resolver both notify() and the settings UI read. */
+export function notificationEnabled(
+  prefs: Record<string, boolean> | undefined,
+  category: NotificationCategory
+): boolean {
+  const stored = prefs?.[category];
+  if (typeof stored === "boolean") return stored;
+  return NOTIFICATION_CATALOG.find((c) => c.id === category)?.defaultEnabled ?? true;
+}
+
+/**
  * Built-in harness templates (ACP servers). `cursor` and `opencode` are
  * verified firsthand (`cursor-agent acp`, `opencode acp`); claude-code uses
  * Zed's documented adapter; codex has no native ACP server and needs a bridge
@@ -431,6 +497,7 @@ export function defaultGlobalConfig(): GlobalConfig {
     repos: [],
     lastRepo: "",
     extraSkillDirs: [],
+    notifications: {}, // empty = every category resolves to its catalog default
   };
 }
 
