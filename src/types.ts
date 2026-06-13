@@ -3,6 +3,19 @@
 // connect to GitHub and launch per-repo windows. Everything else is per-repo.
 // ---------------------------------------------------------------------------
 
+/** A harness's saved model selections — swapped in/out as the active harness
+ *  changes so each agent remembers its own picks. */
+export interface HarnessModelPrefs {
+  models: string[];
+  modelLabels: Record<string, string>;
+  defaultModel: string;
+  disabledModels: string[];
+  modelOverrides: Record<string, string>;
+  reasoningOptions: string[];
+  reasoningLabels: Record<string, string>;
+  reasoningEffort: string;
+}
+
 /** An ACP agent harness: a command that speaks Agent Client Protocol. */
 export interface Harness {
   /** stable id, e.g. "cursor" | "opencode" | "claude-code" | "codex" | "custom-…" */
@@ -46,6 +59,10 @@ export interface GlobalConfig {
   reasoningEffort: string;
   /** Per-flow default model overrides, keyed by AgentKind; empty = global default */
   modelOverrides: Record<string, string>;
+  /** Per-harness saved model selections, keyed by harness id. The flat model
+   *  fields above mirror modelPrefs[activeHarness]; switching harness swaps
+   *  them so each agent remembers its own default / overrides / reasoning. */
+  modelPrefs: Record<string, HarnessModelPrefs>;
   /** Repos the user has added, "owner/name" */
   repos: string[];
   /** Most recently opened repo — auto-opened on next app boot */

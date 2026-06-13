@@ -1,4 +1,4 @@
-import type { ClassFilters, EventDef, GlobalConfig, Harness, RepoConfig } from "../types";
+import type { ClassFilters, EventDef, GlobalConfig, Harness, HarnessModelPrefs, RepoConfig } from "../types";
 
 // ---------------------------------------------------------------------------
 // Event catalog. Forward-compatible by design: detectors fire event ids and
@@ -421,6 +421,7 @@ export function defaultGlobalConfig(): GlobalConfig {
     reasoningLabels: {},
     reasoningEffort: "",
     modelOverrides: { ...DEFAULT_MODEL_OVERRIDES },
+    modelPrefs: {},
     repos: [],
     lastRepo: "",
     extraSkillDirs: [],
@@ -431,6 +432,59 @@ export function defaultGlobalConfig(): GlobalConfig {
 export function activeHarness(cfg: GlobalConfig): Harness {
   const list = cfg.harnesses?.length ? cfg.harnesses : [harnessTemplates(cfg.cursorBinary)[0]];
   return list.find((h) => h.id === cfg.activeHarness) ?? list[0];
+}
+
+/** Snapshot the active harness's flat model fields into modelPrefs[active].
+ *  Called on every global save so per-harness selections persist. Idempotent. */
+export function syncActiveModelPrefs(cfg: GlobalConfig): GlobalConfig {
+  if (!cfg.activeHarness) return cfg;
+  const prefs: HarnessModelPrefs = {
+    models: cfg.models,
+    modelLabels: cfg.modelLabels,
+    defaultModel: cfg.defaultModel,
+    disabledModels: cfg.disabledModels ?? [],
+    modelOverrides: cfg.modelOverrides ?? {},
+    reasoningOptions: cfg.reasoningOptions ?? [],
+    reasoningLabels: cfg.reasoningLabels ?? {},
+    reasoningEffort: cfg.reasoningEffort ?? "",
+  };
+  return { ...cfg, modelPrefs: { ...(cfg.modelPrefs ?? {}), [cfg.activeHarness]: prefs } };
+}
+
+/**
+ * Switch the active harness: persist the current harness's model selections,
+ * then load the target's saved selections (or a clean seed) into the flat
+ * fields. The caller then runs refreshModels to source the live list and
+ * reconcile the remembered default against it.
+ */
+export function switchHarness(cfg: GlobalConfig, h: Harness): GlobalConfig {
+  const synced = syncActiveModelPrefs(cfg);
+  const saved = synced.modelPrefs?.[h.id];
+  const harnesses = [...(synced.harnesses ?? []).filter((x) => x.id !== h.id), h];
+  const seed: HarnessModelPrefs = {
+    models: ["auto"],
+    modelLabels: { auto: "Auto" },
+    defaultModel: "auto",
+    disabledModels: [],
+    modelOverrides: {},
+    reasoningOptions: [],
+    reasoningLabels: {},
+    reasoningEffort: "",
+  };
+  const p = saved ?? seed;
+  return {
+    ...synced,
+    harnesses,
+    activeHarness: h.id,
+    models: p.models,
+    modelLabels: p.modelLabels,
+    defaultModel: p.defaultModel,
+    disabledModels: p.disabledModels,
+    modelOverrides: p.modelOverrides,
+    reasoningOptions: p.reasoningOptions,
+    reasoningLabels: p.reasoningLabels,
+    reasoningEffort: p.reasoningEffort,
+  };
 }
 
 // ---------------------------------------------------------------------------

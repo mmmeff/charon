@@ -11,7 +11,7 @@ import type {
   ReviewFinding,
   Skill,
 } from "../types";
-import { defaultGlobalConfig, defaultRepoConfig } from "./defaults";
+import { defaultGlobalConfig, defaultRepoConfig, syncActiveModelPrefs } from "./defaults";
 import { native } from "./tauri";
 
 const repoKey = (repo: string) => repo.replace(/[^a-zA-Z0-9_.-]/g, "__");
@@ -50,8 +50,11 @@ export const useGlobalConfig = create<GlobalState>((set) => ({
     return config;
   },
   async save(cfg) {
-    set({ config: cfg });
-    await native.saveBlob("global.json", JSON.stringify(cfg, null, 2));
+    // mirror the active harness's model selections into modelPrefs so they
+    // persist and survive a harness switch-and-return
+    const synced = syncActiveModelPrefs(cfg);
+    set({ config: synced });
+    await native.saveBlob("global.json", JSON.stringify(synced, null, 2));
   },
   // read-modify-write against the file so concurrent repo windows don't
   // clobber each other's global config changes

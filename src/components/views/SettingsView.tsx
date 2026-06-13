@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { refreshModels } from "../../lib/agents";
 import { probeHarness, summarizeProbe } from "../../lib/acp";
-import { activeHarness, EVENT_CATALOG, FLOW_MODEL_CATALOG, harnessTemplates } from "../../lib/defaults";
+import { activeHarness, EVENT_CATALOG, FLOW_MODEL_CATALOG, harnessTemplates, switchHarness } from "../../lib/defaults";
 import { resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
 import { native } from "../../lib/tauri";
@@ -538,8 +538,10 @@ function HarnessSettings({
   const apply = async () => {
     setState("saving");
     const h = harness();
-    await save({ ...global, harnesses: [h], activeHarness: h.id });
-    // re-source the model list from the newly active harness
+    // snapshot the current harness's selections and restore this one's (or a
+    // clean seed); refreshModels then sources the live list and reconciles
+    // the remembered default against it
+    await save(switchHarness(global, h));
     await refreshModels(useGlobalConfig.getState().config!, save);
     setState({ ok: true, msg: "saved — models refreshed from this harness" });
   };
