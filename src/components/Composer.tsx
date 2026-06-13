@@ -9,7 +9,7 @@ import { timeAgo } from "../lib/ui";
 import { AgentCard } from "./AgentCard";
 import { Badge, Spinner } from "./common";
 import { Markdown } from "./Markdown";
-import { ModelPicker } from "./ModelPicker";
+import { ModelPicker, ReasoningPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
 import { useFlow } from "./flow";
 
@@ -190,11 +190,14 @@ export function Composer({
               {busy ? <Spinner /> : null} {meta.submit}
             </button>
             {mode !== "comment" && (
-              <ModelPicker
-                value={model}
-                onChange={setModel}
-                flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
-              />
+              <>
+                <ModelPicker
+                  value={model}
+                  onChange={setModel}
+                  flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+                />
+                <ReasoningPicker />
+              </>
             )}
             {onClose && <button onClick={onClose}>Cancel</button>}
             {error && <span style={{ color: "var(--red)" }}>{error}</span>}
