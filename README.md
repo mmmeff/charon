@@ -11,7 +11,8 @@
   <img src="https://img.shields.io/badge/Tauri-2-ff4f00?style=flat-square&labelColor=15140f" alt="Tauri 2"/>
   <img src="https://img.shields.io/badge/React-18-8fb4cc?style=flat-square&labelColor=15140f" alt="React 18"/>
   <img src="https://img.shields.io/badge/TypeScript-strict-e9e4d4?style=flat-square&labelColor=15140f" alt="TypeScript"/>
-  <img src="https://img.shields.io/badge/agents-Cursor%20CLI-ffb000?style=flat-square&labelColor=15140f" alt="Cursor CLI"/>
+  <img src="https://img.shields.io/badge/protocol-ACP-ffb000?style=flat-square&labelColor=15140f" alt="Agent Client Protocol"/>
+  <img src="https://img.shields.io/badge/harnesses-Cursor%20·%20Claude%20Code%20·%20Codex%20·%20opencode-8fb4cc?style=flat-square&labelColor=15140f" alt="Supported harnesses"/>
 </p>
 
 AI made writing code cheap. It didn't make *merging* it cheap: the PRs got bigger, more numerous,
@@ -52,8 +53,8 @@ one-click apply-or-dismiss — instead of another post in the thread.
 
 A per-repo poller snapshots checks, mergeability, comments, and reviews, then diffs the snapshots
 into **events**: `ci_failed`, `merge_conflict_detected`, `bug_bot_finding`,
-`teammate_review_submitted`, and twenty more. Each event runs your prompt against a Cursor agent —
-the default playbook fixes CI, resolves conflicts, and triages bot findings before you've finished
+`teammate_review_submitted`, and twenty more. Each event runs your prompt against the coding agent
+of your choice — the default playbook fixes CI, resolves conflicts, and triages bot findings before you've finished
 your coffee. Self-review findings (severity- and confidence-tagged, with concrete suggestions) land
 anchored on the diff, one *Apply* away from a fix agent.
 
@@ -92,13 +93,24 @@ entries — the engine never changes.
 
 <img src="docs/settings-events.png" alt="Settings: the event catalog — every behavior is a toggle plus an editable prompt" width="100%"/>
 
-> [!NOTE]
-> **Cursor is the only supported agent harness today.** Every agent run shells out to the
-> [Cursor CLI](https://cursor.com/cli) (`cursor-agent`), so that's the one dependency you need
-> wired up right now. The harness is the one piece that's pluggable by design — adapters for
-> Claude Code, Codex, or any other CLI that streams output would slot in behind the same
-> `event -> { enabled, prompt }` interface. **Contributions for other harnesses are very welcome** —
-> open an issue or PR.
+## Bring your own agent
+
+Charon talks to coding agents over the [Agent Client Protocol](https://agentclientprotocol.com)
+(ACP) — the open JSON-RPC standard for editor↔agent communication. Any ACP-speaking harness drops
+in behind the same `event -> { enabled, prompt }` interface, with its models, reasoning levels, and
+tool calls surfaced natively in the UI. Onboarding walks you through picking one and verifies the
+connection live. Supported out of the box:
+
+| Harness | How it connects | Notes |
+| --- | --- | --- |
+| **[Cursor](https://cursor.com/cli)** | `cursor-agent acp` | Native ACP server. Run `cursor-agent login` first. |
+| **[Claude Code](https://github.com/anthropics/claude-code)** | `npx -y @zed-industries/claude-code-acp` | Adapter; needs `ANTHROPIC_API_KEY`. |
+| **[Codex CLI](https://github.com/openai/codex)** | `npx -y @zed-industries/codex-acp` | ACP bridge; uses your Codex login / `OPENAI_API_KEY`. |
+| **[opencode](https://opencode.ai)** | `opencode acp` | Native ACP server. Configure a provider/API key first. |
+
+Switch harnesses any time from Settings — each keeps its own model and reasoning preferences. Got
+another ACP agent? Point Charon at any command and it'll probe it for models and modes.
+**Contributions for more harnesses are very welcome** — open an issue or PR.
 
 ## How it works
 
@@ -106,8 +118,10 @@ entries — the engine never changes.
   end. One window per repo, each with its own poller and locally-stored config.
 - **Events:** every handler is `event -> { enabled, prompt }`. Prompts interpolate variables
   (`{pr-number}`, `{check-name}`, `{comment-body}`, …) and `/skill-name` references.
-- **Agents:** runs go through `cursor-agent --print --output-format stream-json`. Fix/draft runs
-  use `--force` inside a dedicated worktree; review/Q&A/rewrite runs use read-only `--mode ask`.
+- **Agents:** every run is an [ACP](https://agentclientprotocol.com) session — Charon spawns the
+  harness as a subprocess and speaks newline-delimited JSON-RPC over stdio, streaming `session/update`
+  notifications into the live feed (tool calls, plans, reasoning) and steering or cancelling mid-run.
+  Fix/draft runs get a dedicated worktree in write mode; review/Q&A runs use read-only ask mode.
 - **Skills:** imported from `~/.cursor/commands`, `~/.cursor/skills`, and any directories you add.
   `humanize` and `thermonuclear-code-quality-review` ship as built-in fallbacks. Skills are
   selectable per stage (review / fix / draft / rewrite).
@@ -118,10 +132,11 @@ entries — the engine never changes.
 
 **Download:** grab the latest macOS DMG (universal — Apple Silicon + Intel) from
 [Releases](../../releases/latest). Builds are code-signed and notarized, so it opens like any
-other app. You'll need the [Cursor CLI](https://cursor.com/cli) (`cursor-agent login`) for
-agent runs.
+other app. You'll need at least one supported agent harness installed and logged in (Cursor, Claude
+Code, Codex CLI, or opencode — see [Bring your own agent](#bring-your-own-agent)); onboarding helps
+you pick one and verifies it.
 
-**Or build from source** — prerequisites: **Node 18+**, **Rust (stable)**, and the Cursor CLI:
+**Or build from source** — prerequisites: **Node 18+**, **Rust (stable)**, and a supported harness:
 
 ```sh
 npm install
@@ -136,7 +151,7 @@ universal DMG with an auto-generated changelog. Installed apps **self-update**: 
 releases in the background, downloads them, and offers a one-click restart.
 
 <p align="center">
-  <img src="docs/onboarding.png" alt="Onboarding: GitHub instance, PAT, cursor-agent binary" width="85%"/>
+  <img src="docs/onboarding.png" alt="Onboarding: GitHub instance, PAT, and agent harness selection" width="85%"/>
 </p>
 
 On first boot, point it at your GitHub instance (github.com or a GHE URL) and a personal access

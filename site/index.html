@@ -487,15 +487,16 @@ Charon gives you a desktop control room for the PR mess. Agents do the legwork;
   <div class="hood rv">
     <div><h4>Stack</h4><p>Tauri 2 with a Rust backend for HTTP, git, and process spawning; React + TypeScript front end. One window per repo, config stored locally.</p></div>
     <div><h4>Events</h4><p>Every handler is <code>event → { enabled, prompt }</code>. Prompts interpolate <code>{pr-number}</code>, <code>{check-name}</code>, <code>{comment-body}</code>, and <code>/skill</code> references.</p></div>
-    <div><h4>Agents</h4><p>Runs stream through <code>cursor-agent --print --output-format stream-json</code>. Fixes run in dedicated worktrees; reviews run read-only in <code>--mode ask</code>.</p></div>
+    <div><h4>Agents</h4><p>Every run is an <a href="https://agentclientprotocol.com">ACP</a> session over stdio — tool calls, plans, and reasoning stream live, and you can steer or cancel mid-run. Fixes run in dedicated worktrees; reviews run read-only.</p></div>
     <div><h4>GitHub</h4><p>Works against github.com and GitHub Enterprise (<code>/api/v3</code>). REST plus a dash of GraphQL. Fine-grained PAT recommended.</p></div>
     <div><h4>Skills</h4><p>Imported from <code>~/.cursor/commands</code> and <code>~/.cursor/skills</code>, selectable per stage. <code>humanize</code> ships built in.</p></div>
     <div><h4>Releases</h4><p>Every push to main versions, tags, builds a universal DMG, and publishes it. Installed apps <strong>self-update</strong> with a one-click restart.</p></div>
   </div>
   <div class="callout rv">
-    <strong>Cursor is the only supported agent harness today.</strong> Every run shells out to the
-    <a href="https://cursor.com/cli">Cursor CLI</a> (<code>cursor-agent</code>). The harness is pluggable:
-    adapters for Claude Code, Codex, or any streaming CLI can slot in behind the same interface.
+    <strong>Bring your own agent.</strong> Charon speaks the <a href="https://agentclientprotocol.com">Agent Client Protocol</a>,
+    so it runs <a href="https://cursor.com/cli">Cursor</a>, <a href="https://github.com/anthropics/claude-code">Claude Code</a>,
+    <a href="https://github.com/openai/codex">Codex CLI</a>, and <a href="https://opencode.ai">opencode</a> out of the box —
+    each with its models, reasoning levels, and tool calls surfaced natively. Switch any time; point it at any other ACP agent.
     <a href="https://github.com/mmmeff/charon/issues">Contributions welcome.</a>
   </div>
 </section>
