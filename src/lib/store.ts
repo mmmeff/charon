@@ -418,7 +418,7 @@ export const useUiStore = create<UiState>((set, get) => ({
 // ---------------------------------------------------------------------------
 
 export interface CiAnalysis {
-  status: "running" | "done" | "error";
+  status: "running" | "done" | "error" | "dismissed";
   text: string;
 }
 

@@ -78,6 +78,52 @@ const duration = (c: CheckInfo): string => {
   return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60 ? ` ${sec % 60}s` : ""}`;
 };
 
+/** ⋯ menu on a check's row — tertiary per-check actions. */
+function CheckOverflowMenu({
+  ignored,
+  onToggleIgnore,
+}: {
+  ignored: boolean;
+  onToggleIgnore: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+  return (
+    <div className="overflow-menu" ref={ref}>
+      <button className="link small" title="More actions" onClick={() => setOpen((o) => !o)}>
+        ⋯
+      </button>
+      {open && (
+        <div className="overflow-pop">
+          <button
+            className="overflow-item"
+            title="Never auto-analyze this check again (manage in Settings → CI)"
+            onClick={() => {
+              onToggleIgnore();
+              setOpen(false);
+            }}
+          >
+            {ignored ? "Stop ignoring this check" : "Ignore this check"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * CI panel for own PRs: per-check summary, drill-in log viewer, and the
  * fix pipeline — "Fix with agent" feeds the failing check's log tail into a
@@ -188,11 +234,20 @@ ${log.slice(-AGENT_LOG_TAIL)}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pr.number, pr.headSha, autoAnalysis, mine, ignored.join("|"), failing.map((c) => c.name).join("|")]);
 
-  const ignoreCheck = (name: string) => {
-    void useRepoStore
-      .getState()
-      .saveConfig({ ...ctx.config, ignoredChecks: [...new Set([...ignored, name])] });
+  // permanent: never auto-analyze this check again (managed in Settings → CI)
+  const setCheckIgnored = (name: string, on: boolean) => {
+    void useRepoStore.getState().saveConfig({
+      ...ctx.config,
+      ignoredChecks: on
+        ? [...new Set([...ignored, name])]
+        : ignored.filter((n) => n !== name),
+    });
   };
+
+  // transient: hide this analysis and don't re-run until the next failure
+  // (a new head sha re-keys, so it analyzes fresh on the next break)
+  const dismissAnalysis = (c: CheckInfo) =>
+    useCiAnalysis.getState().set(analysisKey(c), { status: "dismissed", text: "" });
 
   // teammate PRs: post the (already-read) analysis as a PR comment
   const [commented, setCommented] = useState<Record<string, "busy" | "sent" | string>>({});
@@ -303,6 +358,10 @@ ${log.slice(-AGENT_LOG_TAIL)}
                     Fix with agent
                   </button>
                 )}
+                <CheckOverflowMenu
+                  ignored={ignored.includes(c.name)}
+                  onToggleIgnore={() => setCheckIgnored(c.name, !ignored.includes(c.name))}
+                />
                 <a href={c.url} target="_blank" rel="noreferrer" className="subtle">
                   ↗
                 </a>
@@ -316,7 +375,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
                 (() => {
                   if (ignored.includes(c.name)) return null;
                   const a = analyses[analysisKey(c)];
-                  if (!a) return null;
+                  if (!a || a.status === "dismissed") return null;
                   const sent = commented[c.name];
                   return (
                     <div className="check-analysis">
@@ -357,10 +416,10 @@ ${log.slice(-AGENT_LOG_TAIL)}
                             )}
                             <button
                               className="link small"
-                              title="Never auto-analyze this check again (manage in Settings → CI)"
-                              onClick={() => ignoreCheck(c.name)}
+                              title="Hide this analysis — won't re-run until the next failure"
+                              onClick={() => dismissAnalysis(c)}
                             >
-                              ✕ ignore
+                              dismiss
                             </button>
                           </span>
                         </>
