@@ -307,7 +307,13 @@ export async function probeHarness(
     ]);
     return result;
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e), models: [], modes: [] };
+    let msg = e instanceof Error ? e.message : String(e);
+    // a non-ACP command launches an interactive REPL and bails on our piped
+    // stdin ("stdin is not a terminal") — translate to something actionable
+    if (/not a terminal|stdin|interactive|\btty\b|raw mode/i.test(msg)) {
+      msg = `\`${command}${args.length ? " " + args.join(" ") : ""}\` isn't an ACP server — it started an interactive session instead. Check the command (e.g. Codex needs a separate ACP bridge).`;
+    }
+    return { ok: false, error: msg, models: [], modes: [] };
   } finally {
     conn.kill();
   }

@@ -241,7 +241,11 @@ function Onboarding({
         Accept self-signed TLS certificates (GHE behind a corporate CA)
       </label>
       <div style={{ marginTop: 20 }}>
-        <button className="primary" disabled={busy || !token || !url} onClick={() => void connect()}>
+        <button
+          className="primary"
+          disabled={busy || !token || !url || !command.trim()}
+          onClick={() => void connect()}
+        >
           {busy ? "Connecting…" : "Connect"}
         </button>
       </div>
