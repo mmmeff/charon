@@ -85,6 +85,11 @@ export function modelConfigOption(ns: NewSessionResult): AcpConfigOption | undef
   );
 }
 
+/** Sort a model list alphabetically by display name (case-insensitive). */
+export function sortAcpModels(models: AcpModel[]): AcpModel[] {
+  return [...models].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
 /** The reasoning-effort config option, if the harness exposes one (codex). */
 export function reasoningConfigOption(ns: NewSessionResult): AcpConfigOption | undefined {
   return ns.configOptions?.find(

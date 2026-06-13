@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { refreshModels } from "../lib/agents";
-import { probeHarness, summarizeProbe } from "../lib/acp";
+import { probeHarness, sortAcpModels, summarizeProbe } from "../lib/acp";
 import { AsciiField } from "./AsciiField";
 import { IconCharonMoon } from "./icons";
 import { defaultGlobalConfig, harnessTemplates } from "../lib/defaults";
@@ -98,11 +98,12 @@ function Onboarding({
       let { models, modelLabels, defaultModel, reasoningOptions, reasoningLabels, reasoningEffort } =
         defaults;
       if (probe?.ok && probe.models.length) {
-        models = ["auto", ...probe.models.map((m) => m.modelId)];
+        const sorted = sortAcpModels(probe.models);
+        models = ["auto", ...sorted.map((m) => m.modelId)];
         modelLabels = { auto: "Auto" };
-        for (const m of probe.models) modelLabels[m.modelId] = m.name;
+        for (const m of sorted) modelLabels[m.modelId] = m.name;
         defaultModel =
-          probe.currentId && models.includes(probe.currentId) ? probe.currentId : models[1] ?? "auto";
+          probe.currentId && models.includes(probe.currentId) ? probe.currentId : sorted[0]?.modelId ?? "auto";
         h.verified = true;
       }
       if (probe?.ok && probe.reasoning?.options.length) {
