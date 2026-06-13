@@ -887,6 +887,20 @@ tr.flash > td { animation: line-flash 1.8s ease; }
 }
 .settings-section, .settings-section [id^="g-"] { scroll-margin-top: 10px; }
 
+/* settings page header — level 0, harmonized with the // SECTION hierarchy */
+.settings-head {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  max-width: 880px; margin-bottom: 30px;
+}
+.settings-eyebrow {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--fg-subtle); margin-bottom: 5px;
+}
+.settings-head h2 {
+  margin: 0; font-family: var(--sans); font-weight: 800; font-size: 22px;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg);
+}
+
 /* ---- settings: explicit typographic hierarchy ----
    level 1  section header   — sans 800, bone, orange tick
    level 2  group header     — mono caps, muted, dashed rule

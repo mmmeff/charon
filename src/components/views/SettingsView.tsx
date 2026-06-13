@@ -143,8 +143,11 @@ export function SettingsView() {
       <div className="settings-layout">
         <SettingsNav />
         <div className="settings-body">
-      <div className="row between" style={{ maxWidth: 880 }}>
-        <h2 className="viewtitle">Settings — {repo}</h2>
+      <div className="settings-head">
+        <div>
+          <div className="settings-eyebrow">{repo}</div>
+          <h2>Settings</h2>
+        </div>
         {saved && <Badge color="green">saved</Badge>}
       </div>
 
