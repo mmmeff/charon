@@ -39,6 +39,11 @@ export interface GlobalConfig {
   /** Model ids hidden from every model picker (managed in Settings) */
   disabledModels: string[];
   defaultModel: string;
+  /** Reasoning-effort options the active harness exposes (codex); else empty */
+  reasoningOptions: string[];
+  reasoningLabels: Record<string, string>;
+  /** Chosen reasoning effort; "" = the harness's own default */
+  reasoningEffort: string;
   /** Per-flow default model overrides, keyed by AgentKind; empty = global default */
   modelOverrides: Record<string, string>;
   /** Repos the user has added, "owner/name" */

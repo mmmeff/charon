@@ -1,4 +1,10 @@
-import { AcpConnection, modelConfigOption, probeHarness, type AcpSessionUpdate } from "./acp";
+import {
+  AcpConnection,
+  modelConfigOption,
+  probeHarness,
+  reasoningConfigOption,
+  type AcpSessionUpdate,
+} from "./acp";
 import { activeHarness } from "./defaults";
 import { native } from "./tauri";
 import { notify } from "./notify";
@@ -227,6 +233,13 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
           await conn.setConfigOption(sessionId, "model", opts.model).catch(() => {});
         }
       }
+      // reasoning effort — a separate config-option axis where the harness
+      // exposes it (codex); global default, applied to every run
+      const reasoning = useGlobalConfig.getState().config?.reasoningEffort;
+      const rc = reasoningConfigOption(ns);
+      if (reasoning && rc && rc.options!.some((o) => o.value === reasoning)) {
+        await conn.setConfigOption(sessionId, rc.id, reasoning).catch(() => {});
+      }
 
       // prompt turn loop — steering re-prompts the same session
       let text = opts.prompt;
@@ -436,9 +449,16 @@ export async function refreshModels(
   const models = ["auto", ...probe.models.map((m) => m.modelId)];
   const modelLabels: Record<string, string> = { auto: "Auto" };
   for (const m of probe.models) modelLabels[m.modelId] = m.name;
+
+  // reasoning effort — a separate picker where the harness exposes it
+  const reasoningOptions = (probe.reasoning?.options ?? []).map((o) => o.modelId);
+  const reasoningLabels: Record<string, string> = {};
+  for (const o of probe.reasoning?.options ?? []) reasoningLabels[o.modelId] = o.name;
+
   const changed =
     JSON.stringify(models) !== JSON.stringify(global.models) ||
-    JSON.stringify(modelLabels) !== JSON.stringify(global.modelLabels);
+    JSON.stringify(modelLabels) !== JSON.stringify(global.modelLabels) ||
+    JSON.stringify(reasoningOptions) !== JSON.stringify(global.reasoningOptions);
   if (changed) {
     // keep the configured default if still offered; else the harness's own
     // current/default model; else the first listed
@@ -447,6 +467,19 @@ export async function refreshModels(
       : probe.currentId && models.includes(probe.currentId)
         ? probe.currentId
         : models[1] ?? "auto";
-    await save({ ...global, models, modelLabels, defaultModel });
+    const reasoningEffort = reasoningOptions.includes(global.reasoningEffort)
+      ? global.reasoningEffort
+      : probe.reasoning?.currentId && reasoningOptions.includes(probe.reasoning.currentId)
+        ? probe.reasoning.currentId
+        : "";
+    await save({
+      ...global,
+      models,
+      modelLabels,
+      defaultModel,
+      reasoningOptions,
+      reasoningLabels,
+      reasoningEffort,
+    });
   }
 }

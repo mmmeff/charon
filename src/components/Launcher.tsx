@@ -95,7 +95,8 @@ function Onboarding({
       // source the model list from the chosen harness over ACP (best-effort)
       const cwd = await native.appDataDir();
       const probe = await probeHarness(h.command, h.args, cwd).catch(() => null);
-      let { models, modelLabels, defaultModel } = defaults;
+      let { models, modelLabels, defaultModel, reasoningOptions, reasoningLabels, reasoningEffort } =
+        defaults;
       if (probe?.ok && probe.models.length) {
         models = ["auto", ...probe.models.map((m) => m.modelId)];
         modelLabels = { auto: "Auto" };
@@ -103,6 +104,11 @@ function Onboarding({
         defaultModel =
           probe.currentId && models.includes(probe.currentId) ? probe.currentId : models[1] ?? "auto";
         h.verified = true;
+      }
+      if (probe?.ok && probe.reasoning?.options.length) {
+        reasoningOptions = probe.reasoning.options.map((o) => o.modelId);
+        reasoningLabels = Object.fromEntries(probe.reasoning.options.map((o) => [o.modelId, o.name]));
+        reasoningEffort = probe.reasoning.currentId ?? "";
       }
       const cfg: GlobalConfig = {
         ...defaults,
@@ -117,6 +123,9 @@ function Onboarding({
         models,
         modelLabels,
         defaultModel,
+        reasoningOptions,
+        reasoningLabels,
+        reasoningEffort,
         modelOverrides: {}, // ACP modelIds differ from any legacy CLI ids
       };
       await onDone(cfg);

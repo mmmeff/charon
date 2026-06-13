@@ -85,6 +85,16 @@ export function modelConfigOption(ns: NewSessionResult): AcpConfigOption | undef
   );
 }
 
+/** The reasoning-effort config option, if the harness exposes one (codex). */
+export function reasoningConfigOption(ns: NewSessionResult): AcpConfigOption | undefined {
+  return ns.configOptions?.find(
+    (o) =>
+      (o.category === "thought_level" || /reason|effort|thinking/i.test(o.id)) &&
+      o.type === "select" &&
+      o.options?.length
+  );
+}
+
 /**
  * The model list + current id for a session, sourced from whichever mechanism
  * the harness uses: native ACP models (cursor) or a `model` config option
@@ -317,6 +327,8 @@ export interface HarnessProbe {
   models: AcpModel[];
   /** the harness's default/current model id, if any */
   currentId?: string;
+  /** reasoning-effort options, if the harness exposes them (codex) */
+  reasoning?: { options: AcpModel[]; currentId?: string };
   modes: AcpMode[];
 }
 
@@ -347,7 +359,14 @@ export async function probeHarness(
         await conn.initialize();
         const ns = await conn.newSession(cwd);
         const { models, currentId } = sessionModels(ns);
-        return { ok: true, models, currentId, modes: ns.modes?.availableModes ?? [] };
+        const rc = reasoningConfigOption(ns);
+        const reasoning = rc
+          ? {
+              options: rc.options!.map((o) => ({ modelId: o.value, name: o.name ?? o.value })),
+              currentId: rc.currentValue,
+            }
+          : undefined;
+        return { ok: true, models, currentId, reasoning, modes: ns.modes?.availableModes ?? [] };
       })(),
       new Promise<HarnessProbe>((_, rej) =>
         setTimeout(() => rej(new Error("timed out — is the command an ACP server?")), timeoutMs)

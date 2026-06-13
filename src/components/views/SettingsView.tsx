@@ -227,6 +227,26 @@ export function SettingsView() {
             per-repo default (Agent section), or an explicit pick in a launch form.
           </small>
         </label>
+        {global.reasoningOptions.length > 0 && (
+          <label className="field">
+            <span>Reasoning effort</span>
+            <select
+              value={global.reasoningEffort}
+              onChange={(e) => void saveGlobal({ ...global, reasoningEffort: e.target.value })}
+            >
+              <option value="">harness default</option>
+              {global.reasoningOptions.map((r) => (
+                <option key={r} value={r}>
+                  {global.reasoningLabels[r] ?? r}
+                </option>
+              ))}
+            </select>
+            <small>
+              A separate axis from the model, applied to every run on harnesses that expose it (e.g.
+              Codex). Harnesses that bake reasoning into the model don't show this.
+            </small>
+          </label>
+        )}
         <p className="subtle" style={{ maxWidth: "76ch" }}>
           Every AI-driven flow, with what you can steer at launch. Set a per-flow default to route a
           flow to a different model without touching the launch forms.
