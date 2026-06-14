@@ -24,7 +24,13 @@ export const EVENT_CATALOG: EventDef[] = [
     group: "My PRs — CI & Checks",
     appliesTo: "mine",
     defaultEnabled: false,
-    defaultPrompt: "investigate and fix the failing CI for PR {pr-number}",
+    defaultPrompt:
+      "investigate the failing CI for PR {pr-number}. Consider whether the changes are related, or if " +
+      "it's from some other upstream issue or the result of flaky tests. If they're flaky, just rerun it. " +
+      "If the breakages are legitimately the result of our changes, implement a fix on the PR's branch. " +
+      "Make sure all related type-checking/linting/tests are passing before calling the work done. Avoid " +
+      "running suites for the entire project and just focus on PR-related tests/files. Once all good, " +
+      "commit and push to the associated PR's branch.",
   },
   {
     id: "ci_succeeded",
@@ -335,26 +341,42 @@ export function defaultRepoConfig(): RepoConfig {
   };
 }
 
-/** Out-of-the-box default model for every installation. If the Cursor CLI
- *  doesn't list it, the startup model refresh falls back to "auto". */
-export const DEFAULT_MODEL_ID = "composer-2.5-fast";
+/** Out-of-the-box default model + reasoning for the shipped (Codex) harness.
+ *  Ids the active harness doesn't list are skipped at resolve time, falling
+ *  through to the harness default. */
+export const DEFAULT_MODEL_ID = "gpt-5.3-codex-spark";
+export const DEFAULT_REASONING = "high";
 
 /**
- * Out-of-the-box per-flow defaults: thinking-heavy models where judgment
- * matters (reviews, Q&A), a strong long-context coder for CI/branch work,
- * a writing-tuned model for prose, fast default for the rest. Ids the
- * user's CLI doesn't list are ignored at resolve time (falls through to
- * the global default).
+ * Out-of-the-box per-flow model defaults (Codex harness): the codex-spark
+ * coder for edit/fix/writing, gpt-5.5 for Q&A/review/apply, gpt-5.5-high for
+ * branch maintenance. Paired with DEFAULT_REASONING_OVERRIDES below.
  */
 export const DEFAULT_MODEL_OVERRIDES: Record<string, string> = {
-  draft_question: "claude-opus-4-8-thinking-high",
-  review: "claude-opus-4-8-thinking-high",
-  ci_fix: "gpt-5.5-high",
+  draft_question: "gpt-5.5",
+  review: "gpt-5.5",
+  feedback_fix: "gpt-5.5",
+  event: "gpt-5.5",
+  draft_edit: "gpt-5.3-codex-spark",
+  ci_fix: "gpt-5.3-codex-spark",
+  ci_analysis: "gpt-5.3-codex-spark",
+  rewrite: "gpt-5.3-codex-spark",
   conflict_fix: "gpt-5.5-high",
-  rewrite: "claude-4.6-sonnet-medium",
-  draft_edit: DEFAULT_MODEL_ID,
-  feedback_fix: DEFAULT_MODEL_ID,
-  ci_analysis: DEFAULT_MODEL_ID,
+};
+
+/**
+ * Out-of-the-box per-flow reasoning-effort defaults (Codex). Flows not listed
+ * inherit the global default (DEFAULT_REASONING). xhigh where depth pays off;
+ * medium for routine branch maintenance.
+ */
+export const DEFAULT_REASONING_OVERRIDES: Record<string, string> = {
+  draft_edit: "xhigh",
+  review: "xhigh",
+  feedback_fix: "xhigh",
+  ci_fix: "xhigh",
+  ci_analysis: "xhigh",
+  rewrite: "xhigh",
+  conflict_fix: "medium",
 };
 
 /**
@@ -481,18 +503,25 @@ export function defaultGlobalConfig(): GlobalConfig {
     insecureTls: false,
     login: "",
     cursorBinary: "cursor-agent",
-    harnesses: [harnessTemplates()[0]], // cursor by default; more added in onboarding
-    activeHarness: "cursor",
-    // model list is sourced from the active harness over ACP on startup
-    models: ["auto", DEFAULT_MODEL_ID],
-    modelLabels: { auto: "Auto", [DEFAULT_MODEL_ID]: "Composer 2.5 Fast" },
+    // Codex by default (the team's harness); onboarding can switch it. The
+    // model/reasoning lists below are placeholders until the harness is
+    // probed over ACP on first connect.
+    harnesses: [harnessTemplates().find((h) => h.id === "codex")!],
+    activeHarness: "codex",
+    models: ["auto", "gpt-5.3-codex-spark", "gpt-5.5", "gpt-5.5-high"],
+    modelLabels: {
+      auto: "Auto",
+      "gpt-5.3-codex-spark": "GPT-5.3-Codex-Spark",
+      "gpt-5.5": "GPT-5.5",
+      "gpt-5.5-high": "GPT-5.5-High",
+    },
     disabledModels: [],
     defaultModel: DEFAULT_MODEL_ID,
-    reasoningOptions: [],
-    reasoningLabels: {},
-    reasoningEffort: "",
+    reasoningOptions: ["low", "medium", "high", "xhigh"],
+    reasoningLabels: { low: "Low", medium: "Medium", high: "High", xhigh: "Xhigh" },
+    reasoningEffort: DEFAULT_REASONING,
     modelOverrides: { ...DEFAULT_MODEL_OVERRIDES },
-    reasoningOverrides: {},
+    reasoningOverrides: { ...DEFAULT_REASONING_OVERRIDES },
     modelPrefs: {},
     repos: [],
     lastRepo: "",
