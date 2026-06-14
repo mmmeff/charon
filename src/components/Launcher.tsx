@@ -3,7 +3,12 @@ import { refreshModels } from "../lib/agents";
 import { probeHarness, sortAcpModels, summarizeProbe } from "../lib/acp";
 import { AsciiField } from "./AsciiField";
 import { IconCharonMoon } from "./icons";
-import { defaultGlobalConfig, harnessTemplates } from "../lib/defaults";
+import {
+  defaultGlobalConfig,
+  harnessModelDefaults,
+  harnessTemplates,
+  reconcileHarnessDefaults,
+} from "../lib/defaults";
 import { GitHubClient } from "../lib/github";
 import { native } from "../lib/tauri";
 import { useGlobalConfig } from "../lib/store";
@@ -92,25 +97,39 @@ function Onboarding({
       const login = await gh.connect();
       const defaults = defaultGlobalConfig();
       const h = harness();
-      // source the model list from the chosen harness over ACP (best-effort)
+      // source the live model/reasoning list from the chosen harness, then
+      // apply that harness's hardcoded defaults reconciled against what it
+      // actually exposes (best-effort: a failed probe keeps the "auto" seed)
       const cwd = await native.appDataDir();
       const probe = await probeHarness(h.command, h.args, cwd).catch(() => null);
-      let { models, modelLabels, defaultModel, reasoningOptions, reasoningLabels, reasoningEffort } =
-        defaults;
+      let models = ["auto"];
+      let modelLabels: Record<string, string> = { auto: "Auto" };
+      let reasoningOptions: string[] = [];
+      let reasoningLabels: Record<string, string> = {};
       if (probe?.ok && probe.models.length) {
         const sorted = sortAcpModels(probe.models);
         models = ["auto", ...sorted.map((m) => m.modelId)];
         modelLabels = { auto: "Auto" };
         for (const m of sorted) modelLabels[m.modelId] = m.name;
-        defaultModel =
-          probe.currentId && models.includes(probe.currentId) ? probe.currentId : sorted[0]?.modelId ?? "auto";
         h.verified = true;
       }
       if (probe?.ok && probe.reasoning?.options.length) {
         reasoningOptions = probe.reasoning.options.map((o) => o.modelId);
         reasoningLabels = Object.fromEntries(probe.reasoning.options.map((o) => [o.modelId, o.name]));
-        reasoningEffort = probe.reasoning.currentId ?? "";
       }
+      const rec = reconcileHarnessDefaults(harnessModelDefaults(h.id), models, reasoningOptions);
+      // hardcoded default unavailable → fall back to the harness's own current pick
+      const defaultModel =
+        rec.defaultModel !== "auto"
+          ? rec.defaultModel
+          : probe?.currentId && models.includes(probe.currentId)
+            ? probe.currentId
+            : models[1] ?? "auto";
+      const reasoningEffort =
+        rec.reasoningEffort ||
+        (probe?.reasoning?.currentId && reasoningOptions.includes(probe.reasoning.currentId)
+          ? probe.reasoning.currentId
+          : "");
       const cfg: GlobalConfig = {
         ...defaults,
         ...(existing ?? {}),
@@ -127,7 +146,8 @@ function Onboarding({
         reasoningOptions,
         reasoningLabels,
         reasoningEffort,
-        modelOverrides: {}, // ACP modelIds differ from any legacy CLI ids
+        modelOverrides: rec.modelOverrides,
+        reasoningOverrides: rec.reasoningOverrides,
       };
       await onDone(cfg);
     } catch (e) {

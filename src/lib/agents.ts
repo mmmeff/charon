@@ -479,31 +479,46 @@ export async function refreshModels(
   const reasoningLabels: Record<string, string> = {};
   for (const o of probe.reasoning?.options ?? []) reasoningLabels[o.modelId] = o.name;
 
-  const changed =
-    JSON.stringify(models) !== JSON.stringify(global.models) ||
-    JSON.stringify(modelLabels) !== JSON.stringify(global.modelLabels) ||
-    JSON.stringify(reasoningOptions) !== JSON.stringify(global.reasoningOptions);
-  if (changed) {
-    // keep the configured default if still offered; else the harness's own
-    // current/default model; else the first listed
-    const defaultModel = models.includes(global.defaultModel)
-      ? global.defaultModel
-      : probe.currentId && models.includes(probe.currentId)
-        ? probe.currentId
-        : models[1] ?? "auto";
-    const reasoningEffort = reasoningOptions.includes(global.reasoningEffort)
-      ? global.reasoningEffort
-      : probe.reasoning?.currentId && reasoningOptions.includes(probe.reasoning.currentId)
-        ? probe.reasoning.currentId
-        : "";
-    await save({
-      ...global,
-      models,
-      modelLabels,
-      defaultModel,
-      reasoningOptions,
-      reasoningLabels,
-      reasoningEffort,
-    });
-  }
+  // Reconcile every selection against what's actually available now: keep the
+  // configured pick if still offered, else the harness's own current/default,
+  // else fall through. Stale overrides — referencing a model or reasoning
+  // effort the harness no longer lists — are dropped so a selection is never
+  // invalid. This is what enforces "defaults are always valid & available"
+  // both after a harness switch (seeded defaults get pruned to reality) and on
+  // every startup (a harness that dropped a model self-heals).
+  const defaultModel = models.includes(global.defaultModel)
+    ? global.defaultModel
+    : probe.currentId && models.includes(probe.currentId)
+      ? probe.currentId
+      : models[1] ?? "auto";
+  const reasoningEffort = reasoningOptions.includes(global.reasoningEffort)
+    ? global.reasoningEffort
+    : probe.reasoning?.currentId && reasoningOptions.includes(probe.reasoning.currentId)
+      ? probe.reasoning.currentId
+      : "";
+  const modelOverrides: Record<string, string> = {};
+  for (const [k, v] of Object.entries(global.modelOverrides ?? {}))
+    if (models.includes(v)) modelOverrides[k] = v;
+  const reasoningOverrides: Record<string, string> = {};
+  for (const [k, v] of Object.entries(global.reasoningOverrides ?? {}))
+    if (reasoningOptions.includes(v)) reasoningOverrides[k] = v;
+
+  const next = {
+    ...global,
+    models,
+    modelLabels,
+    defaultModel,
+    reasoningOptions,
+    reasoningLabels,
+    reasoningEffort,
+    modelOverrides,
+    reasoningOverrides,
+  };
+  const sig = (c: import("../types").GlobalConfig) =>
+    JSON.stringify([
+      c.models, c.modelLabels, c.defaultModel,
+      c.reasoningOptions, c.reasoningLabels, c.reasoningEffort,
+      c.modelOverrides, c.reasoningOverrides,
+    ]);
+  if (sig(next) !== sig(global)) await save(next);
 }

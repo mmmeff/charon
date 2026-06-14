@@ -341,43 +341,134 @@ export function defaultRepoConfig(): RepoConfig {
   };
 }
 
-/** Out-of-the-box default model + reasoning for the shipped (Codex) harness.
- *  Ids the active harness doesn't list are skipped at resolve time, falling
- *  through to the harness default. */
-export const DEFAULT_MODEL_ID = "gpt-5.3-codex-spark";
-export const DEFAULT_REASONING = "high";
+// ---------------------------------------------------------------------------
+// Per-harness model & reasoning defaults
+//
+// Model selections are never baked into a fresh config. They're applied — and
+// reconciled against the harness's live model list — the moment a harness is
+// selected in onboarding or switched in Settings. Every harness carries its
+// own hardcoded defaults, so a switch always lands on sensible picks for that
+// specific agent. Harnesses absent from this table get a clean "auto" seed
+// ("auto" is always valid), and any id the live harness doesn't expose is
+// dropped at reconcile time — so a default selection is never invalid.
+// ---------------------------------------------------------------------------
 
-/**
- * Out-of-the-box per-flow model defaults (Codex harness): the codex-spark
- * coder for edit/fix/writing, gpt-5.5 for Q&A/review/apply, gpt-5.5-high for
- * branch maintenance. Paired with DEFAULT_REASONING_OVERRIDES below.
- */
-export const DEFAULT_MODEL_OVERRIDES: Record<string, string> = {
-  draft_question: "gpt-5.5",
-  review: "gpt-5.5",
-  feedback_fix: "gpt-5.5",
-  event: "gpt-5.5",
-  draft_edit: "gpt-5.3-codex-spark",
-  ci_fix: "gpt-5.3-codex-spark",
-  ci_analysis: "gpt-5.3-codex-spark",
-  rewrite: "gpt-5.3-codex-spark",
-  conflict_fix: "gpt-5.5-high",
+export interface HarnessModelDefaults {
+  /** install default model id, or "auto" to defer to the harness's own default */
+  defaultModel: string;
+  /** per-flow model overrides, keyed by AgentKind */
+  modelOverrides: Record<string, string>;
+  /** global default reasoning effort ("" = no axis / harness default) */
+  reasoningEffort: string;
+  /** per-flow reasoning-effort overrides, keyed by AgentKind */
+  reasoningOverrides: Record<string, string>;
+}
+
+export const HARNESS_MODEL_DEFAULTS: Record<string, HarnessModelDefaults> = {
+  // Cursor encodes thinking effort in the model id, so it has no separate
+  // reasoning axis. Thinking-heavy models where judgment matters (review,
+  // Q&A); a strong long-context coder for CI/branch work; a writing-tuned
+  // model for prose; the fast composer for the rest.
+  cursor: {
+    defaultModel: "composer-2.5-fast",
+    modelOverrides: {
+      draft_question: "claude-opus-4-8-thinking-high",
+      review: "claude-opus-4-8-thinking-high",
+      ci_fix: "gpt-5.5-high",
+      conflict_fix: "gpt-5.5-high",
+      rewrite: "claude-4.6-sonnet-medium",
+      draft_edit: "composer-2.5-fast",
+      feedback_fix: "composer-2.5-fast",
+      ci_analysis: "composer-2.5-fast",
+    },
+    reasoningEffort: "",
+    reasoningOverrides: {},
+  },
+  // Codex exposes a reasoning-effort axis (low/medium/high/xhigh): the
+  // codex-spark coder for edit/fix/writing, gpt-5.5 for Q&A/review/apply,
+  // gpt-5.5-high for branch maintenance. xhigh where depth pays off; medium
+  // for routine branch maintenance.
+  codex: {
+    defaultModel: "gpt-5.3-codex-spark",
+    modelOverrides: {
+      draft_question: "gpt-5.5",
+      review: "gpt-5.5",
+      feedback_fix: "gpt-5.5",
+      event: "gpt-5.5",
+      draft_edit: "gpt-5.3-codex-spark",
+      ci_fix: "gpt-5.3-codex-spark",
+      ci_analysis: "gpt-5.3-codex-spark",
+      rewrite: "gpt-5.3-codex-spark",
+      conflict_fix: "gpt-5.5-high",
+    },
+    reasoningEffort: "high",
+    reasoningOverrides: {
+      draft_edit: "xhigh",
+      review: "xhigh",
+      feedback_fix: "xhigh",
+      ci_fix: "xhigh",
+      ci_analysis: "xhigh",
+      rewrite: "xhigh",
+      conflict_fix: "medium",
+    },
+  },
 };
 
-/**
- * Out-of-the-box per-flow reasoning-effort defaults (Codex). Flows not listed
- * inherit the global default (DEFAULT_REASONING). xhigh where depth pays off;
- * medium for routine branch maintenance.
- */
-export const DEFAULT_REASONING_OVERRIDES: Record<string, string> = {
-  draft_edit: "xhigh",
-  review: "xhigh",
-  feedback_fix: "xhigh",
-  ci_fix: "xhigh",
-  ci_analysis: "xhigh",
-  rewrite: "xhigh",
-  conflict_fix: "medium",
-};
+/** Hardcoded defaults for a harness, or a clean "auto" seed for harnesses we
+ *  don't ship presets for ("auto" is always a valid, available selection). */
+export function harnessModelDefaults(id: string): HarnessModelDefaults {
+  return (
+    HARNESS_MODEL_DEFAULTS[id] ?? {
+      defaultModel: "auto",
+      modelOverrides: {},
+      reasoningEffort: "",
+      reasoningOverrides: {},
+    }
+  );
+}
+
+/** Reconcile a harness's hardcoded defaults against the ids it actually
+ *  exposes, guaranteeing every selection is available: unknown model ids fall
+ *  back to "auto", unknown reasoning ids are dropped (the flow inherits the
+ *  global default). Pass the live `models` (incl. "auto") / `reasoningOptions`
+ *  from a probe. */
+export function reconcileHarnessDefaults(
+  d: HarnessModelDefaults,
+  models: string[],
+  reasoningOptions: string[]
+): Pick<HarnessModelDefaults, "defaultModel" | "modelOverrides" | "reasoningEffort" | "reasoningOverrides"> {
+  const okModel = (m: string) => models.includes(m);
+  const okR = (r: string) => reasoningOptions.includes(r);
+  const modelOverrides: Record<string, string> = {};
+  for (const [k, v] of Object.entries(d.modelOverrides)) if (okModel(v)) modelOverrides[k] = v;
+  const reasoningOverrides: Record<string, string> = {};
+  for (const [k, v] of Object.entries(d.reasoningOverrides)) if (okR(v)) reasoningOverrides[k] = v;
+  return {
+    defaultModel: okModel(d.defaultModel) ? d.defaultModel : "auto",
+    modelOverrides,
+    reasoningEffort: okR(d.reasoningEffort) ? d.reasoningEffort : "",
+    reasoningOverrides,
+  };
+}
+
+/** Seed model/label/reasoning lists from a harness's hardcoded defaults so the
+ *  selections are listable in the brief window between switching and the live
+ *  probe (refreshModels then replaces these with the real list + labels). */
+function seedListsFromDefaults(d: HarnessModelDefaults): {
+  models: string[];
+  modelLabels: Record<string, string>;
+  reasoningOptions: string[];
+  reasoningLabels: Record<string, string>;
+} {
+  const uniq = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
+  const ids = uniq(["auto", d.defaultModel, ...Object.values(d.modelOverrides)]);
+  const modelLabels: Record<string, string> = {};
+  for (const id of ids) modelLabels[id] = id === "auto" ? "Auto" : id;
+  const rids = uniq([d.reasoningEffort, ...Object.values(d.reasoningOverrides)]);
+  const reasoningLabels: Record<string, string> = {};
+  for (const r of rids) reasoningLabels[r] = r.charAt(0).toUpperCase() + r.slice(1);
+  return { models: ids, modelLabels, reasoningOptions: rids, reasoningLabels };
+}
 
 /**
  * Every AI-prompt-driven flow, keyed by its AgentKind, with what the user can
@@ -503,25 +594,21 @@ export function defaultGlobalConfig(): GlobalConfig {
     insecureTls: false,
     login: "",
     cursorBinary: "cursor-agent",
-    // Codex by default (the team's harness); onboarding can switch it. The
-    // model/reasoning lists below are placeholders until the harness is
-    // probed over ACP on first connect.
-    harnesses: [harnessTemplates().find((h) => h.id === "codex")!],
-    activeHarness: "codex",
-    models: ["auto", "gpt-5.3-codex-spark", "gpt-5.5", "gpt-5.5-high"],
-    modelLabels: {
-      auto: "Auto",
-      "gpt-5.3-codex-spark": "GPT-5.3-Codex-Spark",
-      "gpt-5.5": "GPT-5.5",
-      "gpt-5.5-high": "GPT-5.5-High",
-    },
+    // Cursor by default; onboarding can switch it. Model selections are NOT
+    // baked in here — they're applied (and reconciled against the harness's
+    // live model list) once a harness is selected in onboarding or switched in
+    // Settings. Until then everything resolves to "auto", which is always valid.
+    harnesses: [harnessTemplates().find((h) => h.id === "cursor")!],
+    activeHarness: "cursor",
+    models: ["auto"],
+    modelLabels: { auto: "Auto" },
     disabledModels: [],
-    defaultModel: DEFAULT_MODEL_ID,
-    reasoningOptions: ["low", "medium", "high", "xhigh"],
-    reasoningLabels: { low: "Low", medium: "Medium", high: "High", xhigh: "Xhigh" },
-    reasoningEffort: DEFAULT_REASONING,
-    modelOverrides: { ...DEFAULT_MODEL_OVERRIDES },
-    reasoningOverrides: { ...DEFAULT_REASONING_OVERRIDES },
+    defaultModel: "auto",
+    reasoningOptions: [],
+    reasoningLabels: {},
+    reasoningEffort: "",
+    modelOverrides: {},
+    reasoningOverrides: {},
     modelPrefs: {},
     repos: [],
     lastRepo: "",
@@ -537,7 +624,9 @@ export function activeHarness(cfg: GlobalConfig): Harness {
 }
 
 /** Snapshot the active harness's flat model fields into modelPrefs[active].
- *  Called on every global save so per-harness selections persist. Idempotent. */
+ *  Called on every global save as an informational record of each harness's
+ *  last-known selections. Switching harness does NOT restore from it — every
+ *  switch resets to the harness's hardcoded defaults (see switchHarness). */
 export function syncActiveModelPrefs(cfg: GlobalConfig): GlobalConfig {
   if (!cfg.activeHarness) return cfg;
   const prefs: HarnessModelPrefs = {
@@ -555,40 +644,34 @@ export function syncActiveModelPrefs(cfg: GlobalConfig): GlobalConfig {
 }
 
 /**
- * Switch the active harness: persist the current harness's model selections,
- * then load the target's saved selections (or a clean seed) into the flat
- * fields. The caller then runs refreshModels to source the live list and
- * reconcile the remembered default against it.
+ * Switch the active harness. Every switch lands on the TARGET harness's
+ * hardcoded defaults (not the user's prior picks) — seeded so the selections
+ * are listable immediately. The caller then runs refreshModels, which sources
+ * the live model list and reconciles these defaults against it so every
+ * selection is guaranteed available.
  */
 export function switchHarness(cfg: GlobalConfig, h: Harness): GlobalConfig {
   const synced = syncActiveModelPrefs(cfg);
-  const saved = synced.modelPrefs?.[h.id];
   const harnesses = [...(synced.harnesses ?? []).filter((x) => x.id !== h.id), h];
-  const seed: HarnessModelPrefs = {
-    models: ["auto"],
-    modelLabels: { auto: "Auto" },
-    defaultModel: "auto",
-    disabledModels: [],
-    modelOverrides: {},
-    reasoningOptions: [],
-    reasoningLabels: {},
-    reasoningEffort: "",
-    reasoningOverrides: {},
-  };
-  const p = saved ?? seed;
+  // Re-saving the already-active harness (e.g. tweaking its command/args) keeps
+  // the current selections — only an actual change of harness resets to the
+  // target's hardcoded defaults.
+  if (synced.activeHarness === h.id) return { ...synced, harnesses };
+  const d = harnessModelDefaults(h.id);
+  const seed = seedListsFromDefaults(d);
   return {
     ...synced,
     harnesses,
     activeHarness: h.id,
-    models: p.models,
-    modelLabels: p.modelLabels,
-    defaultModel: p.defaultModel,
-    disabledModels: p.disabledModels,
-    modelOverrides: p.modelOverrides,
-    reasoningOptions: p.reasoningOptions,
-    reasoningLabels: p.reasoningLabels,
-    reasoningEffort: p.reasoningEffort,
-    reasoningOverrides: p.reasoningOverrides ?? {},
+    models: seed.models,
+    modelLabels: seed.modelLabels,
+    defaultModel: d.defaultModel,
+    disabledModels: [],
+    modelOverrides: { ...d.modelOverrides },
+    reasoningOptions: seed.reasoningOptions,
+    reasoningLabels: seed.reasoningLabels,
+    reasoningEffort: d.reasoningEffort,
+    reasoningOverrides: { ...d.reasoningOverrides },
   };
 }
 
