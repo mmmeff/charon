@@ -1,6 +1,7 @@
 import {
   AcpConnection,
   modelConfigOption,
+  modelLabel,
   probeHarness,
   reasoningConfigOption,
   sortAcpModels,
@@ -503,7 +504,7 @@ export async function refreshModels(
   const sorted = sortAcpModels(probe.models);
   const models = ["auto", ...sorted.map((m) => m.modelId)];
   const modelLabels: Record<string, string> = { auto: "Auto" };
-  for (const m of sorted) modelLabels[m.modelId] = m.name;
+  for (const m of sorted) modelLabels[m.modelId] = modelLabel(m);
 
   // reasoning effort — a separate picker where the harness exposes it
   const reasoningOptions = (probe.reasoning?.options ?? []).map((o) => o.modelId);
