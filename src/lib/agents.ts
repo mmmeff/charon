@@ -3,6 +3,7 @@ import {
   modelConfigOption,
   probeHarness,
   reasoningConfigOption,
+  sortModelIds,
   type AcpSessionUpdate,
 } from "./acp";
 import { isHiddenAgentRun, isVisibleAgentRun } from "./agent-runs";
@@ -499,13 +500,12 @@ export async function refreshModels(
   const cwd = await native.appDataDir();
   const probe = await probeHarness(harness.command, harness.args, cwd);
   if (!probe.ok || probe.models.length === 0) return; // harness exposes no model list
-  // List models exactly as the harness reports them: native order, raw ids
-  // (no sorting, no name massaging). The id is the only label — for Cursor it
-  // carries the reasoning level in its brackets, which is the whole point.
-  // No synthetic "auto" entry — harnesses that have a "let me pick" option
-  // expose their own (Cursor's `default[]`), and "auto" remains the internal
-  // sentinel for "no model set, defer to the harness".
-  const models = probe.models.map((m) => m.modelId);
+  // List models with raw ids (no name massaging), sorted alphabetically. The
+  // id is the only label — for Cursor it carries the reasoning level in its
+  // brackets, which is the whole point. No synthetic "auto" entry — harnesses
+  // with a "let me pick" option expose their own (Cursor's `default[]`), and
+  // "auto" remains the internal sentinel for "no model set, defer to harness".
+  const models = sortModelIds(probe.models.map((m) => m.modelId));
   const modelLabels: Record<string, string> = {};
 
   // reasoning effort — a separate picker where the harness exposes it

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { refreshModels } from "../lib/agents";
-import { probeHarness, summarizeProbe } from "../lib/acp";
+import { probeHarness, sortModelIds, summarizeProbe } from "../lib/acp";
 import { AsciiField } from "./AsciiField";
 import { IconCharonMoon } from "./icons";
 import {
@@ -107,9 +107,9 @@ function Onboarding({
       let reasoningOptions: string[] = [];
       let reasoningLabels: Record<string, string> = {};
       if (probe?.ok && probe.models.length) {
-        // native order, raw ids — no sorting or name massaging (the id carries
+        // raw ids, sorted alphabetically — no name massaging (the id carries
         // Cursor's reasoning level in its brackets), and no synthetic "auto"
-        models = probe.models.map((m) => m.modelId);
+        models = sortModelIds(probe.models.map((m) => m.modelId));
         h.verified = true;
       }
       if (probe?.ok && probe.reasoning?.options.length) {

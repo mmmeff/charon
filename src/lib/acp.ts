@@ -85,6 +85,11 @@ export function modelConfigOption(ns: NewSessionResult): AcpConfigOption | undef
   );
 }
 
+/** Sort model ids alphabetically (case-insensitive). The id is also the
+ *  display label, so this orders the list exactly as the user sees it. */
+export function sortModelIds(ids: string[]): string[] {
+  return [...ids].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
 
 /** The reasoning-effort config option, if the harness exposes one (codex). */
 export function reasoningConfigOption(ns: NewSessionResult): AcpConfigOption | undefined {
