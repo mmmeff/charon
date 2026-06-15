@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { deleteDraftCreateArtifacts } from "../../lib/flows";
 import { usePrData } from "../../lib/events";
 import { useAgentStore, useUiStore } from "../../lib/store";
+import { formatShortcut, resolveShortcutMap } from "../../lib/shortcuts";
 import { age, sortPrs, type SortKey } from "../../lib/ui";
 import type { AgentRun } from "../../types";
 import { AgentCard } from "../AgentCard";
@@ -21,6 +22,7 @@ export function DraftsView() {
   const drafts = usePrData((s) => s.myDrafts);
   const checks = usePrData((s) => s.checks);
   const selected = useUiStore((s) => s.focusedPr["drafts"] ?? null);
+  const requestedNewDraft = useUiStore((s) => s.requestedNewDraft);
   const [creating, setCreating] = useState(false);
   const [selectedPendingId, setSelectedPendingId] = useState<string | null>(null);
   const runs = useAgentStore((s) => s.runs);
@@ -57,6 +59,14 @@ export function DraftsView() {
   const visiblePending = selectedPending ?? (!creating && !defaultPr ? pendingDraftRuns[0] ?? null : null);
   const pr = creating || visiblePending ? null : defaultPr;
   const clearPendingSelection = () => setSelectedPendingId(null);
+  const newDraftShortcut = formatShortcut(resolveShortcutMap(ctx.global.shortcuts).new_draft);
+
+  useEffect(() => {
+    if (!requestedNewDraft) return;
+    startCreating();
+    useUiStore.getState().clearNewDraftRequest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedNewDraft?.nonce]);
 
   return (
     <div className="main split">
@@ -72,13 +82,14 @@ export function DraftsView() {
         </div>
         <button
           type="button"
-          className={`card selectable draft-create-row ${creating ? "selected" : ""}`}
+          className={`draft-create-row ${creating ? "active" : ""}`}
           onClick={startCreating}
         >
-          <h4>+ Draft</h4>
-          <div className="meta">
-            <span>Start a new prompt-to-PR draft</span>
-          </div>
+          <span className="draft-create-main">
+            <span className="draft-create-icon">+</span>
+            <span>Create draft</span>
+          </span>
+          <span className="draft-create-hint">{newDraftShortcut}</span>
         </button>
         {drafts.length === 0 && pendingDraftRuns.length === 0 && <p className="subtle">No draft PRs.</p>}
         {pendingDraftRuns.map((run) => (

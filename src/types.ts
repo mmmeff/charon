@@ -100,6 +100,7 @@ export type ShortcutActionId =
   | "tab_review"
   | "tab_activity"
   | "tab_settings"
+  | "new_draft"
   | "nav_back"
   | "nav_forward"
   | "toggle_pr_sidebar"

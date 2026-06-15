@@ -4,7 +4,7 @@ import { highlightFileLines, langForPath } from "../lib/highlight";
 import { useUiStore } from "../lib/store";
 import type { FileDiff, LineSelection } from "../types";
 import { Badge } from "./common";
-import { FileTree } from "./FileTree";
+import { FileTree, type FileTreeMarkers } from "./FileTree";
 
 const slug = (p: string) => encodeURIComponent(p);
 /** DOM id of a diff line's number cell — the target for scroll-to-line. */
@@ -42,6 +42,7 @@ export function DiffViewer({
   files: rawFiles,
   selectable = false,
   anchors = [],
+  titleBar,
   viewedKey,
   remoteViewed,
   renderCommentForm,
@@ -49,6 +50,7 @@ export function DiffViewer({
   files: FileDiff[];
   selectable?: boolean;
   anchors?: DiffAnchor[];
+  titleBar?: ReactNode;
   /** local "viewed" checkboxes; state persists under this key (own drafts) */
   viewedKey?: string;
   /** GitHub-backed viewed state (teammate reviews) — syncs with github.com */
@@ -110,6 +112,19 @@ export function DiffViewer({
   );
 
   const keyOf = (f: FileDiff) => f.newPath || f.oldPath;
+
+  const fileMarkers = useMemo(() => {
+    const next: FileTreeMarkers = {};
+    for (const a of anchors) {
+      if (a.resolved) continue;
+      if (a.tone !== "github" && a.tone !== "local") continue;
+      const marker = next[a.path] ?? { comments: 0, feedback: 0 };
+      if (a.tone === "github") marker.comments++;
+      else marker.feedback++;
+      next[a.path] = marker;
+    }
+    return next;
+  }, [anchors]);
 
   // cheap content hash per file (djb2 over diff lines) for viewed-tracking
   const fileHashes = useMemo(() => {
@@ -328,40 +343,41 @@ export function DiffViewer({
 
   return (
     <div onMouseLeave={() => drag && setDrag(null)} ref={rootRef}>
-      {actionable > 0 && (
-        <div className={`comment-nav-wrap ${navVisible ? "show" : ""}`}>
-          <div className="comment-nav">
-            <span className="comment-nav-count">{actionable} actionable</span>
-            <button title="Previous (k)" onClick={() => navToComment(-1)}>
-              ↑
-            </button>
-            <button title="Next (j)" onClick={() => navToComment(1)}>
-              ↓
-            </button>
-          </div>
-        </div>
-      )}
       {rawFiles.length > 0 && (
-        <div className="row" style={{ marginBottom: 8 }}>
-          <button className={`small ${treeOpen ? "primary" : ""}`} onClick={() => setTreeOpen(!treeOpen)}>
-            ☰ Files
-          </button>
-          <div className="seg">
-            <button className={`small ${mode === "unified" ? "primary" : ""}`} onClick={() => setMode("unified")}>
-              Unified
+        <div className="diff-title-control-bar">
+          {titleBar && <div className="diff-title-control-title">{titleBar}</div>}
+          <div className="diff-controls">
+            <button className={`small ${treeOpen ? "primary" : ""}`} onClick={() => setTreeOpen(!treeOpen)}>
+              ☰ Files
             </button>
-            <button className={`small ${mode === "split" ? "primary" : ""}`} onClick={() => setMode("split")}>
-              Side-by-side
-            </button>
+            <div className="seg">
+              <button className={`small ${mode === "unified" ? "primary" : ""}`} onClick={() => setMode("unified")}>
+                Unified
+              </button>
+              <button className={`small ${mode === "split" ? "primary" : ""}`} onClick={() => setMode("split")}>
+                Side-by-side
+              </button>
+            </div>
+            <label className="switch subtle">
+              <input type="checkbox" checked={hideWs} onChange={(e) => setHideWs(e.target.checked)} />
+              Hide whitespace changes
+            </label>
+            {viewedEnabled && (
+              <span className="subtle">
+                {files.filter((f) => isViewedPath(keyOf(f))).length}/{files.length} viewed
+              </span>
+            )}
           </div>
-          <label className="switch subtle">
-            <input type="checkbox" checked={hideWs} onChange={(e) => setHideWs(e.target.checked)} />
-            Hide whitespace changes
-          </label>
-          {viewedEnabled && (
-            <span className="subtle">
-              {files.filter((f) => isViewedPath(keyOf(f))).length}/{files.length} viewed
-            </span>
+          {actionable > 0 && navVisible && (
+            <div className="comment-nav diff-action-nav">
+              <span className="comment-nav-count">{actionable} actionable</span>
+              <button title="Previous (k)" onClick={() => navToComment(-1)}>
+                ↑
+              </button>
+              <button title="Next (j)" onClick={() => navToComment(1)}>
+                ↓
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -370,6 +386,7 @@ export function DiffViewer({
           <FileTree
             files={files}
             activePath={activePath}
+            markers={fileMarkers}
             onClose={() => setTreeOpen(false)}
             onSelect={jumpToFile}
           />

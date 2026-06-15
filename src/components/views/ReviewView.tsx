@@ -193,6 +193,19 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   const anchors = [...threadAnchors, ...proposalAnchors];
 
   const consoleModes: ComposerMode[] = ["review", "ask"];
+  const diffTitle = (fileCount: number | null) => (
+    <>
+      <span className="pr-diff-eyebrow">Diff</span>
+      {fileCount !== null && (
+        <span className="pr-diff-count">
+          {fileCount} file{fileCount === 1 ? "" : "s"}
+        </span>
+      )}
+      <span className="pr-diff-stat">
+        <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
+      </span>
+    </>
+  );
 
   return (
     <div className="workspace">
@@ -258,22 +271,12 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
 
         {/* ── the diff: the main "canvas" view below the hero ── */}
         <section className="pr-diff">
-          <div className="pr-diff-head">
-            <span className="pr-diff-eyebrow">Diff</span>
-            <span style={{ flex: 1 }} />
-            {files && (
-              <span className="pr-diff-count">
-                {files.length} file{files.length === 1 ? "" : "s"}
-              </span>
-            )}
-            <span className="pr-diff-stat">
-              <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
-            </span>
-          </div>
+          {!files && <div className="pr-diff-head">{diffTitle(null)}</div>}
           {!files && !error && <LoadingField label="loading diff…" />}
           {files && (
             <DiffViewer
               files={files}
+              titleBar={diffTitle(files.length)}
               anchors={anchors}
               selectable
               remoteViewed={

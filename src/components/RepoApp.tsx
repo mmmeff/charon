@@ -249,6 +249,12 @@ export function RepoApp({ repo }: { repo: string }) {
         switchTo(tab === "activity" ? lastNonActivityTab.current : "activity");
         return;
       }
+      if (action === "new_draft") {
+        e.preventDefault();
+        setTab("drafts");
+        ui.requestNewDraft();
+        return;
+      }
 
       const tabAction = (Object.entries(TAB_SHORTCUTS) as [Tab, ShortcutActionId][]).find(
         ([, id]) => id === action

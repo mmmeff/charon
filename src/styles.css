@@ -395,6 +395,31 @@ h3, h4 {
 /* ---- diff viewer ---- */
 .diff-area { display: flex; gap: 12px; align-items: flex-start; }
 .diff-list { flex: 1; min-width: 0; }
+.diff-title-control-bar {
+  position: sticky; top: 8px; z-index: 25;
+  min-height: var(--prc-diffbar-h, 44px);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 12px; padding: 6px 8px 6px 12px;
+  background: var(--bg-raised);
+  background-image: var(--dotgrid);
+  background-size: 7px 7px;
+  border: 1px solid var(--border);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+}
+.diff-title-control-title {
+  flex: 1 1 190px; min-width: 0;
+  display: flex; align-items: baseline; gap: 12px;
+}
+.diff-controls {
+  flex: 0 1 auto;
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+}
+.diff-controls .switch { white-space: nowrap; }
+.diff-action-nav {
+  flex: none;
+  margin-left: 2px;
+  box-shadow: none;
+}
 .diff-file { border: 1px solid var(--border); border-radius: 0; margin-bottom: 14px; overflow: hidden; }
 .diff-file-header {
   background: var(--bg-raised);
@@ -737,7 +762,8 @@ tr.flash > td { animation: line-flash 1.8s ease; }
 /* ---- docked file tree ---- */
 .filetree {
   width: 248px; flex-shrink: 0;
-  position: sticky; top: 8px; max-height: calc(100vh - 120px);
+  position: sticky; top: calc(var(--prc-diffbar-h, 44px) + 16px);
+  max-height: calc(100vh - var(--prc-diffbar-h, 44px) - 80px);
   background: var(--bg-raised); border: 1px solid var(--border);
   border-radius: 0; display: flex; flex-direction: column;
   animation: tree-in 0.16s ease;
@@ -756,11 +782,38 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
   font-size: 11.5px; font-family: var(--mono); padding: 2px 8px;
   cursor: pointer; white-space: nowrap; border-left: 2px solid transparent;
+  position: relative; min-height: 20px;
 }
 .ft-file:hover { background: #1d1b14; }
 .ft-file.active { background: var(--orange-bg); color: var(--orange); border-left-color: var(--orange); }
 .ft-name { overflow: hidden; text-overflow: ellipsis; }
 .ft-counts { font-size: 10px; flex-shrink: 0; }
+.ft-markers {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  pointer-events: auto;
+}
+.ft-marker {
+  width: 12px; height: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
+}
+.ft-marker svg { width: 8px; height: 8px; }
+.ft-markers.dual .ft-marker { width: 11px; height: 9px; }
+.ft-markers.dual .ft-marker svg { width: 7px; height: 7px; }
+.ft-marker.comment {
+  color: var(--steel);
+  background: var(--steel-bg);
+  border-color: rgba(143, 180, 204, 0.65);
+}
+.ft-marker.feedback {
+  color: var(--orange);
+  background: var(--orange-bg);
+  border-color: rgba(255, 79, 0, 0.65);
+  border-style: dashed;
+}
 
 /* ---- proposals: spec-sheet cards with bracket corners ---- */
 .proposal {
@@ -807,18 +860,78 @@ tr.flash > td { animation: line-flash 1.8s ease; }
 }
 .new-draft-composer textarea { min-height: 180px; }
 .draft-create-row {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
+  min-height: 46px;
+  margin: 0 0 10px;
+  padding: 11px 13px;
+  background: var(--orange);
+  border: 1px solid var(--orange);
+  color: #120d09;
+  cursor: pointer;
   text-align: left;
   text-transform: none;
   letter-spacing: 0;
-  color: var(--fg);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset;
 }
-.draft-create-row h4 {
-  color: var(--orange);
+.draft-create-main {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 9px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 800;
 }
-.draft-create-row:hover h4 {
-  color: var(--fg);
+.draft-create-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(18, 13, 9, 0.28);
+  background: rgba(18, 13, 9, 0.1);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1;
+}
+.draft-create-hint {
+  flex: none;
+  color: rgba(18, 13, 9, 0.72);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+button.draft-create-row:hover:not(:disabled),
+button.draft-create-row:focus-visible,
+button.draft-create-row.active {
+  background: #ff681f;
+  border-color: #ff7f3f;
+  color: #120d09;
+  text-decoration: none;
+  box-shadow:
+    0 0 0 1px rgba(255, 127, 63, 0.22),
+    0 1px 0 rgba(255, 255, 255, 0.2) inset;
+}
+button.draft-create-row:hover:not(:disabled) .draft-create-hint,
+button.draft-create-row:focus-visible .draft-create-hint,
+button.draft-create-row.active .draft-create-hint {
+  color: rgba(18, 13, 9, 0.72);
+}
+button.draft-create-row:hover:not(:disabled) .draft-create-icon,
+button.draft-create-row:focus-visible .draft-create-icon,
+button.draft-create-row.active .draft-create-icon {
+  border-color: rgba(18, 13, 9, 0.28);
+  background: rgba(18, 13, 9, 0.1);
+}
+button.draft-create-row:focus-visible {
+  outline: 2px solid rgba(255, 127, 63, 0.35);
+  outline-offset: 2px;
 }
 .pending-draft-card {
   border-color: rgba(143, 180, 204, 0.34);
@@ -1365,7 +1478,7 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
    header well on the inset ground (matching the topstrip/rail chrome), so the
    raised cards inside pop; the diff below sits on plain ground as content.
    A condensed identity rail pins to the top once the hero scrolls away. */
-.ws-main.pr-shell { padding: 0 0 60px; --prc-rail-h: 38px; }
+.ws-main.pr-shell { padding: 0 0 60px; --prc-rail-h: 38px; --prc-diffbar-h: 44px; }
 
 /* condensed identity rail: collapsed to zero height until the hero leaves */
 .pr-railbar {
@@ -1452,13 +1565,14 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
 .pr-diff-stat .add { color: var(--acid); }
 .pr-diff-stat .del { color: var(--red); }
 
-/* keep the diff's viewport-sticky chrome clear of the pinned rail. NOTE: the
-   per-file headers are intentionally excluded — their sticky context is their
-   own `overflow:hidden` .diff-file (they don't viewport-pin), so a top offset
-   would just shove each header down and expose a black band above it. They
-   scroll up under the opaque rail instead. */
-.pr-shell .comment-nav-wrap { top: calc(var(--prc-rail-h) + 8px); }
-.pr-shell .filetree { top: calc(var(--prc-rail-h) + 8px); max-height: calc(100vh - 150px); }
+/* keep the diff's viewport-sticky chrome clear of the pinned rail. The per-file
+   headers are intentionally excluded: their sticky context is each clipped
+   .diff-file, so a viewport offset would expose a black band above them. */
+.pr-shell .diff-title-control-bar { top: calc(var(--prc-rail-h) + 8px); }
+.pr-shell .filetree {
+  top: calc(var(--prc-rail-h) + var(--prc-diffbar-h) + 16px);
+  max-height: calc(100vh - var(--prc-rail-h) - var(--prc-diffbar-h) - 68px);
+}
 .ws-activity {
   width: 320px; flex-shrink: 0; position: relative;
   display: flex; flex-direction: column;

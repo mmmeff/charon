@@ -30,6 +30,12 @@ export const IconReview = () => (
   </svg>
 );
 
+export const IconComment = () => (
+  <svg {...base}>
+    <path d="M2 2.5h12v8.5H9.2L6 14v-3H2z" />
+  </svg>
+);
+
 export const IconActivity = () => (
   <svg {...base}>
     <path d="M1 9h3l2-5.5 3.5 9L11.5 7l1 2H15" />

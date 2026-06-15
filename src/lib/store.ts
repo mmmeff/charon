@@ -454,6 +454,10 @@ interface UiState {
   /** cross-component tab switch request (RepoApp applies it) */
   requestedTab: { tab: string; nonce: number } | null;
   requestTab(tab: string): void;
+  /** request opening the new draft composer in Drafts */
+  requestedNewDraft: { nonce: number } | null;
+  requestNewDraft(): void;
+  clearNewDraftRequest(): void;
   /** browser-style location history: (tab, focused PR) pairs */
   navHistory: { tab: string; pr: number | null }[];
   navIndex: number;
@@ -499,6 +503,13 @@ export const useUiStore = create<UiState>((set, get) => ({
   requestedTab: null,
   requestTab(tab) {
     set({ requestedTab: { tab, nonce: Date.now() } });
+  },
+  requestedNewDraft: null,
+  requestNewDraft() {
+    set({ requestedNewDraft: { nonce: Date.now() } });
+  },
+  clearNewDraftRequest() {
+    set({ requestedNewDraft: null });
   },
   navHistory: [],
   navIndex: -1,

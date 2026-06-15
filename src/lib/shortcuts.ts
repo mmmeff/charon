@@ -87,6 +87,13 @@ export const SHORTCUT_CATALOG: ShortcutDef[] = [
     defaultBinding: { primary: true, key: "5" },
   },
   {
+    id: "new_draft",
+    group: "Actions",
+    label: "New draft",
+    description: "Open the new draft PR composer.",
+    defaultBinding: { primary: true, key: "n" },
+  },
+  {
     id: "nav_back",
     group: "Navigation",
     label: "Back",

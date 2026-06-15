@@ -107,6 +107,19 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   // drafts lead with Review (the pre-flight ritual); open PRs lead with Ask
   const consoleModes: ComposerMode[] =
     variant === "draft" ? ["review", "edit", "ask"] : ["ask", "edit", "review"];
+  const diffTitle = (fileCount: number | null) => (
+    <>
+      <span className="pr-diff-eyebrow">Diff</span>
+      {fileCount !== null && (
+        <span className="pr-diff-count">
+          {fileCount} file{fileCount === 1 ? "" : "s"}
+        </span>
+      )}
+      <span className="pr-diff-stat">
+        <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
+      </span>
+    </>
+  );
 
   return (
     <div className="workspace">
@@ -171,23 +184,13 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
         {/* ── the diff: the main "canvas" view below the hero ── */}
         <section className="pr-diff">
-          <div className="pr-diff-head">
-            <span className="pr-diff-eyebrow">Diff</span>
-            <span style={{ flex: 1 }} />
-            {files && (
-              <span className="pr-diff-count">
-                {files.length} file{files.length === 1 ? "" : "s"}
-              </span>
-            )}
-            <span className="pr-diff-stat">
-              <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
-            </span>
-          </div>
+          {!files && <div className="pr-diff-head">{diffTitle(null)}</div>}
           {diffErr && <p style={{ color: "var(--red)" }}>{diffErr}</p>}
           {!files && !diffErr && <LoadingField label="loading diff…" />}
           {files && (
             <DiffViewer
               files={files}
+              titleBar={diffTitle(files.length)}
               selectable
               anchors={anchors}
               viewedKey={variant === "draft" ? `prc-viewed-${ctx.repo}-${pr.number}` : undefined}

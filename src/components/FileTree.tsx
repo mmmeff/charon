@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { FileDiff } from "../types";
+import { IconAgent, IconComment } from "./icons";
 import { useResizablePanel } from "./useResizablePanel";
 
 interface TreeNode {
@@ -8,6 +9,13 @@ interface TreeNode {
   file?: FileDiff;
   children: TreeNode[];
 }
+
+export interface FileTreeMarkerState {
+  comments: number;
+  feedback: number;
+}
+
+export type FileTreeMarkers = Record<string, FileTreeMarkerState>;
 
 function buildTree(files: FileDiff[]): TreeNode[] {
   const root: TreeNode = { name: "", path: "", children: [] };
@@ -55,11 +63,13 @@ const counts = (f: FileDiff) => {
 export function FileTree({
   files,
   activePath,
+  markers = {},
   onClose,
   onSelect,
 }: {
   files: FileDiff[];
   activePath: string | null;
+  markers?: FileTreeMarkers;
   onClose: () => void;
   onSelect: (path: string) => void;
 }) {
@@ -70,6 +80,19 @@ export function FileTree({
     if (node.file) {
       const { adds, dels } = counts(node.file);
       const active = activePath === node.path;
+      const marker = markers[node.path];
+      const markerTitle = marker
+        ? [
+            marker.comments
+              ? `${marker.comments} GitHub comment${marker.comments === 1 ? "" : "s"}`
+              : "",
+            marker.feedback
+              ? `${marker.feedback} local review feedback item${marker.feedback === 1 ? "" : "s"}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : "";
       return (
         <div
           key={node.path}
@@ -78,6 +101,25 @@ export function FileTree({
           title={node.path}
           onClick={() => onSelect(node.path)}
         >
+          {markerTitle && (
+            <span
+              className={`ft-markers ${marker.comments && marker.feedback ? "dual" : ""}`}
+              style={{ left: 10 + depth * 14 - 16 }}
+              title={markerTitle}
+              aria-label={markerTitle}
+            >
+              {marker.comments > 0 && (
+                <span className="ft-marker comment" aria-hidden="true">
+                  <IconComment />
+                </span>
+              )}
+              {marker.feedback > 0 && (
+                <span className="ft-marker feedback" aria-hidden="true">
+                  <IconAgent />
+                </span>
+              )}
+            </span>
+          )}
           <span className="ft-name">{node.name}</span>
           <span className="ft-counts">
             {node.file.isDeleted ? (
