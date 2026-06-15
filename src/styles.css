@@ -806,6 +806,20 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   text-transform: uppercase;
 }
 .new-draft-composer textarea { min-height: 180px; }
+.draft-create-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg);
+}
+.draft-create-row h4 {
+  color: var(--orange);
+}
+.draft-create-row:hover h4 {
+  color: var(--fg);
+}
 .pending-draft-card {
   border-color: rgba(143, 180, 204, 0.34);
   border-left-color: var(--steel);

@@ -68,11 +68,18 @@ export function DraftsView() {
           </span>
           <div className="row" style={{ gap: 6 }}>
             {drafts.length > 0 && <SortPicker value={sort} onChange={setSort} />}
-            <button className={`small ${creating ? "primary" : ""}`} onClick={startCreating}>
-              + Draft
-            </button>
           </div>
         </div>
+        <button
+          type="button"
+          className={`card selectable draft-create-row ${creating ? "selected" : ""}`}
+          onClick={startCreating}
+        >
+          <h4>+ Draft</h4>
+          <div className="meta">
+            <span>Start a new prompt-to-PR draft</span>
+          </div>
+        </button>
         {drafts.length === 0 && pendingDraftRuns.length === 0 && <p className="subtle">No draft PRs.</p>}
         {pendingDraftRuns.map((run) => (
           <PendingDraftCard
