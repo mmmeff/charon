@@ -107,6 +107,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   // drafts lead with Review (the pre-flight ritual); open PRs lead with Ask
   const consoleModes: ComposerMode[] =
     variant === "draft" ? ["review", "edit", "ask"] : ["ask", "edit", "review"];
+  const selectedRangeModes: ComposerMode[] =
+    pr.author === ctx.gh.login ? ["comment", "edit", "review", "ask"] : ["comment", "review", "ask"];
   const diffTitle = (fileCount: number | null) => (
     <>
       <span className="pr-diff-eyebrow">Diff</span>
@@ -197,7 +199,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
               renderCommentForm={(sel, close) => (
                 <Composer
                   pr={pr}
-                  modes={["comment", "review", "ask"]}
+                  modes={selectedRangeModes}
                   reviewKind="self"
                   compact
                   selection={sel}

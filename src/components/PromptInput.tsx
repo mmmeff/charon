@@ -123,7 +123,7 @@ export function PromptInput({
   return (
     <div className="autocomplete">
       {as === "textarea" ? (
-        <textarea ref={ref as React.Ref<HTMLTextAreaElement>} rows={rows} {...shared} />
+        <textarea ref={ref as React.Ref<HTMLTextAreaElement>} rows={rows} wrap="soft" {...shared} />
       ) : (
         <input ref={ref as React.Ref<HTMLInputElement>} type="text" {...shared} />
       )}

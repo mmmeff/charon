@@ -89,15 +89,20 @@ export function NewDraftWorkspace({
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit) void submit();
                 }}
               />
-              <div className="row" style={{ marginTop: 8 }}>
-                <button className="primary" disabled={!canSubmit} onClick={() => void submit()}>
-                  {busy ? <Spinner /> : null}{" "}
-                  Create draft
-                </button>
-                <ModelPicker value={model} onChange={setModel} flowKind="draft_create" />
-                <ReasoningPicker flowKind="draft_create" />
-                {branchErr && <span style={{ color: "var(--red)" }}>{branchErr}</span>}
-                {error && <span style={{ color: "var(--red)" }}>{error}</span>}
+              <div className="composer-footer">
+                <div className="composer-controls">
+                  <ModelPicker value={model} onChange={setModel} flowKind="draft_create" />
+                  <ReasoningPicker flowKind="draft_create" />
+                </div>
+                <div className="composer-actions">
+                  <button className="primary composer-submit" disabled={!canSubmit} onClick={() => void submit()}>
+                    {busy ? <Spinner /> : null}
+                    <span>Create draft</span>
+                  </button>
+                </div>
+                {(branchErr || error) && (
+                  <div className="composer-error">{branchErr || error}</div>
+                )}
               </div>
             </div>
           </Section>

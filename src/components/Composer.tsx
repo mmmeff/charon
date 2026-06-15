@@ -144,7 +144,7 @@ export function Composer({
   };
 
   return (
-    <div className={compact ? "" : "card composer"}>
+    <div className={compact ? "compact-composer" : "card composer"}>
       {selection && (
         <div className="subtle" style={{ marginBottom: 6 }}>
           {selection.path}: lines {selection.startLine}
@@ -185,24 +185,29 @@ export function Composer({
               if (e.key === "Escape" && onClose) onClose();
             }}
           />
-          <div className="row" style={{ marginTop: 8 }}>
-            <button className="primary" disabled={busy || !canSubmit} onClick={() => void submit()}>
-              {busy ? <Spinner /> : null} {meta.submit}
-            </button>
-            {mode !== "comment" && (
-              <>
-                <ModelPicker
-                  value={model}
-                  onChange={setModel}
-                  flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
-                />
-                <ReasoningPicker
-                  flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
-                />
-              </>
-            )}
-            {onClose && <button onClick={onClose}>Cancel</button>}
-            {error && <span style={{ color: "var(--red)" }}>{error}</span>}
+          <div className="composer-footer">
+            <div className="composer-controls">
+              {mode !== "comment" && (
+                <>
+                  <ModelPicker
+                    value={model}
+                    onChange={setModel}
+                    flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+                  />
+                  <ReasoningPicker
+                    flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+                  />
+                </>
+              )}
+            </div>
+            <div className="composer-actions">
+              {onClose && <button onClick={onClose}>Cancel</button>}
+              <button className="primary composer-submit" disabled={busy || !canSubmit} onClick={() => void submit()}>
+                {busy ? <Spinner /> : null}
+                <span>{meta.submit}</span>
+              </button>
+            </div>
+            {error && <div className="composer-error">{error}</div>}
           </div>
         </>
       )}
