@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { killAgent, steerAgent } from "../lib/agents";
 import { navigateToPr } from "../lib/nav";
-import { useGlobalConfig } from "../lib/store";
+import { useGlobalConfig, useUiStore } from "../lib/store";
 import type { AgentEntry, AgentLine, AgentPlanEntry, AgentRun, AgentToolCall, ToolKind } from "../types";
 import { timeAgo, useNow } from "../lib/ui";
 import { Badge, LoadingField, Spinner } from "./common";
@@ -142,6 +142,7 @@ export function AgentCard({
   const [steer, setSteer] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const githubUrl = useGlobalConfig((s) => s.config?.githubUrl ?? "https://github.com");
+  const openCommit = useUiStore((s) => s.openCommit);
   const prUrl = `${githubUrl}/${run.repo}/pull/${run.prNumber}`;
   const active = run.status === "running" || run.status === "starting";
   useNow(active ? 1000 : 0); // tick the elapsed counter while running
@@ -198,6 +199,18 @@ export function AgentCard({
           >
             ↗
           </a>
+          {run.commitSha && (
+            <button
+              className="link agent-commit-link"
+              title="View the diff this agent pushed"
+              onClick={(e) => {
+                e.stopPropagation();
+                openCommit(run.repo, run.commitSha!);
+              }}
+            >
+              ⧉ {run.commitSha.slice(0, 7)}
+            </button>
+          )}
         </div>
         <div className="row">
           <span className="subtle">

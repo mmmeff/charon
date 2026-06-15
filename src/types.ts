@@ -265,6 +265,23 @@ export interface TimelineEventInfo {
   sub?: string;
   color: "gray" | "green" | "red" | "yellow" | "blue" | "purple";
   url?: string;
+  /** full commit sha for push/merge events — opens the in-app commit diff */
+  sha?: string;
+}
+
+/** A single commit's metadata, for the commit-diff modal header. */
+export interface CommitInfo {
+  sha: string;
+  message: string;
+  /** GitHub login when known, else the raw git author name */
+  author: string;
+  /** authored timestamp (ms) */
+  date: number;
+  additions: number;
+  deletions: number;
+  filesChanged: number;
+  /** github.com commit page */
+  url: string;
 }
 
 /** Snapshot persisted between polls; diffing two snapshots yields events. */
@@ -366,6 +383,9 @@ export interface AgentRun {
   resultText: string;
   /** Proposal ids produced by this run */
   proposalIds: string[];
+  /** the commit this run pushed (worktree HEAD when it advanced past the
+   *  branch tip the run started from) — links straight to its diff */
+  commitSha?: string;
   error?: string;
 }
 

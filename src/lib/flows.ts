@@ -15,8 +15,14 @@ import { lineInDiff, lineTextAt, nearestDiffLine, parseUnifiedDiff } from "./dif
 import type { GitHubClient } from "./github";
 import { applySkills } from "./skills";
 import { interpolate, prVars, truncate, uid } from "./template";
-import { useRepoStore } from "./store";
-import { createReviewWorktree, createWorktree, releaseWorktree, type Worktree } from "./worktree";
+import { useAgentStore, useRepoStore } from "./store";
+import {
+  createReviewWorktree,
+  createWorktree,
+  releaseWorktree,
+  worktreeHead,
+  type Worktree,
+} from "./worktree";
 
 /**
  * Best-effort full-project checkout for review agents. Reviews must not fail
@@ -151,6 +157,23 @@ ${
 No PR comment is wanted for this run. Do NOT emit a proposal block; end with a short summary
 of what you did for the activity log.`
 }`;
+}
+
+/**
+ * Record the commit an agent pushed onto a run, so the UI can link straight to
+ * its diff. The worktree HEAD advances only when the agent actually committed;
+ * if it didn't (no change needed) HEAD still equals the tip it started from and
+ * we record nothing. Best-effort — a failure here must never sink the run.
+ */
+async function recordPushedCommit(runId: string, wt: Worktree): Promise<void> {
+  try {
+    const head = await worktreeHead(wt);
+    if (head && head !== wt.baseSha) {
+      useAgentStore.getState().update(runId, { commitSha: head });
+    }
+  } catch (e) {
+    console.warn("could not record pushed commit", e);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +379,7 @@ export async function runFixFlow(
       cwd: wt.path,
       onDone: async (run) => {
         try {
+          await recordPushedCommit(run.id, wt);
           if (propose) {
             await createProposalFromFixOutput(
               ctx,
@@ -435,7 +459,7 @@ ${selection.snippet}
 Every comment must be about code in (or directly broken by) this region; anchor comments to lines within it.\n`
     : "";
   const wt = await tryReviewWorktree(ctx, pr);
-  const base = `You are PR Copilot's review agent. Review PR #${pr.number} ("${pr.title}") by ${pr.author} in ${ctx.repo}.
+  const base = `You are Charon's code's review agent. Review PR #${pr.number} ("${pr.title}") by ${pr.author} in ${ctx.repo}.
 ${reviewWorkspaceBlock(wt, pr)}
 TASK:
 ${task}
@@ -508,7 +532,7 @@ ${selection.snippet}
 Every finding must be about code in (or directly broken by) this region; anchor findings to lines within it.\n`
     : "";
   const wt = await tryReviewWorktree(ctx, pr);
-  const base = `You are PR Copilot's review agent. The user wants a critical self-review of THEIR OWN PR #${pr.number}
+  const base = `You are Charon's code's review agent. The user wants a critical self-review of THEIR OWN PR #${pr.number}
 ("${pr.title}") in ${ctx.repo} before others see it. Find real problems they should fix.
 ${reviewWorkspaceBlock(wt, pr)}
 TASK:
@@ -630,6 +654,7 @@ ${findings.map(findingInstruction).join("\n\n")}${
         cwd: wt.path,
         onDone: async (run) => {
           try {
+            await recordPushedCommit(run.id, wt);
             const s = useRepoStore.getState();
             for (const f of findings) await s.updateFinding(f.key, { status: "applied" });
           } finally {
@@ -833,6 +858,7 @@ ${PROPOSAL_CONTRACT}`;
       cwd: wt.path,
       onDone: async (run) => {
         try {
+          await recordPushedCommit(run.id, wt);
           await createProposalFromFixOutput(ctx, pr, run.id, run.resultText, "draft edit summary");
         } finally {
           await releaseWorktree(wt);

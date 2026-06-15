@@ -12,6 +12,9 @@ export interface Worktree {
   clonePath: string;
   /** persistent worktrees are reused across runs (deps survive); temp ones are removed */
   persistent: boolean;
+  /** HEAD sha the worktree started from — compare against the post-run HEAD to
+   *  tell whether the agent actually produced a commit (and which one). */
+  baseSha: string;
 }
 
 /** cwd of every agent currently executing — used to avoid touching busy worktrees */
@@ -162,7 +165,8 @@ export async function createWorktree(
         await git(["worktree", "add", "-B", localBranch, path, `origin/${pr.headRef}`], clonePath);
       }
       leases.add(path);
-      return { path, localBranch, prBranch: pr.headRef, clonePath, persistent: true };
+      const baseSha = (await git(["rev-parse", "HEAD"], path)).trim();
+      return { path, localBranch, prBranch: pr.headRef, clonePath, persistent: true, baseSha };
     }
 
     // every persistent slot is occupied — fall back to a throwaway
@@ -170,7 +174,8 @@ export async function createWorktree(
     const tmpPath = `${branchWorktreePath(dataDir, repo, pr.headRef)}-tmp-${uid()}`;
     await git(["worktree", "add", "-b", tmpBranch, tmpPath, `origin/${pr.headRef}`], clonePath);
     leases.add(tmpPath);
-    return { path: tmpPath, localBranch: tmpBranch, prBranch: pr.headRef, clonePath, persistent: false };
+    const baseSha = (await git(["rev-parse", "HEAD"], tmpPath)).trim();
+    return { path: tmpPath, localBranch: tmpBranch, prBranch: pr.headRef, clonePath, persistent: false, baseSha };
   });
 }
 
@@ -197,7 +202,7 @@ export async function createReviewWorktree(
     const tmpPath = `${dataDir}/worktrees/${sanitize(repo)}/pr-${pr.number}-${uid()}`;
     await git(["worktree", "add", "--detach", tmpPath, pr.headSha], clonePath);
     leases.add(tmpPath);
-    return { path: tmpPath, localBranch: "", prBranch: pr.headRef, clonePath, persistent: false };
+    return { path: tmpPath, localBranch: "", prBranch: pr.headRef, clonePath, persistent: false, baseSha: pr.headSha };
   });
 }
 
@@ -244,12 +249,12 @@ export async function pruneBranchWorktree(repo: string, branch: string): Promise
   }
 }
 
-/** True when the worktree produced commits not yet on the PR branch tip. */
-export async function worktreeHasNewCommits(wt: Worktree, baseSha: string): Promise<boolean> {
+/** The worktree's current HEAD sha, or null if it can't be read. Compare to
+ *  `wt.baseSha` to tell whether the agent committed anything this run. */
+export async function worktreeHead(wt: Worktree): Promise<string | null> {
   try {
-    const head = (await git(["rev-parse", "HEAD"], wt.path)).trim();
-    return head !== baseSha;
+    return (await git(["rev-parse", "HEAD"], wt.path)).trim();
   } catch {
-    return false;
+    return null;
   }
 }

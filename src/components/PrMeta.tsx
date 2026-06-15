@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { splitCommitMention } from "../lib/commit";
 import { usePrData } from "../lib/events";
 import { runAddressComment, runDescriptionDraft, runTitleDraft } from "../lib/flows";
 import type { ReviewThreadInfo } from "../lib/github";
@@ -523,7 +524,9 @@ type ActivityEntry =
  * and post PR comments directly (user-authored — no approval gate needed).
  */
 export function PrActivityPanel({ pr }: { pr: PrSummary }) {
+  const { ctx } = useFlow();
   const open = useUiStore((s) => s.activityPanelOpen);
+  const openCommit = useUiStore((s) => s.openCommit);
   const comments = usePrData((s) => s.comments[pr.number] ?? []);
   const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
   const timeline = usePrData((s) => s.timeline[pr.number] ?? []);
@@ -587,7 +590,8 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
                 <span className="subtle">{age(ev.at)}</span>
               </div>
               <div className="act-sentence">
-                <strong>{ev.actor}</strong> {ev.text}
+                <strong>{ev.actor}</strong>{" "}
+                <TimelineText text={ev.text} sha={ev.sha} onOpenCommit={(s) => openCommit(ctx.repo, s)} />
               </div>
               {ev.sub &&
                 (ev.url ? (
@@ -839,6 +843,37 @@ const firstLine = (s: string) => {
   const l = (s ?? "").split("\n").find((x) => x.trim()) ?? "";
   return l.length > 72 ? l.slice(0, 72) + "…" : l;
 };
+
+/**
+ * A timeline sentence with its commit hash (when present) turned into a button
+ * that opens the in-app commit diff. The short sha is embedded verbatim in the
+ * event text (e.g. "pushed abc1234"), so we wrap that exact substring.
+ */
+function TimelineText({
+  text,
+  sha,
+  onOpenCommit,
+}: {
+  text: string;
+  sha?: string;
+  onOpenCommit: (sha: string) => void;
+}) {
+  const parts = splitCommitMention(text, sha);
+  if (!parts) return <>{text}</>;
+  return (
+    <>
+      {parts.before}
+      <button
+        className="link commit-inline-link"
+        title="View this commit's diff"
+        onClick={() => onOpenCommit(sha!)}
+      >
+        {parts.short}
+      </button>
+      {parts.after}
+    </>
+  );
+}
 
 /** Two-line activity header: type + age on top, author beneath. */
 function ActHeader({

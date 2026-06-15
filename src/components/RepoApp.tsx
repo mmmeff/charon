@@ -23,6 +23,7 @@ import {
   IconSidePanel,
 } from "./icons";
 import { AsciiField } from "./AsciiField";
+import { CommitDiffModal } from "./CommitDiffModal";
 import { ActivityView } from "./views/ActivityView";
 import { BabysitView } from "./views/BabysitView";
 import { DraftsView } from "./views/DraftsView";
@@ -326,6 +327,7 @@ export function RepoApp({ repo }: { repo: string }) {
           {tab === "settings" && <SettingsView />}
         </div>
       </div>
+      <CommitDiffModal />
     </FlowCtx.Provider>
   );
 }

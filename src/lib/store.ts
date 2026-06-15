@@ -351,6 +351,10 @@ interface UiState {
   /** right-hand GitHub activity panel visibility (persisted; topstrip toggle) */
   activityPanelOpen: boolean;
   setActivityPanelOpen(v: boolean): void;
+  /** commit-diff modal: the commit whose diff is being viewed, or null */
+  commitView: { repo: string; sha: string } | null;
+  openCommit(repo: string, sha: string): void;
+  closeCommit(): void;
   /** cross-component tab switch request (RepoApp applies it) */
   requestedTab: { tab: string; nonce: number } | null;
   requestTab(tab: string): void;
@@ -383,6 +387,13 @@ export const useUiStore = create<UiState>((set, get) => ({
   setActivityPanelOpen(v) {
     localStorage.setItem("prc-activity-open", v ? "on" : "off");
     set({ activityPanelOpen: v });
+  },
+  commitView: null,
+  openCommit(repo, sha) {
+    set({ commitView: { repo, sha } });
+  },
+  closeCommit() {
+    set({ commitView: null });
   },
   requestedTab: null,
   requestTab(tab) {

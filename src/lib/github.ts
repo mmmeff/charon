@@ -2,6 +2,7 @@ import { native } from "./tauri";
 import type {
   CheckInfo,
   CommentInfo,
+  CommitInfo,
   GlobalConfig,
   PrSummary,
   ProposedInlineComment,
@@ -306,6 +307,31 @@ export class GitHubClient {
     return resp.body;
   }
 
+  // -- Commits ---------------------------------------------------------------
+
+  /** Unified diff for a single commit (its patch against its first parent). */
+  async getCommitDiff(repo: string, sha: string): Promise<string> {
+    const resp = await this.raw("GET", `/repos/${repo}/commits/${sha}`, {
+      accept: "application/vnd.github.v3.diff",
+    });
+    return resp.body;
+  }
+
+  /** Metadata for a single commit (header line for the commit-diff modal). */
+  async getCommit(repo: string, sha: string): Promise<CommitInfo> {
+    const c = await this.json<any>("GET", `/repos/${repo}/commits/${sha}`);
+    return {
+      sha: c.sha ?? sha,
+      message: c.commit?.message ?? "",
+      author: c.author?.login || c.commit?.author?.name || "",
+      date: Date.parse(c.commit?.author?.date ?? "") || 0,
+      additions: c.stats?.additions ?? 0,
+      deletions: c.stats?.deletions ?? 0,
+      filesChanged: Array.isArray(c.files) ? c.files.length : 0,
+      url: c.html_url ?? "",
+    };
+  }
+
   // -- Checks ----------------------------------------------------------------
 
   async listChecks(repo: string, ref: string): Promise<CheckInfo[]> {
@@ -478,7 +504,8 @@ export class GitHubClient {
         color: TimelineEventInfo["color"],
         text: string,
         sub?: string,
-        url?: string
+        url?: string,
+        sha?: string
       ) =>
         out.push({
           id: `${e.event}-${e.id ?? e.sha ?? at}-${out.length}`,
@@ -489,14 +516,22 @@ export class GitHubClient {
           sub,
           color,
           url,
+          sha,
         });
       const reviewee = e.requested_reviewer?.login ?? e.requested_team?.name ?? "someone";
       switch (e.event) {
         case "committed":
-          push("pushed", "blue", `pushed ${(e.sha ?? "").slice(0, 7)}`, firstLine(e.message), e.html_url);
+          push("pushed", "blue", `pushed ${(e.sha ?? "").slice(0, 7)}`, firstLine(e.message), e.html_url, e.sha);
           break;
         case "merged":
-          push("merged", "purple", `merged this PR${e.commit_id ? ` as ${e.commit_id.slice(0, 7)}` : ""}`);
+          push(
+            "merged",
+            "purple",
+            `merged this PR${e.commit_id ? ` as ${e.commit_id.slice(0, 7)}` : ""}`,
+            undefined,
+            undefined,
+            e.commit_id
+          );
           break;
         case "closed":
           push("closed", "red", "closed this PR");
