@@ -118,6 +118,7 @@ export function isTauri(): boolean {
 }
 
 export function isLocalDevelopment(): boolean {
-  const host = window.location.hostname;
-  return import.meta.env.DEV || host === "localhost" || host === "127.0.0.1" || host === "::1";
+  // Packaged Tauri builds may use localhost-like webview origins. Only Vite's
+  // dev-mode flag reliably identifies `pnpm run tauri dev`.
+  return import.meta.env.DEV;
 }
