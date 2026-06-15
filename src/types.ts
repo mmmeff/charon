@@ -454,6 +454,8 @@ export interface AgentRun {
   steerable: boolean;
   /** overrides the lifecycle notification category (e.g. CI triage → "ci_analysis") */
   notifyCategory?: NotificationCategory;
+  /** Background/internal runs stay out of the general agent activity UI and lifecycle notifications. */
+  hiddenFromActivity?: boolean;
   /** Persisted recovery metadata for new draft PR creation runs. */
   draftCreate?: DraftCreateRunState;
   /** legacy raw lines — only on runs persisted before the ACP migration */

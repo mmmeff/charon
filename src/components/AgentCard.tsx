@@ -160,11 +160,14 @@ export function AgentCard({
   run,
   defaultOpen = false,
   embedded = false,
+  streamContext,
 }: {
   run: AgentRun;
   defaultOpen?: boolean;
   /** rendered inside another card (e.g. the composer) — no outer chrome */
   embedded?: boolean;
+  /** layout variant for streams embedded in constrained contexts */
+  streamContext?: "inline-comment";
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -198,8 +201,16 @@ export function AgentCard({
     setSteer("");
   };
 
+  const frameClass = [
+    embedded ? "agent-embedded" : "card",
+    !embedded && active ? "agent-running" : "",
+    streamContext === "inline-comment" ? "agent-stream-inline-comment" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={embedded ? "agent-embedded" : `card ${active ? "agent-running" : ""}`}>
+    <div className={frameClass}>
       <div
         className="row between agent-head"
         onClick={() => setOpen(!open)}

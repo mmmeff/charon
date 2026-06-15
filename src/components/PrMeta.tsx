@@ -55,7 +55,7 @@ function AddressWithAgent({
           onClose={() => setOpen(false)}
         />
       )}
-      {run && <AgentCard run={run} embedded defaultOpen />}
+      {run && <AgentCard run={run} embedded defaultOpen streamContext="inline-comment" />}
     </>
   );
 }
