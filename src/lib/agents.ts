@@ -502,8 +502,11 @@ export async function refreshModels(
   // List models exactly as the harness reports them: native order, raw ids
   // (no sorting, no name massaging). The id is the only label — for Cursor it
   // carries the reasoning level in its brackets, which is the whole point.
-  const models = ["auto", ...probe.models.map((m) => m.modelId)];
-  const modelLabels: Record<string, string> = { auto: "Auto" };
+  // No synthetic "auto" entry — harnesses that have a "let me pick" option
+  // expose their own (Cursor's `default[]`), and "auto" remains the internal
+  // sentinel for "no model set, defer to the harness".
+  const models = probe.models.map((m) => m.modelId);
+  const modelLabels: Record<string, string> = {};
 
   // reasoning effort — a separate picker where the harness exposes it
   const reasoningOptions = (probe.reasoning?.options ?? []).map((o) => o.modelId);
@@ -521,7 +524,7 @@ export async function refreshModels(
     ? global.defaultModel
     : probe.currentId && models.includes(probe.currentId)
       ? probe.currentId
-      : models[1] ?? "auto";
+      : models[0] ?? "auto";
   const reasoningEffort = reasoningOptions.includes(global.reasoningEffort)
     ? global.reasoningEffort
     : probe.reasoning?.currentId && reasoningOptions.includes(probe.reasoning.currentId)

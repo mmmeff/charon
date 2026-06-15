@@ -102,15 +102,14 @@ function Onboarding({
       // actually exposes (best-effort: a failed probe keeps the "auto" seed)
       const cwd = await native.appDataDir();
       const probe = await probeHarness(h.command, h.args, cwd).catch(() => null);
-      let models = ["auto"];
-      let modelLabels: Record<string, string> = { auto: "Auto" };
+      let models: string[] = [];
+      let modelLabels: Record<string, string> = {};
       let reasoningOptions: string[] = [];
       let reasoningLabels: Record<string, string> = {};
       if (probe?.ok && probe.models.length) {
         // native order, raw ids — no sorting or name massaging (the id carries
-        // Cursor's reasoning level in its brackets)
-        models = ["auto", ...probe.models.map((m) => m.modelId)];
-        modelLabels = { auto: "Auto" };
+        // Cursor's reasoning level in its brackets), and no synthetic "auto"
+        models = probe.models.map((m) => m.modelId);
         h.verified = true;
       }
       if (probe?.ok && probe.reasoning?.options.length) {
@@ -124,7 +123,7 @@ function Onboarding({
           ? rec.defaultModel
           : probe?.currentId && models.includes(probe.currentId)
             ? probe.currentId
-            : models[1] ?? "auto";
+            : models[0] ?? "auto";
       const reasoningEffort =
         rec.reasoningEffort ||
         (probe?.reasoning?.currentId && reasoningOptions.includes(probe.reasoning.currentId)
