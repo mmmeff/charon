@@ -5,6 +5,7 @@ import type {
   Harness,
   HarnessModelPrefs,
   NotificationCategory,
+  PrReviewFilters,
   RepoConfig,
 } from "../types";
 
@@ -293,19 +294,10 @@ export const eventDef = (id: string): EventDef | undefined =>
 export const DEFAULT_BABYSIT_FILTERS: ClassFilters = {
   processDrafts: false,
   excludeLabels: ["pr-copilot-ignore"],
-  criteria:
-    "Ignore pure acknowledgements (LGTM, thanks, +1), emoji-only comments, and already-resolved threads. " +
-    "Respond to direct questions, change requests, and bug findings. Prefer a code fix over a rebuttal when the " +
-    "feedback is plausibly right; push back politely with reasoning when it is wrong.",
 };
 
-export const DEFAULT_REVIEW_FILTERS: ClassFilters = {
-  processDrafts: false,
-  excludeLabels: ["pr-copilot-ignore", "do-not-review"],
-  criteria:
-    "Focus on correctness, security, concurrency, and maintainability. Skip generated files, lockfiles, and pure " +
-    "formatting churn. Only raise an inline comment when you can articulate the concrete failure mode or cost; " +
-    "do not pad reviews with style nits unless severity is marked accordingly.",
+export const DEFAULT_REVIEW_FILTERS: PrReviewFilters = {
+  filters: [],
 };
 
 export const DEFAULT_REVIEW_PROMPT =

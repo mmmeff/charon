@@ -947,6 +947,41 @@ tr.flash > td { animation: line-flash 1.8s ease; }
 .event-row button.link { color: var(--fg-subtle); }
 .event-row button.link:hover { color: var(--orange); }
 
+.review-filter-builder {
+  border: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--border);
+  padding: 12px 14px;
+}
+.review-filter-empty { margin: 0; }
+.review-filter-list { display: flex; flex-direction: column; gap: 8px; }
+.review-filter-row {
+  display: grid;
+  grid-template-columns: minmax(180px, max-content) minmax(180px, 1fr) max-content;
+  gap: 8px;
+  align-items: center;
+}
+.review-filter-row select,
+.review-filter-row input {
+  min-width: 0;
+}
+.review-filter-query {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--fg-subtle);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.review-filter-query code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+
 .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; font-size: 12px; }
 input[type="checkbox"] { accent-color: var(--orange); }
 

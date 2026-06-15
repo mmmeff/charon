@@ -205,7 +205,7 @@ export function RepoApp({ repo }: { repo: string }) {
   const tabs: { id: Tab; label: string; icon: () => JSX.Element; count?: number; hot?: boolean }[] = [
     { id: "drafts", label: "Drafts", icon: IconDrafts, count: prData.myDrafts.length },
     { id: "open", label: "Open PRs", icon: IconOpen, count: prData.myOpen.length },
-    { id: "review", label: "Review", icon: IconReview, count: prData.reviewQueue.filter((p) => p.requestedFromMe).length },
+    { id: "review", label: "Review", icon: IconReview, count: prData.reviewQueue.length },
     { id: "activity", label: "Agents", icon: IconActivity, count: activeAgents, hot: activeAgents > 0 },
     { id: "settings", label: "Settings", icon: IconSettings },
   ];

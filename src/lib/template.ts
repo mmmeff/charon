@@ -1,7 +1,7 @@
 /**
  * Prompt template interpolation. Variables use {kebab-case} syntax:
  *   {pr-number} {pr-title} {branch} {base-branch} {comment-body} {author}
- *   {model} {repo} {filter-criteria} ... plus anything the event provides.
+ *   {model} {repo} ... plus anything the event provides.
  * Unknown variables are left intact so prompts degrade visibly, not silently.
  */
 export function interpolate(template: string, vars: Record<string, string>): string {

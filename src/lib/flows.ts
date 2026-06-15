@@ -465,9 +465,6 @@ TASK:
 ${task}
 ${scopeBlock}
 
-Reviewer guidance configured for this repo:
-${ctx.config.reviewFilters.criteria}
-
 PR description:
 ${truncate(pr.body || "(none)", 4000)}
 
@@ -538,8 +535,6 @@ ${reviewWorkspaceBlock(wt, pr)}
 TASK:
 ${task?.trim() || "Review the diff and propose inline comments with severity and confidence."}
 ${scopeBlock}
-Reviewer guidance configured for this repo:
-${ctx.config.reviewFilters.criteria}
 
 PR description:
 ${truncate(pr.body || "(none)", 4000)}
@@ -1105,8 +1100,6 @@ export function eventVars(
     ...prVars(pr),
     repo: ctx.repo,
     model: resolveModel(ctx, undefined, "event"),
-    "filter-criteria":
-      pr.author === ctx.gh.login ? ctx.config.babysitFilters.criteria : ctx.config.reviewFilters.criteria,
     ...extra,
   };
 }

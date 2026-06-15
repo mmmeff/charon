@@ -19,6 +19,7 @@ import type { ClassFilters, EventHandlerConfig, GlobalConfig, RepoConfig, SkillS
 import { Badge, Spinner } from "../common";
 import { ModelPicker } from "../ModelPicker";
 import { PromptInput } from "../PromptInput";
+import { PrReviewFilterBuilder } from "../PrReviewFilterBuilder";
 
 /**
  * Settings outline: top-level groups, each with its sections in document order.
@@ -451,10 +452,13 @@ export function SettingsView() {
       </div>
       <div className="settings-section" id="s-review">
         <h3>To Review</h3>
-        <FilterEditor
+        <p className="subtle">
+          These are any open PRs on this repository that are not created by you. Review filters narrow
+          that repo-wide set.
+        </p>
+        <PrReviewFilterBuilder
           filters={config.reviewFilters}
           onChange={(reviewFilters) => update({ reviewFilters })}
-          draftsHint="Also process teammate drafts you've been asked to review."
         />
       </div>
       <div className="settings-section" id="s-ci">
@@ -551,7 +555,7 @@ export function SettingsView() {
           Variables:{" "}
           <code>{"{pr-number}"}</code> <code>{"{pr-title}"}</code> <code>{"{branch}"}</code>{" "}
           <code>{"{base-branch}"}</code> <code>{"{comment-body}"}</code> <code>{"{author}"}</code>{" "}
-          <code>{"{model}"}</code> <code>{"{filter-criteria}"}</code> <code>{"{check-name}"}</code>{" "}
+          <code>{"{model}"}</code> <code>{"{check-name}"}</code>{" "}
           <code>{"{label}"}</code>. Skill references like <code>/fix-merge-conflicts</code> expand to the
           skill's content when it exists.
         </p>
@@ -699,18 +703,6 @@ function FilterEditor({
           }
         />
         <small>PRs with any of these labels are ignored entirely.</small>
-      </label>
-      <label className="field">
-        <span>LLM criteria</span>
-        <PromptInput
-          rows={3}
-          value={filters.criteria}
-          onChange={(criteria) => onChange({ ...filters, criteria })}
-        />
-        <small>
-          Fed directly into agent prompts as <code>{"{filter-criteria}"}</code> — e.g. which comments warrant
-          a response, what reviews should focus on.
-        </small>
       </label>
     </>
   );

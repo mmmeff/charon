@@ -31,14 +31,14 @@ export function ReviewView() {
     return (
       <div className="main">
         <EmptyState title="Nothing to review">
-          PRs waiting on your review — requested directly or via a team — appear here, along with ones you're already reviewing.
+          Open pull requests by other people appear here when they match your To Review filters.
         </EmptyState>
       </div>
     );
   }
 
   const needsAttention = sorted.filter((p) => p.requestedFromMe);
-  const reviewing = sorted.filter((p) => !p.requestedFromMe);
+  const repositoryPrs = sorted.filter((p) => !p.requestedFromMe);
 
   const card = (p: PrSummary) => (
     <div
@@ -73,12 +73,12 @@ export function ReviewView() {
           <div className="list-group-label">Needs attention ({needsAttention.length})</div>
         )}
         {needsAttention.map(card)}
-        {reviewing.length > 0 && (
-          <div className="list-group-label" title="PRs you've reviewed that aren't waiting on you">
-            Reviewing ({reviewing.length})
+        {repositoryPrs.length > 0 && (
+          <div className="list-group-label" title="Open PRs by other people that match your To Review filters">
+            Repository PRs ({repositoryPrs.length})
           </div>
         )}
-        {reviewing.map(card)}
+        {repositoryPrs.map(card)}
       </Sidebar>
       <div className="content">{pr && <ReviewWorkspace key={pr.number} pr={pr} />}</div>
     </div>
@@ -216,7 +216,9 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
               </a>
             </h2>
             <div className="row pr-hero-meta">
-              <Badge color="purple">review requested</Badge>
+              <Badge color={pr.requestedFromMe ? "purple" : "gray"}>
+                {pr.requestedFromMe ? "review requested" : "teammate PR"}
+              </Badge>
               <CiBadge checks={checks} />
               <BranchBadge head={pr.headRef} base={pr.baseRef} />
               <PrLabels pr={pr} />

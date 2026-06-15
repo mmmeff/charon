@@ -5,6 +5,8 @@ import type {
   AgentToolCall,
   FiredEvent,
   GlobalConfig,
+  PrReviewFilter,
+  PrReviewFilters,
   Proposal,
   PrSnapshot,
   RepoConfig,
@@ -96,6 +98,59 @@ interface RepoState {
   clearFindings(prNumber: number): Promise<void>;
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function migrateClassFilters(raw: unknown, fallback: RepoConfig["babysitFilters"]): RepoConfig["babysitFilters"] {
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    processDrafts: typeof obj.processDrafts === "boolean" ? obj.processDrafts : fallback.processDrafts,
+    excludeLabels: Array.isArray(obj.excludeLabels) ? stringList(obj.excludeLabels) : fallback.excludeLabels,
+  };
+}
+
+function migrateReviewFilters(raw: unknown): PrReviewFilters {
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const filters = Array.isArray(obj.filters) ? obj.filters : [];
+  return {
+    filters: filters
+      .map((f): PrReviewFilter | null => {
+        if (!f || typeof f !== "object") return null;
+        const row = f as Record<string, unknown>;
+        const qualifier = String(row.qualifier ?? "");
+        if (
+          qualifier !== "review" &&
+          qualifier !== "reviewed-by" &&
+          qualifier !== "review-requested" &&
+          qualifier !== "user-review-requested" &&
+          qualifier !== "team-review-requested"
+        ) {
+          return null;
+        }
+        return {
+          id: String(row.id || `${qualifier}-${Math.random().toString(36).slice(2)}`),
+          qualifier: qualifier as PrReviewFilter["qualifier"],
+          value: String(row.value ?? "").trim(),
+        };
+      })
+      .filter((f): f is PrReviewFilter => !!f && !!f.value),
+  };
+}
+
+function migrateRepoConfig(raw: string | null): RepoConfig {
+  const defaults = defaultRepoConfig();
+  if (!raw) return defaults;
+  const parsed = JSON.parse(raw) as Partial<RepoConfig> & Record<string, unknown>;
+  const cfg: RepoConfig = { ...defaults, ...parsed };
+  cfg.babysitFilters = migrateClassFilters(parsed.babysitFilters, defaults.babysitFilters);
+  // Legacy reviewFilters contained draft/label/LLM criteria fields. To Review
+  // now starts from all open repo PRs not authored by the viewer; only the new
+  // GitHub review-filter builder should narrow that list.
+  cfg.reviewFilters = migrateReviewFilters(parsed.reviewFilters);
+  return cfg;
+}
+
 export const useRepoStore = create<RepoState>((set, get) => ({
   repo: "",
   config: defaultRepoConfig(),
@@ -119,7 +174,7 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     const findData = findRaw ? JSON.parse(findRaw) : { findings: [], summaries: {} };
     set({
       repo,
-      config: cfgRaw ? { ...defaultRepoConfig(), ...JSON.parse(cfgRaw) } : defaultRepoConfig(),
+      config: migrateRepoConfig(cfgRaw),
       snapshots: snapRaw ? JSON.parse(snapRaw) : {},
       proposals: propRaw ? JSON.parse(propRaw) : [],
       eventLog: logRaw ? JSON.parse(logRaw) : [],

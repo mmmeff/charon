@@ -262,33 +262,52 @@ export class GitHubClient {
 
   private isRequestedFromMe(p: any): boolean {
     const direct = (p.requested_reviewers ?? []).some((u: any) => u.login === this.login);
-    return direct; // team requests resolved via search query below
+    return direct; // team requests are resolved by the poller with /user/teams
   }
 
-  /**
-   * PR numbers where my review is requested — `review-requested:` in the
-   * search API includes requests via teams I'm on, which is exactly the
-   * "directly or via team, treated identically" semantic we want.
-   */
-  async reviewRequestedNumbers(repo: string): Promise<Set<number>> {
-    const res = await this.json<{ items: { number: number }[] }>(
-      "GET",
-      `/search/issues?q=${encodeURIComponent(
-        `is:pr is:open repo:${repo} review-requested:${this.login}`
-      )}&per_page=100`
+  /** Team slugs in this repo's owner org that the authenticated user belongs to. */
+  async myTeamSlugs(repo: string): Promise<Set<string>> {
+    const org = repo.split("/")[0].toLowerCase();
+    const teams = await this.paged<any>("/user/teams", undefined, 30);
+    return new Set(
+      teams
+        .filter((t) => String(t.organization?.login ?? "").toLowerCase() === org)
+        .map((t) => String(t.slug).toLowerCase())
     );
-    return new Set(res.items.map((i) => i.number));
   }
 
-  /** Open PRs the user has already reviewed (beyond outstanding requests). */
-  async reviewedByMeNumbers(repo: string): Promise<Set<number>> {
-    const res = await this.json<{ items: { number: number }[] }>(
-      "GET",
-      `/search/issues?q=${encodeURIComponent(
-        `is:pr is:open repo:${repo} reviewed-by:${this.login} -author:${this.login}`
-      )}&per_page=100`
-    );
-    return new Set(res.items.map((i) => i.number));
+  /** Review-decision enum for all open PRs, used by client-side review filters. */
+  async listOpenPullReviewDecisions(
+    repo: string
+  ): Promise<Record<number, PrSummary["reviewDecision"]>> {
+    const [owner, name] = repo.split("/");
+    type Response = {
+      repository?: {
+        pullRequests?: {
+          pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+          nodes?: { number: number; reviewDecision?: PrSummary["reviewDecision"] }[];
+        };
+      };
+    };
+    let after: string | null = null;
+    const out: Record<number, PrSummary["reviewDecision"]> = {};
+    do {
+      const data: Response = await this.graphql<Response>(
+        `query($owner:String!,$name:String!,$after:String){
+          repository(owner:$owner,name:$name){
+            pullRequests(states:OPEN,first:100,after:$after,orderBy:{field:UPDATED_AT,direction:DESC}){
+              pageInfo{ hasNextPage endCursor }
+              nodes{ number reviewDecision }
+            }
+          }
+        }`,
+        { owner, name, after }
+      );
+      const prs = data?.repository?.pullRequests;
+      for (const p of prs?.nodes ?? []) out[Number(p.number)] = p.reviewDecision ?? null;
+      after = prs?.pageInfo?.hasNextPage ? (prs.pageInfo.endCursor ?? null) : null;
+    } while (after);
+    return out;
   }
 
   /** Detail fetch — includes mergeable_state (GitHub computes it lazily). */

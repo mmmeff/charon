@@ -102,11 +102,25 @@ export interface ClassFilters {
   processDrafts: boolean;
   /** PRs carrying any of these labels are ignored entirely */
   excludeLabels: string[];
-  /**
-   * Freeform criteria injected into LLM prompts ({filter-criteria}) deciding
-   * e.g. which comments warrant a response, what to focus a review on.
-   */
-  criteria: string;
+}
+
+export type PrReviewFilterQualifier =
+  | "review"
+  | "reviewed-by"
+  | "review-requested"
+  | "user-review-requested"
+  | "team-review-requested";
+
+export type PrReviewStatusFilter = "none" | "required" | "approved" | "changes_requested";
+
+export interface PrReviewFilter {
+  id: string;
+  qualifier: PrReviewFilterQualifier;
+  value: string;
+}
+
+export interface PrReviewFilters {
+  filters: PrReviewFilter[];
 }
 
 export interface EventHandlerConfig {
@@ -136,7 +150,7 @@ export interface RepoConfig {
   /** dependency/validation policy injected into every fix-flow prompt */
   fixPolicy: string;
   babysitFilters: ClassFilters;
-  reviewFilters: ClassFilters;
+  reviewFilters: PrReviewFilters;
   /** Overrides keyed by event id; missing ids fall back to catalog defaults */
   events: Record<string, EventHandlerConfig>;
   skills: SkillSelection;
@@ -207,6 +221,8 @@ export interface PrSummary {
   /** team slugs with an outstanding review request */
   requestedTeams: string[];
   requestedFromMe: boolean;
+  /** GraphQL review decision when available */
+  reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
   updatedAt: string;
   additions: number;
   deletions: number;

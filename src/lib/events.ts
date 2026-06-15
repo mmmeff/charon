@@ -13,6 +13,11 @@ import { eventDef, EVENT_CATALOG } from "./defaults";
 import { runAnalysisFlow, runFixFlow, runReviewFlow, type FlowContext, eventVars } from "./flows";
 import type { ReviewThreadInfo } from "./github";
 import { notify } from "./notify";
+import {
+  isReviewRequestedFromUser,
+  matchesPrReviewFilters,
+  reviewFilterNeedsReviews,
+} from "./pr-review-filters";
 import { interpolate, truncate } from "./template";
 import { useRepoStore } from "./store";
 import { pruneBranchWorktree } from "./worktree";
@@ -22,6 +27,7 @@ import { pruneBranchWorktree } from "./worktree";
 // ---------------------------------------------------------------------------
 
 interface PrDataState {
+  openPulls: PrSummary[];
   myDrafts: PrSummary[];
   myOpen: PrSummary[];
   reviewQueue: PrSummary[];
@@ -41,6 +47,7 @@ interface PrDataState {
 }
 
 export const usePrData = create<PrDataState>((set) => ({
+  openPulls: [],
   myDrafts: [],
   myOpen: [],
   reviewQueue: [],
@@ -351,6 +358,24 @@ export async function dispatchEvent(ctx: FlowContext, ev: FiredEvent, pr: PrSumm
 
 const MAX_TRACKED_PER_CLASS = 25;
 
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await fn(items[i]);
+      }
+    })
+  );
+  return out;
+}
+
 export class RepoPoller {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
@@ -407,7 +432,13 @@ export class RepoPoller {
       const swap = (l: PrSummary[]) =>
         open
           ? l.map((p) =>
-              p.number === number ? { ...detail, requestedFromMe: p.requestedFromMe } : p
+              p.number === number
+                ? {
+                    ...detail,
+                    requestedFromMe: p.requestedFromMe,
+                    reviewDecision: p.reviewDecision ?? detail.reviewDecision ?? null,
+                  }
+                : p
             )
           : l.filter((p) => p.number !== number);
       d.patch({
@@ -416,6 +447,7 @@ export class RepoPoller {
         reviews: { ...d.reviews, [number]: rv },
         threads: { ...d.threads, [number]: th },
         timeline: { ...d.timeline, [number]: tl },
+        openPulls: swap(d.openPulls),
         myDrafts: swap(d.myDrafts),
         myOpen: swap(d.myOpen),
         reviewQueue: swap(d.reviewQueue),
@@ -463,11 +495,21 @@ export class RepoPoller {
       const store = useRepoStore.getState();
       const isFirstRun = Object.keys(store.snapshots).length === 0;
 
-      const [openPulls, requested, reviewedByMe] = await Promise.all([
+      const needsReviewData = reviewFilterNeedsReviews(config.reviewFilters);
+      const [rawOpenPulls, myTeamSlugs, reviewDecisions] = await Promise.all([
         gh.listOpenPulls(repo),
-        gh.reviewRequestedNumbers(repo),
-        gh.reviewedByMeNumbers(repo).catch(() => new Set<number>()),
+        gh.myTeamSlugs(repo).catch(() => new Set<string>()),
+        needsReviewData
+          ? gh
+              .listOpenPullReviewDecisions(repo)
+              .catch(() => ({} as Record<number, PrSummary["reviewDecision"]>))
+          : Promise.resolve({} as Record<number, PrSummary["reviewDecision"]>),
       ]);
+      const openPulls = rawOpenPulls.map((p) => ({
+        ...p,
+        reviewDecision: reviewDecisions[p.number] ?? p.reviewDecision ?? null,
+        requestedFromMe: isReviewRequestedFromUser(p, me, myTeamSlugs),
+      }));
 
       const notExcluded = (pr: PrSummary, labels: string[]) =>
         !pr.labels.some((l) => labels.includes(l));
@@ -477,12 +519,23 @@ export class RepoPoller {
       );
       const myDrafts = mine.filter((p) => p.draft);
       const myNonDraft = mine.filter((p) => !p.draft);
-      // needs-attention (outstanding request) + reviewing (I reviewed it before)
-      const teammate = openPulls
-        .filter((p) => p.author !== me && (requested.has(p.number) || reviewedByMe.has(p.number)))
-        .filter((p) => notExcluded(p, config.reviewFilters.excludeLabels))
-        .filter((p) => !p.draft || config.reviewFilters.processDrafts)
-        .map((p) => ({ ...p, requestedFromMe: requested.has(p.number) }));
+      const teammateCandidates = openPulls.filter((p) => p.author !== me);
+      const reviewData: Record<number, ReviewInfo[]> = {};
+      if (needsReviewData) {
+        const pairs = await mapLimit(teammateCandidates, 6, async (p) => {
+          const rv = await gh.listReviews(repo, p.number).catch(() => []);
+          return [p.number, rv] as const;
+        });
+        for (const [number, rv] of pairs) reviewData[number] = rv;
+      }
+      const teammate = teammateCandidates.filter((p) =>
+        matchesPrReviewFilters(p, config.reviewFilters, {
+          login: me,
+          repo,
+          myTeamSlugs,
+          reviews: reviewData[p.number],
+        })
+      );
 
       // Track previously-known PRs that left the open list (merged/closed).
       const stillOpen = new Set(openPulls.map((p) => p.number));
@@ -506,16 +559,18 @@ export class RepoPoller {
       const pollOne = async (
         shallow: PrSummary,
         prClass: "mine" | "teammate",
-        fireEvents: boolean
+        fireEvents: boolean,
+        seedReviews?: ReviewInfo[]
       ) => {
         // detail fetch fills mergeable_state (computed lazily by GitHub)
         const detail = await gh.getPull(repo, shallow.number);
-        detail.requestedFromMe = shallow.requestedFromMe || requested.has(shallow.number);
+        detail.reviewDecision = shallow.reviewDecision ?? detail.reviewDecision ?? null;
+        detail.requestedFromMe = isReviewRequestedFromUser(detail, me, myTeamSlugs);
         detailed[detail.number] = detail;
         const [ch, cm, rv, th, tl] = await Promise.all([
           gh.listChecks(repo, detail.headSha), // teammate checks: display-only (events stay mine-only)
           gh.listComments(repo, shallow.number),
-          gh.listReviews(repo, shallow.number),
+          seedReviews ? Promise.resolve(seedReviews) : gh.listReviews(repo, shallow.number),
           // GraphQL-only; tolerate failure on older GHE
           gh.listReviewThreads(repo, shallow.number).catch(() => []),
           gh.listTimeline(repo, shallow.number),
@@ -552,7 +607,9 @@ export class RepoPoller {
         ...watchDrafts.map((p) =>
           pollOne(p, "mine", config.babysitFilters.processDrafts).catch((e) => console.error(e))
         ),
-        ...watchTeam.map((p) => pollOne(p, "teammate", true).catch((e) => console.error(e))),
+        ...watchTeam.map((p) =>
+          pollOne(p, "teammate", true, reviewData[p.number]).catch((e) => console.error(e))
+        ),
       ]);
 
       // closed/merged transitions for vanished PRs
@@ -585,12 +642,13 @@ export class RepoPoller {
       await store.saveSnapshots(newSnapshots);
       const enrich = (p: PrSummary) => detailed[p.number] ?? p;
       data.patch({
+        openPulls: openPulls.map(enrich),
         myDrafts: myDrafts.map(enrich),
         myOpen: myNonDraft.map(enrich),
-        reviewQueue: watchTeam.map(enrich),
+        reviewQueue: teammate.map(enrich),
         checks,
         comments,
-        reviews,
+        reviews: { ...reviewData, ...reviews },
         threads,
         timeline,
         lastPollAt: Date.now(),
