@@ -372,22 +372,23 @@ export interface HarnessModelDefaults {
 }
 
 export const HARNESS_MODEL_DEFAULTS: Record<string, HarnessModelDefaults> = {
-  // Cursor encodes thinking effort in the model id, so it has no separate
-  // reasoning axis. Thinking-heavy models where judgment matters (review,
-  // Q&A); a strong long-context coder for CI/branch work; a writing-tuned
-  // model for prose; the fast composer for the rest.
+  // Cursor encodes thinking effort in the model id (bracketed params), so it
+  // has no separate reasoning axis — these are the exact ids it advertises over
+  // ACP. High-effort opus where judgment matters (review, Q&A); the 272k
+  // long-context gpt-5.5 for CI/branch work (medium is its only level); a
+  // thinking sonnet for prose; the fast composer for the rest.
   cursor: {
-    defaultModel: "composer-2.5-fast",
+    defaultModel: "composer-2.5[fast=true]",
     modelOverrides: {
-      draft_create: "composer-2.5-fast",
-      draft_question: "claude-opus-4-8-thinking-high",
-      review: "claude-opus-4-8-thinking-high",
-      ci_fix: "gpt-5.5-high",
-      conflict_fix: "gpt-5.5-high",
-      rewrite: "claude-4.6-sonnet-medium",
-      draft_edit: "composer-2.5-fast",
-      feedback_fix: "composer-2.5-fast",
-      ci_analysis: "composer-2.5-fast",
+      draft_create: "composer-2.5[fast=true]",
+      draft_question: "claude-opus-4-8[thinking=true,context=300k,effort=high,fast=false]",
+      review: "claude-opus-4-8[thinking=true,context=300k,effort=high,fast=false]",
+      ci_fix: "gpt-5.5[context=272k,reasoning=medium,fast=false]",
+      conflict_fix: "gpt-5.5[context=272k,reasoning=medium,fast=false]",
+      rewrite: "claude-sonnet-4-6[thinking=true,context=200k,effort=medium]",
+      draft_edit: "composer-2.5[fast=true]",
+      feedback_fix: "composer-2.5[fast=true]",
+      ci_analysis: "composer-2.5[fast=true]",
     },
     reasoningEffort: "",
     reasoningOverrides: {},
@@ -461,15 +462,11 @@ export function reconcileHarnessDefaults(
   };
 }
 
-/** Seed model/label/reasoning lists from a harness's hardcoded defaults so the
- *  selections are listable in the brief window between switching and the live
- *  probe (refreshModels then replaces these with the real list + labels). */
-function seedListsFromDefaults(d: HarnessModelDefaults): {
-  models: string[];
-  modelLabels: Record<string, string>;
-  reasoningOptions: string[];
-  reasoningLabels: Record<string, string>;
-} {
+/** A full prefs bundle seeded from a harness's hardcoded defaults — used the
+ *  first time a harness is selected (no captured snapshot yet). The selections
+ *  are listable in the brief window before the live probe; refreshModels then
+ *  replaces the lists/labels with the real ones and reconciles the picks. */
+function seedPrefsFromDefaults(d: HarnessModelDefaults): HarnessModelPrefs {
   const uniq = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
   const ids = uniq(["auto", d.defaultModel, ...Object.values(d.modelOverrides)]);
   const modelLabels: Record<string, string> = {};
@@ -477,7 +474,17 @@ function seedListsFromDefaults(d: HarnessModelDefaults): {
   const rids = uniq([d.reasoningEffort, ...Object.values(d.reasoningOverrides)]);
   const reasoningLabels: Record<string, string> = {};
   for (const r of rids) reasoningLabels[r] = r.charAt(0).toUpperCase() + r.slice(1);
-  return { models: ids, modelLabels, reasoningOptions: rids, reasoningLabels };
+  return {
+    models: ids,
+    modelLabels,
+    defaultModel: d.defaultModel,
+    disabledModels: [],
+    modelOverrides: { ...d.modelOverrides },
+    reasoningOptions: rids,
+    reasoningLabels,
+    reasoningEffort: d.reasoningEffort,
+    reasoningOverrides: { ...d.reasoningOverrides },
+  };
 }
 
 /**
@@ -656,35 +663,23 @@ export function syncActiveModelPrefs(cfg: GlobalConfig): GlobalConfig {
 }
 
 /**
- * Switch the active harness. Every switch lands on the TARGET harness's
- * hardcoded defaults (not the user's prior picks) — seeded so the selections
- * are listable immediately. The caller then runs refreshModels, which sources
- * the live model list and reconciles these defaults against it so every
- * selection is guaranteed available.
+ * Switch the active harness. First snapshots the current harness's selections,
+ * then flips to the TARGET harness's previously-captured selections verbatim —
+ * no reconciling against a live list on the switch itself. Only the first-ever
+ * switch to a harness (no snapshot yet) seeds from its hardcoded defaults. The
+ * caller then runs refreshModels, which sources the live list and self-heals
+ * any selection the harness no longer offers.
  */
 export function switchHarness(cfg: GlobalConfig, h: Harness): GlobalConfig {
   const synced = syncActiveModelPrefs(cfg);
   const harnesses = [...(synced.harnesses ?? []).filter((x) => x.id !== h.id), h];
   // Re-saving the already-active harness (e.g. tweaking its command/args) keeps
-  // the current selections — only an actual change of harness resets to the
-  // target's hardcoded defaults.
+  // the current selections — only an actual change of harness swaps them.
   if (synced.activeHarness === h.id) return { ...synced, harnesses };
-  const d = harnessModelDefaults(h.id);
-  const seed = seedListsFromDefaults(d);
-  return {
-    ...synced,
-    harnesses,
-    activeHarness: h.id,
-    models: seed.models,
-    modelLabels: seed.modelLabels,
-    defaultModel: d.defaultModel,
-    disabledModels: [],
-    modelOverrides: { ...d.modelOverrides },
-    reasoningOptions: seed.reasoningOptions,
-    reasoningLabels: seed.reasoningLabels,
-    reasoningEffort: d.reasoningEffort,
-    reasoningOverrides: { ...d.reasoningOverrides },
-  };
+  // Captured selections for the target harness win — restore them as-is.
+  const captured = synced.modelPrefs?.[h.id];
+  const prefs: HarnessModelPrefs = captured ?? seedPrefsFromDefaults(harnessModelDefaults(h.id));
+  return { ...synced, harnesses, activeHarness: h.id, ...prefs };
 }
 
 // ---------------------------------------------------------------------------
