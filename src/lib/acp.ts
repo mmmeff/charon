@@ -85,38 +85,6 @@ export function modelConfigOption(ns: NewSessionResult): AcpConfigOption | undef
   );
 }
 
-/** Sort a model list alphabetically by display name (case-insensitive). */
-export function sortAcpModels(models: AcpModel[]): AcpModel[] {
-  return [...models].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-}
-
-/**
- * Cursor bakes a model's reasoning level into the modelId brackets
- * (`claude-opus-4-8[thinking=true,effort=high]`, `gpt-5.5[reasoning=medium]`)
- * but reports a bare display name, and exposes no separate reasoning axis to
- * pick it from. So pull the level out of the id — it's the only place the user
- * can see it. Returns "" for ids with no reasoning hint (other harnesses, or
- * models like `gemini-3.1-pro[]` and `claude-sonnet-4[thinking=false]`).
- */
-export function modelReasoningHint(modelId: string): string {
-  const m = /\[(.+)\]$/.exec(modelId);
-  if (!m) return "";
-  const params = new Map(
-    m[1].split(",").map((kv) => {
-      const eq = kv.indexOf("=");
-      return eq < 0 ? [kv.trim(), ""] : [kv.slice(0, eq).trim(), kv.slice(eq + 1).trim()];
-    })
-  );
-  const effort = params.get("effort") || params.get("reasoning");
-  if (effort) return effort;
-  return params.get("thinking") === "true" ? "thinking" : "";
-}
-
-/** Display label for a model: its name plus any baked-in reasoning level. */
-export function modelLabel(m: AcpModel): string {
-  const hint = modelReasoningHint(m.modelId);
-  return hint ? `${m.name} (${hint})` : m.name;
-}
 
 /** The reasoning-effort config option, if the harness exposes one (codex). */
 export function reasoningConfigOption(ns: NewSessionResult): AcpConfigOption | undefined {

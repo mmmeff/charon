@@ -337,7 +337,7 @@ export function SettingsView() {
                     void saveGlobal({ ...global, disabledModels: [...next] });
                   }}
                 />
-                {global.modelLabels[m] ?? m} <span className="subtle">({m})</span>
+                {global.modelLabels[m] ?? m}
               </label>
             );
           })}
