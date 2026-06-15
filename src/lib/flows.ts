@@ -123,7 +123,7 @@ function fixFlowWrapper(
   task: string,
   propose = true
 ): string {
-  return `You are PR Copilot's autonomous fix agent working on repository ${ctx.repo}, PR #${pr.number} ("${pr.title}").
+  return `You are Charon's autonomous code fix agent working on repository ${ctx.repo}, PR #${pr.number} ("${pr.title}").
 
 Your working directory is a dedicated git worktree at ${wt.path}, checked out from origin/${pr.headRef}
 on local branch ${wt.localBranch}. The PR's base branch is ${pr.baseRef}.
@@ -777,7 +777,7 @@ export async function runAnalysisFlow(
   relation: string,
   model?: string
 ): Promise<string> {
-  const prompt = `You are PR Copilot's analysis agent for repository ${ctx.repo}, PR #${pr.number} ("${pr.title}") by ${pr.author}.
+  const prompt = `You are Charon's code's analysis agent for repository ${ctx.repo}, PR #${pr.number} ("${pr.title}") by ${pr.author}.
 PR state: ${pr.state}${pr.merged ? " (merged)" : ""}${pr.draft ? " (draft)" : ""}; branch ${pr.headRef} → ${pr.baseRef}.
 
 TASK:
@@ -828,7 +828,7 @@ Apply the requested change to that code (and anything it forces you to touch).`
 REQUESTED CHANGE:
 ${instruction}`;
 
-  const base = `You are PR Copilot's draft-edit agent working on the user's own draft PR #${pr.number} ("${pr.title}") in ${ctx.repo}.
+  const base = `You are Charon's code's draft-edit agent working on the user's own draft PR #${pr.number} ("${pr.title}") in ${ctx.repo}.
 
 Your working directory is a dedicated git worktree at ${wt.path} on local branch ${wt.localBranch},
 checked out from origin/${pr.headRef} (base: ${pr.baseRef}).
@@ -886,7 +886,7 @@ export async function runDraftQuestion(
   const scope = selection
     ? `\nThe question is about ${selection.path} lines ${selection.startLine}–${selection.endLine}:\n\`\`\`\n${selection.snippet}\n\`\`\`\n`
     : "";
-  const base = `You are PR Copilot's analysis agent. The user has a question / wants feedback on
+  const base = `You are Charon's code's analysis agent. The user has a question / wants feedback on
 PR #${pr.number} ("${pr.title}") by ${pr.author} in ${ctx.repo}. Do NOT make any code changes — answer in text only.
 ${scope}
 QUESTION / FEEDBACK REQUEST:
@@ -928,7 +928,7 @@ export async function runDescriptionDraft(
 ): Promise<string> {
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   return new Promise((resolve, reject) => {
-    const base = `You are PR Copilot's writing agent. Draft an updated description for the user's own
+    const base = `You are Charon's code's writing agent. Draft an updated description for the user's own
 PR #${pr.number} ("${pr.title}") in ${ctx.repo} (branch ${pr.headRef} → ${pr.baseRef}).
 
 INSTRUCTION: ${instruction.trim() || "Rewrite the description so it accurately and clearly explains the change: what, why, and anything reviewers should know."}
@@ -982,7 +982,7 @@ export async function runTitleDraft(
   ]);
   const examples = recentTitles.filter((t) => t !== pr.title).slice(0, 25);
   return new Promise((resolve, reject) => {
-    const base = `You are PR Copilot's writing agent. Draft a title for the user's own PR #${pr.number}
+    const base = `You are Charon's code's writing agent. Draft a title for the user's own PR #${pr.number}
 in ${ctx.repo} (branch ${pr.headRef} → ${pr.baseRef}).
 
 INSTRUCTION: ${instruction.trim() || "Write a clear, specific title that describes the change."}
