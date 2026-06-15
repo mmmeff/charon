@@ -305,6 +305,7 @@ interface AgentState {
   order: string[]; // newest first
   register(run: AgentRun): void;
   update(id: string, patch: Partial<AgentRun>): void;
+  remove(id: string): void;
   /** Append agent prose / a user steer; consecutive message|thought chunks merge. */
   appendChunk(id: string, kind: "message" | "thought" | "steer", text: string): void;
   /** Insert or patch a tool call by id (ACP tool_call / tool_call_update). */
@@ -331,6 +332,14 @@ export const useAgentStore = create<AgentState>((set) => ({
       const run = s.runs[id];
       if (!run) return s;
       return { runs: { ...s.runs, [id]: { ...run, ...patch } } };
+    });
+  },
+  remove(id) {
+    set((s) => {
+      if (!s.runs[id]) return s;
+      const runs = { ...s.runs };
+      delete runs[id];
+      return { runs, order: s.order.filter((x) => x !== id) };
     });
   },
   appendChunk(id, kind, text) {

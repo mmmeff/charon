@@ -1,5 +1,6 @@
 import type {
   CommentInfo,
+  AgentRun,
   GlobalConfig,
   LineSelection,
   Proposal,
@@ -14,11 +15,15 @@ import { cleanResultText, extractProposalJson, startAgent } from "./agents";
 import { lineInDiff, lineTextAt, nearestDiffLine, parseUnifiedDiff } from "./diff";
 import type { GitHubClient } from "./github";
 import { applySkills } from "./skills";
+import { native } from "./tauri";
 import { interpolate, prVars, truncate, uid } from "./template";
 import { useAgentStore, useRepoStore } from "./store";
 import {
+  createDraftCreationWorktree,
   createReviewWorktree,
   createWorktree,
+  removeWorktree,
+  preserveWorktree,
   releaseWorktree,
   worktreeHead,
   type Worktree,
@@ -174,6 +179,178 @@ async function recordPushedCommit(runId: string, wt: Worktree): Promise<void> {
   } catch (e) {
     console.warn("could not record pushed commit", e);
   }
+}
+
+interface DraftPrMetadata {
+  changed: boolean;
+  title: string;
+  body: string;
+  summary?: string;
+}
+
+function extractDraftPrJson(text: string): DraftPrMetadata | null {
+  const m = /<draft-pr>\s*([\s\S]*?)\s*<\/draft-pr>/i.exec(text);
+  if (!m) return null;
+  try {
+    const obj = JSON.parse(m[1]) as Record<string, unknown>;
+    return {
+      changed: obj.changed !== false,
+      title: String(obj.title ?? "").trim(),
+      body: String(obj.body ?? "").trim(),
+      summary: obj.summary == null ? undefined : String(obj.summary).trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const BRANCH_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "for",
+  "from",
+  "in",
+  "into",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "with",
+]);
+
+function branchSegment(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/g, "");
+}
+
+function draftSlug(prompt: string): string {
+  const words = prompt
+    .toLowerCase()
+    .match(/[a-z0-9]+/g)
+    ?.filter((w) => w.length > 1 && !BRANCH_STOP_WORDS.has(w))
+    .slice(0, 6);
+  return branchSegment(words?.join("-") || "draft-pr") || "draft-pr";
+}
+
+async function uniqueDraftBranch(ctx: FlowContext, prompt: string): Promise<string> {
+  const user = branchSegment(ctx.gh.login || ctx.global.login || "user") || "user";
+  const base = `${user}/${draftSlug(prompt)}`;
+  let existing = new Set<string>();
+  try {
+    existing = new Set(await ctx.gh.listBranches(ctx.repo));
+  } catch {
+    return `${base}-${uid().split("-").pop()}`;
+  }
+  if (!existing.has(base)) return base;
+  for (let i = 2; i <= 20; i++) {
+    const candidate = `${base}-${i}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `${base}-${uid().split("-").pop()}`;
+}
+
+function ghRepoArg(ctx: FlowContext): string {
+  try {
+    const host = new URL(ctx.gh.webBase).host;
+    return host === "github.com" || host === "www.github.com" ? ctx.repo : `${host}/${ctx.repo}`;
+  } catch {
+    return ctx.repo;
+  }
+}
+
+async function createDraftPrWithGh(
+  ctx: FlowContext,
+  wt: Worktree,
+  baseBranch: string,
+  title: string,
+  body: string
+): Promise<{ number: number; url: string }> {
+  const res = await native.runExec(
+    "gh",
+    [
+      "pr",
+      "create",
+      "--draft",
+      "--repo",
+      ghRepoArg(ctx),
+      "--base",
+      baseBranch,
+      "--head",
+      wt.prBranch,
+      "--title",
+      title,
+      "--body",
+      body || "Draft PR created by Charon.",
+    ],
+    wt.path
+  );
+  if (res.code !== 0) {
+    const out = res.stderr || res.stdout;
+    const hint = /not found|No such file|failed to run gh/i.test(out)
+      ? "\n\nInstall and authenticate the GitHub CLI (`gh auth login`) before creating draft PRs."
+      : /authentication|not logged|login|HTTP 401|HTTP 403/i.test(out)
+        ? "\n\nAuthenticate the GitHub CLI for this GitHub host with `gh auth login`."
+        : "";
+    throw new Error(`gh pr create failed (${res.code}):\n${out}${hint}`);
+  }
+  const out = `${res.stdout}\n${res.stderr}`.trim();
+  const url = out.match(/https?:\/\/\S+\/pull\/\d+/)?.[0] ?? "";
+  const number = Number(/\/pull\/(\d+)/.exec(url)?.[1] ?? NaN);
+  if (!url || !Number.isFinite(number)) {
+    throw new Error(`gh pr create succeeded but no PR URL was found:\n${out}`);
+  }
+  return { number, url };
+}
+
+export async function deleteDraftCreateArtifacts(run: AgentRun): Promise<void> {
+  const d = run.draftCreate;
+  if (!d) throw new Error("this run has no draft creation recovery metadata");
+  if (run.status === "running" || run.status === "starting") {
+    throw new Error("stop the draft creation run before deleting its worktree");
+  }
+
+  const errors: string[] = [];
+  if (d.branch && run.prNumber == null) {
+    try {
+      const res = await native.runGit(["push", "origin", "--delete", d.branch], d.clonePath);
+      if (res.code !== 0 && !/remote ref does not exist|unable to delete/i.test(res.stderr || res.stdout)) {
+        errors.push(res.stderr || res.stdout);
+      }
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  try {
+    const path = d.worktreePath || run.cwd || "";
+    if (!path) throw new Error("no preserved worktree path was recorded for this run");
+    await removeWorktree({
+      path,
+      clonePath: d.clonePath,
+      localBranch: d.localBranch,
+    });
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : String(e));
+  }
+
+  if (errors.length) {
+    useAgentStore.getState().update(run.id, {
+      draftCreate: { ...d, cleanupStatus: "error", cleanupError: errors.join("\n\n") },
+    });
+    throw new Error(errors.join("\n\n"));
+  }
+
+  useAgentStore.getState().remove(run.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -798,6 +975,133 @@ ${PROPOSAL_CONTRACT}`;
     mode: "ask",
     onDone: (run) => createProposalFromFixOutput(ctx, pr, run.id, run.resultText, relation),
   });
+}
+
+/**
+ * Drafts view: create a brand-new draft PR from a prompt. The agent owns code
+ * implementation and pushing the generated branch; Charon owns GitHub PR
+ * creation via `gh pr create --draft` after the push and metadata block land.
+ */
+export async function runDraftCreate(
+  ctx: FlowContext,
+  instruction: string,
+  model?: string,
+  onCreated?: (pr: { number: number; title: string; url: string; branch: string }) => void | Promise<void>
+): Promise<string> {
+  const task = instruction.trim();
+  if (!task) throw new Error("describe the draft PR to create");
+  const baseBranch = ctx.config.draftCreate.baseBranch.trim() || (await ctx.gh.defaultBranch(ctx.repo));
+  const prBranch = await uniqueDraftBranch(ctx, task);
+  const wt = await createDraftCreationWorktree(
+    ctx.gh,
+    ctx.repo,
+    ctx.config.localClonePath,
+    baseBranch,
+    prBranch
+  );
+
+  let finishedCleanly = false;
+  const base = `You are Charon's draft-create agent for repository ${ctx.repo}.
+
+The user wants a brand-new GitHub draft pull request created from this prompt:
+<<<
+${task}
+>>>
+
+Your working directory is a dedicated git worktree at ${wt.path}.
+It starts from origin/${baseBranch} on local branch ${wt.localBranch}.
+The new PR branch Charon generated is: ${prBranch}
+
+REPOSITORY SETTINGS FOR THIS FLOW:
+- Branch naming: ${ctx.config.draftCreate.branchNameInstructions}
+- PR title: ${ctx.config.draftCreate.titleInstructions}
+- PR description: ${ctx.config.draftCreate.descriptionInstructions}
+- Implementation: ${ctx.config.draftCreate.implementationInstructions}
+
+WORKFLOW:
+1. Implement the requested change in this worktree. Keep the PR coherent and tightly scoped.
+2. If no code change is needed, do not commit, do not push, and report changed:false in the metadata block.
+3. If code changed, commit with a clear message and push exactly this branch:
+   git push origin HEAD:${prBranch}
+   If the push is rejected because the remote branch exists or moved, stop and explain the failure. NEVER force-push.
+4. Do NOT create a pull request. Do NOT run gh, use the GitHub API, post comments, request reviewers, or mutate GitHub in any way except the git push above.
+5. After implementation and push, write a PR title and PR description from the final diff and repo conventions.
+
+DEPENDENCY & VALIDATION POLICY:
+${ctx.config.fixPolicy}
+
+FINAL OUTPUT CONTRACT:
+End your final message with EXACTLY ONE draft metadata block:
+<draft-pr>{"changed":true|false,"title":"<PR title>","body":"<PR description markdown>","summary":"<short implementation summary>"}</draft-pr>
+- Use changed:false only when no code changes were committed and pushed.
+- For changed:true, title must be a single line and body must be reviewer-ready markdown.
+- The block must be valid JSON on its own.`;
+
+  const prompt = applySkills(base, ctx.skills, ctx.config.skills.draftCreate);
+  try {
+    return await startAgent({
+      kind: "draft_create",
+      relation: "draft creation",
+      repo: ctx.repo,
+      prNumber: null,
+      prTitle: "New draft PR",
+      prompt,
+      model: resolveModel(ctx, model, "draft_create"),
+      binary: ctx.global.cursorBinary,
+      cwd: wt.path,
+      draftCreate: {
+        baseBranch,
+        branch: prBranch,
+        worktreePath: wt.path,
+        clonePath: wt.clonePath,
+        localBranch: wt.localBranch,
+      },
+      onDone: async (run) => {
+        try {
+          const head = await worktreeHead(wt);
+          const meta = extractDraftPrJson(run.resultText);
+          if (!head || head === wt.baseSha || meta?.changed === false) {
+            finishedCleanly = true;
+            await releaseWorktree(wt);
+            return;
+          }
+          if (!meta) {
+            throw new Error("draft-create agent did not return a valid <draft-pr> metadata block");
+          }
+          if (!meta.title) throw new Error("draft-create agent returned no PR title");
+          const body = meta.body || meta.summary || cleanResultText(run.resultText);
+          const created = await createDraftPrWithGh(ctx, wt, baseBranch, meta.title, body);
+          useAgentStore.getState().update(run.id, {
+            prNumber: created.number,
+            prTitle: meta.title,
+            commitSha: head,
+            draftCreate: {
+              ...(run.draftCreate ?? {
+                baseBranch,
+                branch: prBranch,
+                worktreePath: wt.path,
+                clonePath: wt.clonePath,
+                localBranch: wt.localBranch,
+              }),
+              prUrl: created.url,
+            },
+          });
+          await onCreated?.({ ...created, title: meta.title, branch: prBranch });
+          finishedCleanly = true;
+          await releaseWorktree(wt);
+        } catch (e) {
+          preserveWorktree(wt);
+          throw e;
+        }
+      },
+      onSettled: (run) => {
+        if (!finishedCleanly && run.status !== "done") preserveWorktree(wt);
+      },
+    });
+  } catch (e) {
+    await releaseWorktree(wt);
+    throw e;
+  }
 }
 
 /**

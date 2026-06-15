@@ -11,7 +11,14 @@ import { native } from "./tauri";
 import { notify } from "./notify";
 import { uid } from "./template";
 import { useAgentStore, useGlobalConfig } from "./store";
-import type { AgentKind, AgentRun, NotificationCategory, ToolKind, ToolStatus } from "../types";
+import type {
+  AgentKind,
+  AgentRun,
+  DraftCreateRunState,
+  NotificationCategory,
+  ToolKind,
+  ToolStatus,
+} from "../types";
 
 const agentNotif = (
   run: AgentRun,
@@ -54,7 +61,9 @@ export interface StartAgentOptions {
   /** Override the lifecycle notification category for this run (e.g. CI triage
    *  runs use "ci_analysis" so they gate separately). Defaults by outcome. */
   notifyCategory?: NotificationCategory;
+  draftCreate?: DraftCreateRunState;
   onDone?: (run: AgentRun) => void | Promise<void>;
+  onSettled?: (run: AgentRun) => void | Promise<void>;
 }
 
 // app mode → ACP session mode (cursor exposes agent/plan/ask)
@@ -68,6 +77,7 @@ interface ActiveRun {
 }
 const active = new Map<string, ActiveRun>();
 const doneCallbacks = new Map<string, (run: AgentRun) => void | Promise<void>>();
+const settledCallbacks = new Map<string, (run: AgentRun) => void | Promise<void>>();
 
 // ---------------------------------------------------------------------------
 // session/update → store translation
@@ -189,9 +199,11 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     resultText: "",
     proposalIds: [],
     notifyCategory: opts.notifyCategory,
+    draftCreate: opts.draftCreate,
   };
   useAgentStore.getState().register(run);
   if (opts.onDone) doneCallbacks.set(id, opts.onDone);
+  if (opts.onSettled) settledCallbacks.set(id, opts.onSettled);
   agentNotif(run, "started", lifecycleCategory(run, "started"));
 
   const fail = (msg: string) => {
@@ -205,6 +217,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     doneCallbacks.delete(id);
     active.delete(id);
     agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — " + msg.slice(0, 80));
+    runSettledCallback(id);
   };
 
   const conn = new AcpConnection(id, {
@@ -315,11 +328,23 @@ function finalize(id: string, status: "done" | "killed") {
           error: `post-processing failed: ${e instanceof Error ? e.message : String(e)}`,
         });
         agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — post-processing failed");
-      });
-    }
+      }).finally(() => runSettledCallback(id));
+    } else runSettledCallback(id);
   } else {
     doneCallbacks.delete(id); // killed-by-user stays silent
+    runSettledCallback(id);
   }
+}
+
+function runSettledCallback(id: string) {
+  const cb = settledCallbacks.get(id);
+  settledCallbacks.delete(id);
+  if (!cb) return;
+  const run = useAgentStore.getState().runs[id];
+  if (!run) return;
+  Promise.resolve(cb(run)).catch((e) => {
+    console.warn("agent settled callback failed", e);
+  });
 }
 
 /** Send a follow-up prompt to steer a running agent (cancel+reprompt). */

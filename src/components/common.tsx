@@ -88,12 +88,21 @@ export function ApprovalsBadge({ prNumber }: { prNumber: number }) {
 }
 
 /** Empty-state block: the orbiting ASCII Charon + tracked uppercase title. */
-export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
+export function EmptyState({
+  title,
+  children,
+  action,
+}: {
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <div className="empty">
       <AsciiMoon height={190} />
       <h3>{title}</h3>
       {children && <p>{children}</p>}
+      {action && <div className="empty-action">{action}</div>}
     </div>
   );
 }
@@ -114,6 +123,52 @@ export function LoadingField({
       <span className="subtle">
         <Spinner /> {label}
       </span>
+    </div>
+  );
+}
+
+/** Ambient thinking/routing field for agent-owned work surfaces. */
+export function ThinkingField({
+  compact = false,
+  ariaLabel = "Thinking",
+  lines = [],
+}: {
+  compact?: boolean;
+  ariaLabel?: string;
+  /** Live terminal rows; the cursor attaches to the newest row. */
+  lines?: string[];
+}) {
+  const terminalLines = lines.length ? lines.slice(-4) : [""];
+  return (
+    <div
+      className={`thinking-field ${compact ? "compact" : ""} ${lines.length ? "live" : ""}`}
+      aria-label={ariaLabel}
+      aria-live={lines.length ? "polite" : undefined}
+      aria-atomic="false"
+      role={lines.length ? "status" : undefined}
+    >
+      <div className="thinking-track">
+        <span className="thinking-node active" />
+        <span className="thinking-node" />
+        <span className="thinking-node" />
+        <span className="thinking-pulse p1" />
+        <span className="thinking-pulse p2" />
+        <span className="thinking-pulse p3" />
+      </div>
+      <div className="thinking-terminal">
+        {terminalLines.map((line, i) => {
+          const current = i === terminalLines.length - 1;
+          return (
+            <div key={`${line}-${i}`} className={`thinking-terminal-row ${current ? "current" : ""}`}>
+              <span className="prompt-mark">›</span>
+              <span className="thinking-terminal-command">
+                {line && <span className="thinking-terminal-text">{line}</span>}
+                {current && <span className="thinking-cursor" />}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

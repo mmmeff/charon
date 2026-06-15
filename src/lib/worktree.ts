@@ -250,6 +250,13 @@ export async function createDraftCreationWorktree(
 export async function releaseWorktree(wt: Worktree): Promise<void> {
   leases.delete(wt.path);
   if (wt.persistent) return;
+  await removeWorktree(wt);
+}
+
+export async function removeWorktree(
+  wt: Pick<Worktree, "path" | "clonePath" | "localBranch">
+): Promise<void> {
+  leases.delete(wt.path);
   await withCloneLock(wt.clonePath, async () => {
     try {
       await git(["worktree", "remove", "--force", wt.path], wt.clonePath);
@@ -264,6 +271,11 @@ export async function releaseWorktree(wt: Worktree): Promise<void> {
       }
     }
   });
+}
+
+/** Keep a temp worktree on disk but mark it no longer active. */
+export function preserveWorktree(wt: Worktree): void {
+  leases.delete(wt.path);
 }
 
 /**

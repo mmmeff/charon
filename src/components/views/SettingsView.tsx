@@ -39,6 +39,7 @@ import { ModelPicker } from "../ModelPicker";
 import { PromptInput } from "../PromptInput";
 import { PrReviewFilterBuilder } from "../PrReviewFilterBuilder";
 import { ShortcutRecorder } from "../ShortcutRecorder";
+import { useFlow } from "../flow";
 
 /**
  * Settings outline: top-level groups, each with its sections in document order.
@@ -157,6 +158,7 @@ export function SettingsView() {
   const config = useRepoStore((s) => s.config);
   const saveConfig = useRepoStore((s) => s.saveConfig);
   const repo = useRepoStore((s) => s.repo);
+  const { ctx } = useFlow();
   const global = useGlobalConfig((s) => s.config);
   const saveGlobal = useGlobalConfig((s) => s.save);
   const skills = useSkillStore((s) => s.skills);
@@ -164,8 +166,28 @@ export function SettingsView() {
   const [settingsTab, setSettingsTabState] = useState<"general" | "shortcuts">(() =>
     localStorage.getItem("prc-settings-tab") === "shortcuts" ? "shortcuts" : "general"
   );
+  const [branches, setBranches] = useState<string[]>([]);
+  const [defaultBranch, setDefaultBranch] = useState("");
+  const [branchErr, setBranchErr] = useState("");
   const mainRef = useRef<HTMLDivElement>(null);
   useScrollMemory(mainRef, `settings:${repo}`);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBranchErr("");
+    void Promise.all([ctx.gh.defaultBranch(repo), ctx.gh.listBranches(repo)])
+      .then(([def, list]) => {
+        if (cancelled) return;
+        setDefaultBranch(def);
+        setBranches(Array.from(new Set([def, ...list].filter(Boolean))));
+      })
+      .catch((e) => {
+        if (!cancelled) setBranchErr(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx.gh, repo]);
 
   if (!global) return null;
 
@@ -184,6 +206,7 @@ export function SettingsView() {
   const updateDraftCreate = (patch: Partial<RepoConfig["draftCreate"]>) => {
     update({ draftCreate: { ...config.draftCreate, ...patch } });
   };
+  const useDefaultBranch = !config.draftCreate.baseBranch.trim();
 
   return (
     <div className="main" ref={mainRef}>
@@ -220,19 +243,56 @@ export function SettingsView() {
         <p className="subtle">
           {global.login} @ {global.githubUrl}. Reconfigure the GitHub connection from the launcher window.
         </p>
-        <label className="field">
+        <div className="field">
           <span>Default base branch for new drafts</span>
-          <input
-            type="text"
-            value={config.draftCreate.baseBranch}
-            placeholder="GitHub repo default branch"
-            onChange={(e) => updateDraftCreate({ baseBranch: e.target.value })}
-          />
+          <label className="switch" style={{ marginBottom: 8 }}>
+            <input
+              type="checkbox"
+              checked={useDefaultBranch}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  updateDraftCreate({ baseBranch: "" });
+                } else {
+                  const firstOverride =
+                    branches.find((b) => b !== defaultBranch) || defaultBranch || branches[0] || "";
+                  if (firstOverride) updateDraftCreate({ baseBranch: firstOverride });
+                }
+              }}
+            />
+            Use GitHub default branch{" "}
+            <span className="subtle">
+              — {defaultBranch ? <code>{defaultBranch}</code> : branchErr ? "could not load" : "loading"}
+            </span>
+          </label>
+          {!useDefaultBranch && (
+            <select
+              value={config.draftCreate.baseBranch}
+              onChange={(e) => updateDraftCreate({ baseBranch: e.target.value })}
+              disabled={branches.length === 0}
+            >
+              {branches.length === 0 && <option value="">Loading branches…</option>}
+              {!branches.includes(config.draftCreate.baseBranch) && config.draftCreate.baseBranch && (
+                <option value={config.draftCreate.baseBranch}>
+                  {config.draftCreate.baseBranch} (not found)
+                </option>
+              )}
+              {branches.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          )}
           <small>
-            Leave empty to start new draft work from the repository's GitHub default branch. Set this
-            when this repo normally drafts from another long-lived branch.
+            New draft work starts from the GitHub default branch unless you choose another real remote
+            branch here. The agent still creates a fresh branch for the PR.
+            {branchErr && (
+              <>
+                {" "}Branch lookup failed: <code>{branchErr}</code>
+              </>
+            )}
           </small>
-        </label>
+        </div>
       </div>
       <div className="settings-section" id="s-harness">
         <h3>Harness (global)</h3>

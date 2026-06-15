@@ -401,6 +401,19 @@ export interface AgentPlanEntry {
   priority?: string;
 }
 
+export interface DraftCreateRunState {
+  baseBranch: string;
+  branch: string;
+  worktreePath: string;
+  clonePath: string;
+  localBranch: string;
+  /** Hidden from the Drafts-tab recovery panel, but still retained in Activity. */
+  dismissed?: boolean;
+  prUrl?: string;
+  cleanupStatus?: "deleted" | "error";
+  cleanupError?: string;
+}
+
 /**
  * An ordered entry in an agent run's transcript. Messages/thoughts carry their
  * text inline (chunks merge); tool entries reference the tools map by id so
@@ -441,6 +454,8 @@ export interface AgentRun {
   steerable: boolean;
   /** overrides the lifecycle notification category (e.g. CI triage → "ci_analysis") */
   notifyCategory?: NotificationCategory;
+  /** Persisted recovery metadata for new draft PR creation runs. */
+  draftCreate?: DraftCreateRunState;
   /** legacy raw lines — only on runs persisted before the ACP migration */
   lines?: AgentLine[];
   /** Accumulated assistant message text (drives proposal/finding extraction) */

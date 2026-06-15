@@ -746,6 +746,12 @@ export class GitHubClient {
     return String(r.default_branch || "main");
   }
 
+  /** Branch names in this repository, newest server order from GitHub. */
+  async listBranches(repo: string): Promise<string[]> {
+    const branches = await this.paged<any>(`/repos/${repo}/branches`, undefined, 30);
+    return branches.map((b) => String(b.name)).filter(Boolean);
+  }
+
   /** Merge methods this repo allows, preferred order: squash > merge > rebase. */
   async repoMergeMethods(repo: string): Promise<MergeMethod[]> {
     const r = await this.repoInfo(repo);
