@@ -20,11 +20,12 @@ const agentNotif = (
   extra = ""
 ) => {
   const icon = outcome === "started" ? "▶" : outcome === "finished" ? "✓" : "✗";
+  const subject = run.prNumber == null ? run.prTitle : `PR #${run.prNumber} ${run.prTitle}`;
   void notify(
     category,
     `${icon} Agent ${outcome}: ${run.relation}`,
-    `PR #${run.prNumber} ${run.prTitle} · ${run.repo}${extra}`,
-    { repo: run.repo, prNumber: run.prNumber }
+    `${subject} · ${run.repo}${extra}`,
+    run.prNumber == null ? undefined : { repo: run.repo, prNumber: run.prNumber }
   );
 };
 
@@ -42,7 +43,7 @@ export interface StartAgentOptions {
   kind: AgentKind;
   relation: string;
   repo: string;
-  prNumber: number;
+  prNumber: number | null;
   prTitle: string;
   prompt: string;
   model: string;

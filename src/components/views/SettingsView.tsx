@@ -55,6 +55,7 @@ const NAV_GROUPS: { group: string; items: { id: string; label: string }[] }[] = 
       { id: "s-defmodels", label: "Default models" },
       { id: "s-skills", label: "Skills" },
       { id: "s-agent", label: "Behavior" },
+      { id: "s-draft-create", label: "Draft creation" },
     ],
   },
   {
@@ -180,6 +181,9 @@ export function SettingsView() {
     void saveConfig({ ...config, ...patch });
     markSaved();
   };
+  const updateDraftCreate = (patch: Partial<RepoConfig["draftCreate"]>) => {
+    update({ draftCreate: { ...config.draftCreate, ...patch } });
+  };
 
   return (
     <div className="main" ref={mainRef}>
@@ -216,6 +220,19 @@ export function SettingsView() {
         <p className="subtle">
           {global.login} @ {global.githubUrl}. Reconfigure the GitHub connection from the launcher window.
         </p>
+        <label className="field">
+          <span>Default base branch for new drafts</span>
+          <input
+            type="text"
+            value={config.draftCreate.baseBranch}
+            placeholder="GitHub repo default branch"
+            onChange={(e) => updateDraftCreate({ baseBranch: e.target.value })}
+          />
+          <small>
+            Leave empty to start new draft work from the repository's GitHub default branch. Set this
+            when this repo normally drafts from another long-lived branch.
+          </small>
+        </label>
       </div>
       <div className="settings-section" id="s-harness">
         <h3>Harness (global)</h3>
@@ -379,6 +396,7 @@ export function SettingsView() {
             ["review", "Review (teammate PRs)"],
             ["fix", "Fix flows (CI, conflicts, feedback)"],
             ["draft", "Draft edits"],
+            ["draftCreate", "Create draft PRs"],
             ["rewrite", "Rewrites / regeneration"],
           ] as [keyof SkillSelection, string][]
         ).map(([cat, label]) => (
@@ -464,7 +482,10 @@ export function SettingsView() {
             placeholder="leave empty for an app-managed clone"
             onChange={(e) => update({ localClonePath: e.target.value })}
           />
-          <small>Worktrees for fix flows and draft edits are created from this clone.</small>
+          <small>
+            Worktrees for fix flows, draft edits, and new draft creation are created from this clone.
+            Leave empty to let Charon maintain an app-managed local clone under its app data directory.
+          </small>
         </label>
         <label className="field">
           <span>Bug-bot author patterns</span>
@@ -486,6 +507,54 @@ export function SettingsView() {
             onChange={(e) => update({ requiredApprovals: Math.max(1, Number(e.target.value) || 1) })}
             style={{ width: 120 }}
           />
+        </label>
+      </div>
+      <div className="settings-section" id="s-draft-create">
+        <h3>Draft creation</h3>
+        <p className="subtle" style={{ maxWidth: "76ch" }}>
+          These instructions are injected into the new-draft agent and metadata generation. The launch
+          form stays prompt-first; tune repository conventions here instead of adding required fields
+          before every run.
+        </p>
+        <label className="field">
+          <span>Branch naming instructions</span>
+          <PromptInput
+            rows={2}
+            value={config.draftCreate.branchNameInstructions}
+            onChange={(branchNameInstructions) => updateDraftCreate({ branchNameInstructions })}
+          />
+          <small>
+            Default is <code>{"<user>/<short-slug>"}</code>. The branch is generated automatically from
+            the prompt before work starts.
+          </small>
+        </label>
+        <label className="field">
+          <span>PR title instructions</span>
+          <PromptInput
+            rows={2}
+            value={config.draftCreate.titleInstructions}
+            onChange={(titleInstructions) => updateDraftCreate({ titleInstructions })}
+          />
+        </label>
+        <label className="field">
+          <span>PR description instructions</span>
+          <PromptInput
+            rows={3}
+            value={config.draftCreate.descriptionInstructions}
+            onChange={(descriptionInstructions) => updateDraftCreate({ descriptionInstructions })}
+          />
+        </label>
+        <label className="field">
+          <span>Implementation instructions</span>
+          <PromptInput
+            rows={4}
+            value={config.draftCreate.implementationInstructions}
+            onChange={(implementationInstructions) => updateDraftCreate({ implementationInstructions })}
+          />
+          <small>
+            Used only for brand-new draft PRs. Existing draft PR edits continue to use the regular
+            draft-edit flow and skill bucket.
+          </small>
         </label>
       </div>
       <div className="settings-section" id="s-babysit">

@@ -169,6 +169,21 @@ export interface SkillSelection {
   fix: string[];
   /** skill names applied during drafts-view edits */
   draft: string[];
+  /** skill names applied when creating a brand-new draft PR from a prompt */
+  draftCreate: string[];
+}
+
+export interface DraftCreateConfig {
+  /** Empty means use the repository's GitHub default branch. */
+  baseBranch: string;
+  /** Plain-English policy for generating the new branch name. */
+  branchNameInstructions: string;
+  /** Plain-English policy for generating the PR title. */
+  titleInstructions: string;
+  /** Plain-English policy for generating the PR body. */
+  descriptionInstructions: string;
+  /** Repo-specific implementation and validation guidance for new draft work. */
+  implementationInstructions: string;
 }
 
 export interface RepoConfig {
@@ -184,6 +199,8 @@ export interface RepoConfig {
   /** Overrides keyed by event id; missing ids fall back to catalog defaults */
   events: Record<string, EventHandlerConfig>;
   skills: SkillSelection;
+  /** Settings used by the new-draft creation flow. */
+  draftCreate: DraftCreateConfig;
   /** Bot login fragments that classify a comment author as a bug-bot */
   bugBotPatterns: string[];
   /** Approvals needed before pr_approved fires */
@@ -350,6 +367,7 @@ export type AgentKind =
   | "ci_fix"
   | "conflict_fix"
   | "feedback_fix"
+  | "draft_create"
   | "review"
   | "draft_edit"
   | "draft_question"
@@ -400,7 +418,7 @@ export interface AgentRun {
   /** Human description of the relation, e.g. "CI fix", "review" */
   relation: string;
   repo: string;
-  prNumber: number;
+  prNumber: number | null;
   prTitle: string;
   prompt: string;
   model: string;

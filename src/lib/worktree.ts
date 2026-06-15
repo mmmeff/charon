@@ -206,6 +206,46 @@ export async function createReviewWorktree(
   });
 }
 
+/**
+ * Create an isolated worktree for a brand-new draft PR. Unlike PR edit/fix
+ * worktrees, this starts from an arbitrary remote base branch and targets a
+ * not-yet-existing remote branch. The caller owns cleanup so cancelled draft
+ * work can remain inspectable until the user dismisses it.
+ */
+export async function createDraftCreationWorktree(
+  gh: GitHubClient,
+  repo: string,
+  configuredClonePath: string,
+  baseBranch: string,
+  prBranch: string
+): Promise<Worktree> {
+  const base = baseBranch.trim();
+  const branch = prBranch.trim();
+  if (!base) throw new Error("base branch is required");
+  if (!branch) throw new Error("draft branch is required");
+
+  const clonePath = await ensureClone(gh, repo, configuredClonePath);
+  const dataDir = await native.appDataDir();
+
+  return withCloneLock(clonePath, async () => {
+    await git(["fetch", "origin", base], clonePath);
+    const id = uid();
+    const tmpPath = `${dataDir}/worktrees/${sanitize(repo)}/draft-${sanitize(branch)}-${id}`;
+    const localBranch = `pr-copilot/draft-create/${sanitize(branch)}-${id}`;
+    await git(["worktree", "add", "-b", localBranch, tmpPath, `origin/${base}`], clonePath);
+    leases.add(tmpPath);
+    const baseSha = (await git(["rev-parse", "HEAD"], tmpPath)).trim();
+    return {
+      path: tmpPath,
+      localBranch,
+      prBranch: branch,
+      clonePath,
+      persistent: false,
+      baseSha,
+    };
+  });
+}
+
 /** Post-run cleanup: persistent worktrees stay for reuse; temp ones go. */
 export async function releaseWorktree(wt: Worktree): Promise<void> {
   leases.delete(wt.path);

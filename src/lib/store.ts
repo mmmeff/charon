@@ -138,6 +138,33 @@ function migrateReviewFilters(raw: unknown): PrReviewFilters {
   };
 }
 
+function migrateSkillSelection(raw: unknown, fallback: RepoConfig["skills"]): RepoConfig["skills"] {
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    review: Array.isArray(obj.review) ? stringList(obj.review) : fallback.review,
+    rewrite: Array.isArray(obj.rewrite) ? stringList(obj.rewrite) : fallback.rewrite,
+    fix: Array.isArray(obj.fix) ? stringList(obj.fix) : fallback.fix,
+    draft: Array.isArray(obj.draft) ? stringList(obj.draft) : fallback.draft,
+    draftCreate: Array.isArray(obj.draftCreate) ? stringList(obj.draftCreate) : fallback.draftCreate,
+  };
+}
+
+function migrateDraftCreate(
+  raw: unknown,
+  fallback: RepoConfig["draftCreate"]
+): RepoConfig["draftCreate"] {
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const str = (key: keyof RepoConfig["draftCreate"]) =>
+    typeof obj[key] === "string" ? String(obj[key]) : fallback[key];
+  return {
+    baseBranch: str("baseBranch"),
+    branchNameInstructions: str("branchNameInstructions"),
+    titleInstructions: str("titleInstructions"),
+    descriptionInstructions: str("descriptionInstructions"),
+    implementationInstructions: str("implementationInstructions"),
+  };
+}
+
 function migrateRepoConfig(raw: string | null): RepoConfig {
   const defaults = defaultRepoConfig();
   if (!raw) return defaults;
@@ -148,6 +175,8 @@ function migrateRepoConfig(raw: string | null): RepoConfig {
   // now starts from all open repo PRs not authored by the viewer; only the new
   // GitHub review-filter builder should narrow that list.
   cfg.reviewFilters = migrateReviewFilters(parsed.reviewFilters);
+  cfg.skills = migrateSkillSelection(parsed.skills, defaults.skills);
+  cfg.draftCreate = migrateDraftCreate(parsed.draftCreate, defaults.draftCreate);
   return cfg;
 }
 

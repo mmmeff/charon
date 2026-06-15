@@ -143,13 +143,15 @@ export function AgentCard({
   const logRef = useRef<HTMLDivElement>(null);
   const githubUrl = useGlobalConfig((s) => s.config?.githubUrl ?? "https://github.com");
   const openCommit = useUiStore((s) => s.openCommit);
-  const prUrl = `${githubUrl}/${run.repo}/pull/${run.prNumber}`;
+  const prUrl = run.prNumber == null ? "" : `${githubUrl}/${run.repo}/pull/${run.prNumber}`;
   const active = run.status === "running" || run.status === "starting";
   useNow(active ? 1000 : 0); // tick the elapsed counter while running
 
   // jump to this PR inside the app (the ↗ stays for web). No-op if the PR left
   // the lists (closed/merged) — only the web link remains.
-  const openInApp = () => void navigateToPr(run.prNumber);
+  const openInApp = () => {
+    if (run.prNumber != null) void navigateToPr(run.prNumber);
+  };
 
   // follow the live stream as entries/tools grow
   useEffect(() => {
@@ -179,26 +181,32 @@ export function AgentCard({
           {active && <Spinner />}
           <Badge color={statusColor(run.status)}>{run.status}</Badge>
           <strong>{run.relation}</strong>
-          <button
-            className="link agent-pr-link"
-            title="Open in this app"
-            onClick={(e) => {
-              e.stopPropagation();
-              openInApp();
-            }}
-          >
-            PR #{run.prNumber} — {run.prTitle}
-          </button>
-          <a
-            href={prUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="subtle"
-            title="Open on GitHub"
-            onClick={(e) => e.stopPropagation()}
-          >
-            ↗
-          </a>
+          {run.prNumber == null ? (
+            <span className="subtle">{run.prTitle}</span>
+          ) : (
+            <>
+              <button
+                className="link agent-pr-link"
+                title="Open in this app"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openInApp();
+                }}
+              >
+                PR #{run.prNumber} — {run.prTitle}
+              </button>
+              <a
+                href={prUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="subtle"
+                title="Open on GitHub"
+                onClick={(e) => e.stopPropagation()}
+              >
+                ↗
+              </a>
+            </>
+          )}
           {run.commitSha && (
             <button
               className="link agent-commit-link"

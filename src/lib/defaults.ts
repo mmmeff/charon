@@ -1,5 +1,6 @@
 import type {
   ClassFilters,
+  DraftCreateConfig,
   EventDef,
   GlobalConfig,
   Harness,
@@ -311,6 +312,18 @@ export const DEFAULT_FIX_POLICY = `- Do NOT install dependencies (npm/pnpm/yarn 
 - If you are genuinely unable to make the change safely without running something heavyweight, make the
   smallest correct change you can and say exactly what you could not verify.`;
 
+export const DEFAULT_DRAFT_CREATE_CONFIG: DraftCreateConfig = {
+  baseBranch: "",
+  branchNameInstructions:
+    "Use <user>/<short-slug>, where <user> is the GitHub login and <short-slug> is a short kebab-case summary of the change.",
+  titleInstructions:
+    "Write a concise repository-standard PR title that describes the user-visible change.",
+  descriptionInstructions:
+    "Write a repository-standard PR description based on the final diff. Include what changed, why, and any validation or follow-up notes that are useful for reviewers.",
+  implementationInstructions:
+    "Implement the requested change in the smallest coherent draft PR. Follow existing repository patterns, keep unrelated changes out, commit with a clear message, and do not create a PR if no code changes are needed.",
+};
+
 export function defaultRepoConfig(): RepoConfig {
   return {
     localClonePath: "",
@@ -327,7 +340,9 @@ export function defaultRepoConfig(): RepoConfig {
       rewrite: [],
       fix: [],
       draft: [],
+      draftCreate: [],
     },
+    draftCreate: { ...DEFAULT_DRAFT_CREATE_CONFIG },
     bugBotPatterns: ["bugbot", "cursor", "coderabbit", "copilot", "sonar", "snyk", "codeql"],
     requiredApprovals: 1,
   };
@@ -364,6 +379,7 @@ export const HARNESS_MODEL_DEFAULTS: Record<string, HarnessModelDefaults> = {
   cursor: {
     defaultModel: "composer-2.5-fast",
     modelOverrides: {
+      draft_create: "composer-2.5-fast",
       draft_question: "claude-opus-4-8-thinking-high",
       review: "claude-opus-4-8-thinking-high",
       ci_fix: "gpt-5.5-high",
@@ -383,6 +399,7 @@ export const HARNESS_MODEL_DEFAULTS: Record<string, HarnessModelDefaults> = {
   codex: {
     defaultModel: "gpt-5.3-codex-spark",
     modelOverrides: {
+      draft_create: "gpt-5.3-codex-spark",
       draft_question: "gpt-5.5",
       review: "gpt-5.5",
       feedback_fix: "gpt-5.5",
@@ -395,6 +412,7 @@ export const HARNESS_MODEL_DEFAULTS: Record<string, HarnessModelDefaults> = {
     },
     reasoningEffort: "high",
     reasoningOverrides: {
+      draft_create: "xhigh",
       draft_edit: "xhigh",
       review: "xhigh",
       feedback_fix: "xhigh",
@@ -468,6 +486,7 @@ function seedListsFromDefaults(d: HarnessModelDefaults): {
  * land in GlobalConfig.modelOverrides.
  */
 export const FLOW_MODEL_CATALOG: { kind: string; label: string; capability: string }[] = [
+  { kind: "draft_create", label: "Create draft PR", capability: "prompt ✓ · model picker ✓" },
   { kind: "draft_question", label: "Ask / Q&A", capability: "prompt ✓ · model picker ✓" },
   { kind: "draft_edit", label: "Edit (composer Change mode)", capability: "prompt ✓ · model picker ✓" },
   { kind: "review", label: "Review (self-review & teammate review)", capability: "prompt ✓ · model picker ✓" },

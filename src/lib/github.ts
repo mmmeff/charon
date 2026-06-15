@@ -740,6 +740,12 @@ export class GitHubClient {
     return this.repoInfoCache;
   }
 
+  /** Repository default branch from GitHub, e.g. main or master. */
+  async defaultBranch(repo: string): Promise<string> {
+    const r = await this.repoInfo(repo);
+    return String(r.default_branch || "main");
+  }
+
   /** Merge methods this repo allows, preferred order: squash > merge > rebase. */
   async repoMergeMethods(repo: string): Promise<MergeMethod[]> {
     const r = await this.repoInfo(repo);
