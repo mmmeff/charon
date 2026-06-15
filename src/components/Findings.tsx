@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { applyFindings } from "../lib/flows";
-import { useRepoStore } from "../lib/store";
+import { useAgentStore, useRepoStore } from "../lib/store";
 import type { PrSummary, ReviewFinding } from "../types";
+import { AgentCard } from "./AgentCard";
 import { AgentLaunchForm } from "./AgentLaunchForm";
 import { timeAgo } from "../lib/ui";
 import { Badge, ConfidenceBadge, SeverityBadge, Spinner } from "./common";
@@ -93,106 +94,92 @@ export function FindingsStrip({ pr }: { pr: PrSummary }) {
 /** One local finding, anchored inline on the diff. */
 export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSummary }) {
   const updateFinding = useRepoStore((s) => s.updateFinding);
-  const [editing, setEditing] = useState(false);
+  const run = useAgentStore((s) => (finding.agentRunId ? s.runs[finding.agentRunId] : undefined));
   const [applyOpen, setApplyOpen] = useState(false);
   const stale = finding.headSha !== pr.headSha;
+  const runStatus = run?.status;
+
+  useEffect(() => {
+    if (finding.status !== "applying") return;
+    if (runStatus === "error" || runStatus === "killed") {
+      void updateFinding(finding.key, { status: "open" });
+    }
+  }, [finding.key, finding.status, runStatus, updateFinding]);
 
   return (
-    <div style={{ opacity: finding.status === "applied" ? 0.55 : 1 }}>
-      <div className="row" style={{ marginBottom: 4 }}>
-        <span className="origin-chip local" title="Only in this app — not on GitHub">
-          Local only
-        </span>
-        <SeverityBadge severity={finding.severity} />
-        <ConfidenceBadge confidence={finding.confidence} />
-        {finding.status === "applied" && <Badge color="green">applied</Badge>}
-        {finding.status === "applying" && (
-          <Badge color="blue">
-            applying… <Spinner />
-          </Badge>
-        )}
-        {stale && finding.status === "open" && (
-          <Badge color="gray" title="The branch moved since this review ran">
-            stale
-          </Badge>
-        )}
-      </div>
-
-      {editing ? (
-        <>
-          <textarea
-            rows={3}
-            value={finding.body}
-            onChange={(e) => void updateFinding(finding.key, { body: e.target.value })}
-          />
-          <div className="subtle" style={{ margin: "6px 0 2px" }}>
-            Suggested change (optional):
-          </div>
-          <textarea
-            rows={4}
-            value={finding.suggestion ?? ""}
-            onChange={(e) =>
-              void updateFinding(finding.key, { suggestion: e.target.value || undefined })
-            }
-          />
-        </>
-      ) : (
-        <>
-          <Markdown text={finding.body} className="compact" />
-          {finding.suggestion && (
-            <pre className="suggestion-block">
-              <code>{finding.suggestion}</code>
-            </pre>
+    <div>
+      <div style={{ opacity: finding.status === "applied" ? 0.55 : 1 }}>
+        <div className="row" style={{ marginBottom: 4 }}>
+          <span className="origin-chip local" title="Only in this app — not on GitHub">
+            Local only
+          </span>
+          <SeverityBadge severity={finding.severity} />
+          <ConfidenceBadge confidence={finding.confidence} />
+          {finding.status === "applied" && <Badge color="green">applied</Badge>}
+          {finding.status === "applying" && (
+            <Badge color="blue">
+              applying… <Spinner />
+            </Badge>
           )}
-        </>
-      )}
+          {stale && finding.status === "open" && (
+            <Badge color="gray" title="The branch moved since this review ran">
+              stale
+            </Badge>
+          )}
+        </div>
 
-      <div className="row" style={{ marginTop: 8 }}>
-        {finding.status === "open" && (
-          <>
-            <button
-              className={`small ${applyOpen ? "" : "primary"}`}
-              onClick={() => setApplyOpen(!applyOpen)}
-            >
-              Apply
-            </button>
-            <button className="small" onClick={() => setEditing(!editing)}>
-              {editing ? "Done" : "Edit"}
-            </button>
-            <button
-              className="small danger"
-              onClick={() => void updateFinding(finding.key, { status: "dismissed" })}
-            >
-              Dismiss
-            </button>
-          </>
+        <Markdown text={finding.body} className="compact" />
+        {finding.suggestion && (
+          <pre className="suggestion-block">
+            <code>{finding.suggestion}</code>
+          </pre>
         )}
-        {finding.status === "applying" && (
-          <button
-            className="link small"
-            title="Reset if the apply agent failed"
-            onClick={() => void updateFinding(finding.key, { status: "open" })}
-          >
-            reset to open
-          </button>
-        )}
-        {finding.status === "applied" && (
-          <button
-            className="link small"
-            onClick={() => void updateFinding(finding.key, { status: "open" })}
-          >
-            reopen
-          </button>
+
+        <div className="row" style={{ marginTop: 8 }}>
+          {finding.status === "open" && (
+            <>
+              <button
+                className={`small ${applyOpen ? "" : "primary"}`}
+                onClick={() => setApplyOpen(!applyOpen)}
+              >
+                Apply
+              </button>
+              <button
+                className="small danger"
+                onClick={() => void updateFinding(finding.key, { status: "dismissed" })}
+              >
+                Dismiss
+              </button>
+            </>
+          )}
+          {finding.status === "applying" && (
+            <button
+              className="link small"
+              title="Reset if the apply agent failed"
+              onClick={() => void updateFinding(finding.key, { status: "open", agentRunId: undefined })}
+            >
+              reset to open
+            </button>
+          )}
+          {finding.status === "applied" && (
+            <button
+              className="link small"
+              onClick={() => void updateFinding(finding.key, { status: "open", agentRunId: undefined })}
+            >
+              reopen
+            </button>
+          )}
+        </div>
+        {applyOpen && finding.status === "open" && (
+          <ApplyForm
+            pr={pr}
+            findings={[finding]}
+            label="Run apply"
+            onClose={() => setApplyOpen(false)}
+          />
         )}
       </div>
-      {applyOpen && finding.status === "open" && (
-        <ApplyForm
-          pr={pr}
-          findings={[finding]}
-          label="Run apply"
-          onClose={() => setApplyOpen(false)}
-        />
-      )}
+      {run && <AgentCard run={run} embedded defaultOpen />}
     </div>
   );
 }

@@ -5,6 +5,7 @@
   "windows": ["*"],
   "permissions": [
     "core:default",
+    "core:webview:allow-set-webview-zoom",
     "notifications:default",
     "updater:default",
     "process:default",

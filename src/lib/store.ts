@@ -180,7 +180,7 @@ export const useRepoStore = create<RepoState>((set, get) => ({
       eventLog: logRaw ? JSON.parse(logRaw) : [],
       findings: (findData.findings ?? []).map((f: ReviewFinding) =>
         // an in-flight apply can't survive a restart
-        f.status === "applying" ? { ...f, status: "open" } : f
+        f.status === "applying" ? { ...f, status: "open", agentRunId: undefined } : f
       ),
       reviewSummaries: findData.summaries ?? {},
       loaded: true,

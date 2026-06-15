@@ -620,7 +620,7 @@ export async function applyFindings(
   guidance?: string
 ): Promise<string> {
   const store = useRepoStore.getState();
-  for (const f of findings) await store.updateFinding(f.key, { status: "applying" });
+  for (const f of findings) await store.updateFinding(f.key, { status: "applying", agentRunId: undefined });
 
   const task = `Address the following self-review finding${findings.length > 1 ? "s" : ""} from an automated code review
 of this PR. Treat each as a strong recommendation: verify it is correct in context, then implement the fix.
@@ -637,7 +637,7 @@ ${findings.map(findingInstruction).join("\n\n")}${
     // propose=false: these findings are local-only — fix and push, no PR comment
     const prompt = applySkills(fixFlowWrapper(ctx, pr, wt, task, false), ctx.skills, ctx.config.skills.fix);
     try {
-      return await startAgent({
+      const runId = await startAgent({
         kind: "feedback_fix",
         relation: findings.length > 1 ? `apply ${findings.length} findings` : "apply finding",
         repo: ctx.repo,
@@ -657,13 +657,15 @@ ${findings.map(findingInstruction).join("\n\n")}${
           }
         },
       });
+      for (const f of findings) await store.updateFinding(f.key, { status: "applying", agentRunId: runId });
+      return runId;
     } catch (e) {
       await releaseWorktree(wt); // spawn failure: free the slot lease
       throw e;
     }
   } catch (e) {
     // worktree/spawn failure: findings go back to open so the user can retry
-    for (const f of findings) await store.updateFinding(f.key, { status: "open" });
+    for (const f of findings) await store.updateFinding(f.key, { status: "open", agentRunId: undefined });
     throw e;
   }
 }

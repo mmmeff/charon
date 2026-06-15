@@ -194,7 +194,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
               renderCommentForm={(sel, close) => (
                 <Composer
                   pr={pr}
-                  modes={["edit", "comment", "review", "ask"]}
+                  modes={["comment", "review", "ask"]}
                   reviewKind="self"
                   compact
                   selection={sel}
@@ -209,4 +209,3 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
     </div>
   );
 }
-
