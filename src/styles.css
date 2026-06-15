@@ -304,6 +304,83 @@ h3, h4 {
   font-size: 12px;
 }
 
+/* ---- root crash fallback ---- */
+.crash-screen {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    var(--dotgrid),
+    radial-gradient(circle at 50% 18%, rgba(255, 70, 51, 0.1), transparent 32%),
+    var(--bg);
+  background-size: 7px 7px, auto, auto;
+}
+.crash-panel {
+  width: min(720px, 100%);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--red);
+  background: var(--bg-raised);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.35);
+  padding: 24px;
+}
+.crash-kicker {
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.crash-panel h1 {
+  margin: 8px 0 8px;
+  font-family: var(--sans);
+  font-size: 22px;
+  line-height: 1.2;
+}
+.crash-panel p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+.crash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+.crash-details {
+  margin-top: 22px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 14px;
+}
+.crash-details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.crash-details summary:hover {
+  color: var(--fg);
+}
+.crash-details pre {
+  max-height: 42vh;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-inset);
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---- resizable panel handles ---- */
 .resize-handle {
   position: absolute; top: 0; bottom: 0; width: 7px; cursor: col-resize; z-index: 25;
