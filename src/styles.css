@@ -283,6 +283,31 @@ h3, h4 {
 /* ---- layout ---- */
 .main { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .main.split { display: flex; gap: 0; padding: 0; overflow: hidden; }
+
+/* agent grid: active/running agents as cards in rows */
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.agent-grid > .card { margin-bottom: 0; }
+.agent-grid > .agent-embedded { margin-bottom: 0; }
+
+/* completed runs section heading */
+.agent-completed-section { margin-top: 0; }
+.agent-completed-heading {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fg-subtle); margin-bottom: 10px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.agent-completed-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700;
+  background: var(--bg-inset); color: var(--fg-muted);
+  border: 1px solid var(--border); padding: 0 6px; min-width: 18px; height: 16px;
+}
 .sidebar {
   width: 340px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border);
   padding: 12px; position: relative;
@@ -497,13 +522,19 @@ h3, h4 {
   margin-left: 2px;
   box-shadow: none;
 }
-.diff-file { border: 1px solid var(--border); border-radius: 0; margin-bottom: 14px; overflow: hidden; }
+/* overflow:clip (not hidden) clips the box without becoming a scroll container,
+   so the sticky header below anchors to the page scroller — letting it pin at a
+   viewport offset (under the control bar) instead of the file's own top edge. */
+.diff-file { border: 1px solid var(--border); border-radius: 0; margin-bottom: 14px; overflow: clip; }
 .diff-file-header {
   background: var(--bg-raised);
   background-image: var(--dotgrid);
   background-size: 7px 7px;
   padding: 7px 12px; font-family: var(--mono); font-size: 11.5px;
-  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 2;
+  border-bottom: 1px solid var(--border);
+  /* pin the current file's header just below the floating control bar so its
+     "viewed" checkbox is never obscured (matches the filetree's offset) */
+  position: sticky; top: calc(var(--prc-diffbar-h, 44px) + 16px); z-index: 10;
   display: flex; gap: 8px; align-items: center;
 }
 /* "viewed" toggle — checkbox in a button for a generous hitbox */
@@ -1794,9 +1825,10 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
 .pr-diff-stat .del { color: var(--red); }
 
 /* keep the diff's viewport-sticky chrome clear of the pinned rail. The per-file
-   headers are intentionally excluded: their sticky context is each clipped
-   .diff-file, so a viewport offset would expose a black band above them. */
+   headers pin just under the control bar (same offset as the filetree) so the
+   current file's title + "viewed" checkbox stay visible while scrolling. */
 .pr-shell .diff-title-control-bar { top: calc(var(--prc-rail-h) + 8px); }
+.pr-shell .diff-file-header { top: calc(var(--prc-rail-h) + var(--prc-diffbar-h) + 16px); }
 .pr-shell .filetree {
   top: calc(var(--prc-rail-h) + var(--prc-diffbar-h) + 16px);
   max-height: calc(100vh - var(--prc-rail-h) - var(--prc-diffbar-h) - 68px);
