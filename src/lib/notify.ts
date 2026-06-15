@@ -6,6 +6,7 @@ import {
 import type { NotificationCategory } from "../types";
 import { notificationEnabled } from "./defaults";
 import { useGlobalConfig } from "./store";
+import { isLocalDevelopment } from "./tauri";
 
 let granted: boolean | null = null;
 
@@ -32,6 +33,7 @@ export async function notify(
   body: string,
   nav?: NotifyNav
 ): Promise<void> {
+  if (isLocalDevelopment()) return;
   try {
     const prefs = useGlobalConfig.getState().config?.notifications;
     if (!notificationEnabled(prefs, category)) return;

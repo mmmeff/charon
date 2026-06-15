@@ -138,6 +138,10 @@ export function RepoApp({ repo }: { repo: string }) {
     ctxRef.current = { gh, repo, config: repoStore.config, global, skills };
   }
   const [poller] = useState(() => new RepoPoller(() => ctxRef.current!));
+  const reviewFiltersKey = repoStore.loaded ? JSON.stringify(repoStore.config.reviewFilters) : "";
+  const seenReviewFiltersKey = useRef<string | null>(null);
+  const reviewFiltersChangedInSettings = useRef(false);
+  const previousTab = useRef(tab);
 
   useEffect(() => {
     if (!repoStore.loaded || !gh || !global) return;
@@ -145,6 +149,31 @@ export function RepoApp({ repo }: { repo: string }) {
     return () => poller.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoStore.loaded, gh]);
+
+  useEffect(() => {
+    if (!repoStore.loaded) {
+      seenReviewFiltersKey.current = null;
+      reviewFiltersChangedInSettings.current = false;
+      return;
+    }
+    if (seenReviewFiltersKey.current === null) {
+      seenReviewFiltersKey.current = reviewFiltersKey;
+      return;
+    }
+    if (seenReviewFiltersKey.current !== reviewFiltersKey) {
+      if (tab === "settings") reviewFiltersChangedInSettings.current = true;
+      seenReviewFiltersKey.current = reviewFiltersKey;
+    }
+  }, [repoStore.loaded, reviewFiltersKey, tab]);
+
+  useEffect(() => {
+    const prev = previousTab.current;
+    previousTab.current = tab;
+    if (prev === "settings" && tab !== "settings" && reviewFiltersChangedInSettings.current) {
+      reviewFiltersChangedInSettings.current = false;
+      if (ctxRef.current) poller.refresh();
+    }
+  }, [tab, poller]);
 
   // OS-notification deep-link: the PR this window should jump to. Set on a cold
   // start by `focus_pr`'s `?pr=` URL, and live by its `navigate-to-pr` event

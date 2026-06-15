@@ -116,3 +116,8 @@ export const native = {
 export function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window;
 }
+
+export function isLocalDevelopment(): boolean {
+  const host = window.location.hostname;
+  return import.meta.env.DEV || host === "localhost" || host === "127.0.0.1" || host === "::1";
+}

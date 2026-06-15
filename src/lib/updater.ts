@@ -5,7 +5,7 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { create } from "zustand";
 import { notify } from "./notify";
-import { isTauri } from "./tauri";
+import { isLocalDevelopment, isTauri } from "./tauri";
 
 /**
  * Auto-update loop: checks the GitHub `latest.json` on boot and every few
@@ -89,6 +89,10 @@ export function dismissUpdateToast(): void {
 /** set when the user clicks the toast before the download has finished */
 let applyWhenReady = false;
 
+function updaterEnabled(): boolean {
+  return isTauri() && !isLocalDevelopment();
+}
+
 async function checkOnce(): Promise<void> {
   try {
     const update = await check();
@@ -119,6 +123,7 @@ async function checkOnce(): Promise<void> {
  * the in-flight download (or start one) and relaunch the moment it lands.
  */
 export async function kickOffUpdate(): Promise<void> {
+  if (!updaterEnabled()) return;
   if (useUpdateStore.getState().ready) return applyUpdate();
   applyWhenReady = true;
   useUpdateStore.setState({ updating: true });
@@ -134,7 +139,7 @@ export async function kickOffUpdate(): Promise<void> {
 let started = false;
 
 export function startUpdateLoop(): void {
-  if (!isTauri() || started) return;
+  if (!updaterEnabled() || started) return;
   started = true;
 
   // a previous session (or another window) may have an install staged already;
@@ -182,7 +187,7 @@ let manualCheckActive = false;
  * native Update/Cancel dialog with the new version and its changelog.
  */
 export async function checkForUpdatesManually(): Promise<void> {
-  if (!isTauri() || manualCheckActive) return;
+  if (!updaterEnabled() || manualCheckActive) return;
   manualCheckActive = true;
   try {
     // the background loop may already have an install staged

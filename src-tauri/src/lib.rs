@@ -669,22 +669,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             #[cfg(desktop)]
-            app.handle()
-                .plugin(tauri_plugin_updater::Builder::new().build())?;
-            // The native macOS notifications backend requires a .app bundle.
-            // `tauri dev` runs the binary unbundled, so init fails there —
-            // tolerate it in debug so dev startup isn't aborted (notifications
-            // are simply unavailable). Bundled release builds must succeed: the
-            // notification-click → open-PR flow depends on this plugin.
-            if let Err(e) = app.handle().plugin(tauri_plugin_notifications::init()) {
-                if cfg!(debug_assertions) {
-                    eprintln!("notifications plugin unavailable (dev, no .app bundle): {e}");
-                } else {
+            if !cfg!(debug_assertions) {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
+            // Local development should not run updater or desktop notification
+            // plumbing. Bundled release builds must initialize notifications:
+            // the notification-click -> open-PR flow depends on this plugin.
+            if !cfg!(debug_assertions) {
+                if let Err(e) = app.handle().plugin(tauri_plugin_notifications::init()) {
                     return Err(e.into());
                 }
             }
             #[cfg(target_os = "macos")]
-            install_app_menu(app)?;
+            if !cfg!(debug_assertions) {
+                install_app_menu(app)?;
+            }
             Ok(())
         })
         .on_menu_event(|app, event| {

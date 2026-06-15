@@ -3,6 +3,7 @@ import {
   makeReviewFilter,
   REVIEW_FILTER_QUALIFIERS,
   REVIEW_STATUS_VALUES,
+  reviewFilterRows,
   reviewFiltersToQuery,
 } from "../lib/pr-review-filters";
 
@@ -13,7 +14,7 @@ export function PrReviewFilterBuilder({
   filters: PrReviewFilters;
   onChange: (filters: PrReviewFilters) => void;
 }) {
-  const rows = filters.filters;
+  const rows = reviewFilterRows(filters);
   const patchRow = (id: string, patch: Partial<PrReviewFilter>) => {
     onChange({
       filters: rows.map((row) => {
@@ -35,7 +36,7 @@ export function PrReviewFilterBuilder({
   const removeRow = (id: string) => onChange({ filters: rows.filter((row) => row.id !== id) });
   const setReviewRequestedMe = () =>
     onChange({ filters: [makeReviewFilter("review-requested", "@me")] });
-  const query = reviewFiltersToQuery(filters);
+  const query = reviewFiltersToQuery({ filters: rows });
 
   return (
     <div className="review-filter-builder">

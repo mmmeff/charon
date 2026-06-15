@@ -31,7 +31,11 @@ export function makeReviewFilter(
 }
 
 export function reviewFiltersToQuery(filters: PrReviewFilters): string {
-  return filters.filters.map((f) => `${f.qualifier}:${quoteFilterValue(f.value)}`).join(" ");
+  return reviewFilterRows(filters).map((f) => `${f.qualifier}:${quoteFilterValue(f.value)}`).join(" ");
+}
+
+export function reviewFilterRows(filters: PrReviewFilters | undefined): PrReviewFilter[] {
+  return Array.isArray(filters?.filters) ? filters.filters : [];
 }
 
 function quoteFilterValue(value: string): string {
@@ -62,7 +66,7 @@ export function isReviewRequestedFromUser(
 }
 
 export function reviewFilterNeedsReviews(filters: PrReviewFilters): boolean {
-  return filters.filters.some((f) => f.qualifier === "review" || f.qualifier === "reviewed-by");
+  return reviewFilterRows(filters).some((f) => f.qualifier === "review" || f.qualifier === "reviewed-by");
 }
 
 export function matchesPrReviewFilters(
@@ -75,7 +79,7 @@ export function matchesPrReviewFilters(
     reviews?: ReviewInfo[];
   }
 ): boolean {
-  return filters.filters.every((filter) => matchesOne(pr, filter, ctx));
+  return reviewFilterRows(filters).every((filter) => matchesOne(pr, filter, ctx));
 }
 
 function matchesOne(

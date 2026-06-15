@@ -1,5 +1,5 @@
 import { onNotificationClicked } from "@choochmeque/tauri-plugin-notifications-api";
-import { native } from "./tauri";
+import { isLocalDevelopment, native } from "./tauri";
 
 let initialized = false;
 
@@ -21,7 +21,7 @@ let initialized = false;
  * registration within a window (React StrictMode / re-mounts).
  */
 export async function initNotificationNav(): Promise<void> {
-  if (initialized) return;
+  if (initialized || isLocalDevelopment()) return;
   initialized = true;
   try {
     await onNotificationClicked((data) => {
@@ -31,7 +31,7 @@ export async function initNotificationNav(): Promise<void> {
       void native.focusPr(repo, prNumber);
     });
   } catch (e) {
-    initialized = false; // let a later attempt retry (e.g. dev: no .app bundle)
+    initialized = false; // let a later attempt retry if plugin init was transient
     console.error("notification nav init failed", e);
   }
 }
