@@ -87,10 +87,11 @@ export function modelConfigOption(ns: NewSessionResult): AcpConfigOption | undef
 
 /**
  * Display label for a model. Cursor encodes variant params in the modelId
- * brackets; reformat `model[thinking=true,context=300k,effort=high]` to
- * `model (high, 300k)` — the reasoning level (effort or reasoning) then the
- * context window, dropping thinking/fast noise. `default` becomes "Auto".
- * Harnesses without bracketed ids (e.g. codex) just keep their name.
+ * brackets; reformat `model[thinking=true,context=300k,effort=high,fast=true]`
+ * to `model (high, 300k, fast)` — the reasoning level (effort or reasoning),
+ * the context window, then a "fast" tag when fast=true, dropping the rest.
+ * `default` becomes "Auto". Harnesses without bracketed ids (e.g. codex) just
+ * keep their name.
  */
 export function modelLabel(m: AcpModel): string {
   const base = m.modelId.replace(/\[.*\]$/, "");
@@ -102,7 +103,11 @@ export function modelLabel(m: AcpModel): string {
     const eq = kv.indexOf("=");
     params.set(eq < 0 ? kv.trim() : kv.slice(0, eq).trim(), eq < 0 ? "" : kv.slice(eq + 1).trim());
   }
-  const detail = [params.get("effort") || params.get("reasoning"), params.get("context")]
+  const detail = [
+    params.get("effort") || params.get("reasoning"),
+    params.get("context"),
+    params.get("fast") === "true" ? "fast" : "",
+  ]
     .filter(Boolean)
     .join(", ");
   const name = m.name || base;
