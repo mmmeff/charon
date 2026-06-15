@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/hero.svg" alt="Charon — human-in-the-loop agents for pull requests" width="100%"/>
+  <img src="docs/hero.svg" alt="Charon — Code Review Agent" width="100%"/>
 </p>
 
 <p align="center">
@@ -15,81 +15,66 @@
   <img src="https://img.shields.io/badge/harnesses-Cursor%20·%20Claude%20Code%20·%20Codex%20·%20opencode-8fb4cc?style=flat-square&labelColor=15140f" alt="Supported harnesses"/>
 </p>
 
-AI made writing code cheap. It didn't make *merging* it cheap: the PRs got bigger, more numerous,
-and more uneven, while review capacity — humans with context and accountability — stayed exactly
-the same. That's the new bottleneck, and the popular fix (point another unsupervised bot at the
-thread) just moves the noise downstream to the people who have to read it.
+AI agents made code generation cheap. Review is now scarce: what changed, why, and whether it
+should land.
 
-**Charon is a desktop control room for that bottleneck.** It watches every PR you own and every
-review you owe, fires agents at the work that doesn't need your judgment — failing CI, merge
-conflicts, bug-bot triage, first-pass review — and turns what *does* need your judgment into
-fast, well-presented decisions: **proposals you edit and approve before anything touches GitHub**.
+**Charon is a Code Review Agent.** It turns every change — yours, a teammate's, or a bot's — into
+a decision surface: diff, CI, comments, context, agent log, proposed fix. You approve what touches
+GitHub.
 
 <p align="center">
   <img src="docs/tour.gif" alt="Charon tour: babysitting PRs, reviewing a teammate's diff, watching agents stream" width="100%"/>
 </p>
 
-## Tools for the human in the loop
+## Review first
 
-You can't fix an AI-volume problem by adding more unsupervised AI output — auto-posted reviews and
-auto-replies are how PR threads became unreadable in the first place. Charon spends its
-intelligence the other way: agents do the legwork, and the product of every run is a *decision
-surface* for you — diffs with anchored findings, severity and confidence on every comment,
-one-click apply-or-dismiss — instead of another post in the thread.
+Context engineering is the old software problem: define the work well enough to judge it. Bigger
+models still fail on vague intent.
 
-- **The app never posts comments, replies, or reviews on its own.** Every GitHub-facing write is a
-  proposal card — edit it, regenerate it with a custom prompt, run it through a humanize skill, or
-  dismiss it. Nothing ships until you hit *Approve & send*. Your teammates always get *you*, at
-  your speed, not a bot wearing your name.
-- **One automated exception, by design:** during fix flows the agent commits and pushes to *your
-  own* PR branches (never forks, never teammates' branches). Code is reviewable after the fact;
-  comments that impersonate you are not.
-- Agents reviewing teammates' code run **read-only**. Fix agents get an **isolated git worktree**
-  scoped to the one PR they're fixing.
+Charon's rule: **changes = review**. Generated code, hand-written code, teammate code, dependency
+churn, bot fixes — review is the unit of work.
+
+- **No autoposting.** Every GitHub-facing write is a proposal card: edit, regenerate, humanize, or
+  dismiss. Nothing ships until you hit *Approve & send*.
+- **Fixes push only to your PR branches.** Never forks, never teammates' branches.
+- **Teammate reviews are read-only.** Fix agents run in isolated worktrees.
 
 ## What it does
 
-### Babysits your open PRs
+### Keeps PRs review-ready
 
 A per-repo poller snapshots checks, mergeability, comments, and reviews, then diffs the snapshots
 into **events**: `ci_failed`, `merge_conflict_detected`, `bug_bot_finding`,
 `teammate_review_submitted`, and twenty more. Each event runs your prompt against the coding agent
-of your choice — the default playbook fixes CI, resolves conflicts, and triages bot findings before you've finished
-your coffee. Self-review findings (severity- and confidence-tagged, with concrete suggestions) land
-anchored on the diff, one *Apply* away from a fix agent.
+of your choice. CI failures, conflicts, bot findings, and teammate reviews become anchored findings,
+fixes, or proposals you can approve.
 
 <img src="docs/open-prs.png" alt="Open PRs view: CI status, event feed, pending proposals, inline findings on the diff" width="100%"/>
 
-### Drafts reviews you'd actually send
+### Drafts reviews you own
 
-When a teammate requests your review, an agent reads the full diff and drafts inline comments —
-each with severity, confidence, and an editable body — anchored on a native diff view with file
-tree, unified/split modes, and resolvable threads. Toggle comments off, rewrite them, change the
-verdict, then submit the whole review in one shot.
+An agent reads the full diff and drafts inline comments with severity, confidence, and editable
+body. Toggle comments, rewrite, change verdict, submit once.
 
 <img src="docs/review.png" alt="Review view: proposed inline comments with severity and confidence, anchored on the diff" width="100%"/>
 
-### Treats your drafts as a workspace
+### Turns drafts into diffs
 
-GitHub-style click-and-drag line selection on your draft PRs. Select lines and *Edit* — an agent
-implements the change in a worktree and pushes. Ask a question instead and it answers read-only.
-Your draft, no approval gate, full speed.
+Select lines on your draft PRs. Ask a question read-only, or click *Edit* and an agent patches a
+worktree and pushes to your branch.
 
 <img src="docs/drafts.png" alt="Drafts view: line-scoped agent edits on your draft PRs" width="100%"/>
 
-### Shows you everything the agents do
+### Shows every run
 
-Every run — its prompt, model, working directory, and live streamed output — in one feed. Stop a
-runaway agent with one click.
+Prompt, model, working directory, and streamed output in one feed. Stop any run.
 
 <img src="docs/activity.png" alt="Activity feed: live streaming agent runs" width="100%"/>
 
-### And every behavior is a prompt you own
+### Makes prompts policy
 
-Every event handler is a toggle plus a prompt template. Don't like how the CI-fix prompt reads?
-Edit it. Want conflict resolution off for one repo? Toggle it. Per-repo filters (labels, drafts,
-freeform LLM criteria) decide what's worth an agent's attention. New event types are catalog
-entries — the engine never changes.
+Every handler is a toggle plus a prompt template. Per-repo filters decide what deserves an agent.
+New event types are catalog entries.
 
 <img src="docs/settings-events.png" alt="Settings: the event catalog — every behavior is a toggle plus an editable prompt" width="100%"/>
 

@@ -1,0 +1,58 @@
+<svg viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Charon — AI code needs review">
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#e9e4d4" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+    <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="3.8" height="10" fill="#ff4f00" opacity="0.9"/>
+    </pattern>
+    <radialGradient id="moon" cx="38%" cy="32%" r="78%">
+      <stop offset="0%" stop-color="#e9e4d4"/>
+      <stop offset="48%" stop-color="#bdb5a4"/>
+      <stop offset="78%" stop-color="#827b6d"/>
+      <stop offset="100%" stop-color="#2a281f"/>
+    </radialGradient>
+    <radialGradient id="cap" cx="50%" cy="18%" r="86%">
+      <stop offset="0%" stop-color="#9c4a22"/>
+      <stop offset="54%" stop-color="#a35427" stop-opacity="0.82"/>
+      <stop offset="100%" stop-color="#a35427" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="limb" cx="38%" cy="32%" r="80%">
+      <stop offset="66%" stop-color="#0e0d0a" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0e0d0a" stop-opacity="0.68"/>
+    </radialGradient>
+    <clipPath id="moonClip">
+      <circle cx="940" cy="338" r="260"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0e0d0a"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <path d="M0 570 C210 520 360 610 560 548 C750 490 920 470 1200 518 V630 H0 Z" fill="#15140f"/>
+
+  <circle cx="940" cy="338" r="260" fill="url(#moon)" opacity="0.96"/>
+  <g clip-path="url(#moonClip)">
+    <ellipse cx="966" cy="112" rx="236" ry="138" fill="url(#cap)"/>
+    <path d="M690 352 q78 -28 150 -8 t138 28 q80 22 158 -10 t154 -54" fill="none" stroke="#3f3b32" stroke-width="14" opacity="0.55" stroke-linecap="round"/>
+    <path d="M700 336 q76 -30 148 -12 t138 28 q80 22 154 -10 t148 -50" fill="none" stroke="#e9e4d4" stroke-width="5" opacity="0.38" stroke-linecap="round"/>
+    <circle cx="846" cy="460" r="34" fill="#2a281f" opacity="0.34"/>
+    <circle cx="838" cy="452" r="34" fill="none" stroke="#e9e4d4" stroke-width="5" opacity="0.34"/>
+    <circle cx="1018" cy="454" r="22" fill="#2a281f" opacity="0.32"/>
+    <circle cx="1013" cy="449" r="22" fill="none" stroke="#e9e4d4" stroke-width="4" opacity="0.32"/>
+    <circle cx="780" cy="246" r="18" fill="#2a281f" opacity="0.28"/>
+    <circle cx="778" cy="242" r="18" fill="none" stroke="#e9e4d4" stroke-width="4" opacity="0.28"/>
+    <circle cx="940" cy="338" r="260" fill="url(#limb)"/>
+  </g>
+  <circle cx="940" cy="338" r="260" fill="none" stroke="#ff4f00" stroke-opacity="0.45" stroke-width="3"/>
+
+  <text x="68" y="166" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="78" font-weight="800" letter-spacing="10" fill="#e9e4d4">CHARON</text>
+  <rect x="72" y="194" width="250" height="10" fill="url(#hatch)"/>
+  <rect x="334" y="194" width="10" height="10" fill="#cff24d"/>
+
+  <text x="70" y="270" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="24" letter-spacing="4" fill="#cff24d">AI CODE NEEDS REVIEW</text>
+  <text x="70" y="342" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="52" font-weight="800" letter-spacing="0" fill="#e9e4d4">The Code Review</text>
+  <text x="70" y="402" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="52" font-weight="800" letter-spacing="0" fill="#e9e4d4">Agent</text>
+  <text x="72" y="454" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="31" font-weight="700" letter-spacing="0" fill="#e9e4d4" opacity="0.9">Review before it lands</text>
+  <text x="72" y="508" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="20" letter-spacing="2.2" fill="#8f8a7a">DIFF · CI · CONTEXT · COMMENTS</text>
+  <text x="72" y="548" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="17" letter-spacing="2" fill="#ff4f00">charon.sh</text>
+</svg>

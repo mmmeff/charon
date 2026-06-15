@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Charon: human-in-the-loop agents for pull requests</title>
-<meta name="description" content="AI made code cheap. Merging it is the bottleneck now. Charon gives you a desktop control room: agents do the legwork; you make the calls."/>
-<meta property="og:title" content="Charon: human-in-the-loop agents for pull requests"/>
-<meta property="og:description" content="A desktop control room for pull requests. Agents fix CI, resolve conflicts, and draft reviews; nothing ships without your approval."/>
+<title>Charon: Code Review Agent</title>
+<meta name="description" content="AI writes code. Charon reviews changes: diff, CI, context, comments. You approve what lands."/>
+<meta property="og:title" content="Charon: Code Review Agent"/>
+<meta property="og:description" content="AI writes code. Charon reviews the change: diff, CI, context, comments. You approve what lands."/>
 <meta property="og:image" content="https://mmmeff.github.io/charon/assets/og.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
@@ -14,8 +14,8 @@
 <meta property="og:url" content="https://mmmeff.github.io/charon/"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:image" content="https://mmmeff.github.io/charon/assets/og.png"/>
-<meta name="twitter:title" content="Charon — human-in-the-loop agents for pull requests"/>
-<meta name="twitter:description" content="Agents fix CI, resolve conflicts, and draft reviews. Nothing ships without your approval."/>
+<meta name="twitter:title" content="Charon — Code Review Agent"/>
+<meta name="twitter:description" content="Review AI code before it lands."/>
 <link rel="canonical" href="https://mmmeff.github.io/charon/"/>
 <link rel="icon" type="image/svg+xml" href="assets/app-icon.svg"/>
 <style>
@@ -65,7 +65,7 @@ nav .links a.dl{color:var(--orange)}
 
 /* ---------- hero ---------- */
 header{
-  position:relative;min-height:100svh;
+  position:relative;min-height:92svh;
   display:flex;align-items:center;
   overflow:hidden;
 }
@@ -360,13 +360,14 @@ footer .right{margin-left:auto;display:flex;gap:20px}
 ██║     ██╔══██║██╔══██║██╔══██╗██║   ██║██║╚██╗██║
 ╚██████╗██║  ██║██║  ██║██║  ██║╚██████╔╝██║ ╚████║
  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝</pre>
-    <div class="tagline">HUMAN-IN-THE-LOOP AGENTS FOR PULL REQUESTS</div>
-    <p class="hero-sub">AI made code cheap. It didn't make <strong>merging</strong> cheap.
-Charon gives you a desktop control room for the PR mess. Agents do the legwork;
-<strong>you make the calls</strong>.</p>
+    <div class="tagline">AI CODE NEEDS REVIEW</div>
+    <p class="hero-sub">Charon reviews every change: <strong>diff, CI, comments, context,
+agent work</strong>. You edit the proposal. <strong>You approve what lands.</strong></p>
     <div class="cta-row">
       <a class="btn" href="https://github.com/mmmeff/charon/releases/latest">Download for macOS</a>
+      <a class="btn ghost" href="https://github.com/mmmeff/charon">View on GitHub</a>
     </div>
+    <div class="hero-meta"><span>CRE</span> · diff-first · human-approved</div>
   </div>
   <div class="scroll-hint">▼ SCROLL</div>
 </header>
@@ -374,33 +375,25 @@ Charon gives you a desktop control room for the PR mess. Agents do the legwork;
 <div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
 
 <section id="bottleneck">
-  <div class="sec-label rv">01 / THE BOTTLENECK</div>
-  <h2 class="rv">REVIEW IS THE NEW <span class="a">COMPILE</span></h2>
-  <p class="prose rv">The PR queue got bigger and weirder. Review capacity
-  (people with context and accountability) did not. The popular fix is to point
-  another unsupervised bot at the thread, which mostly gives those people one more thing to read.</p>
-  <p class="prose rv">Charon uses agents for the work that does not need your judgment:
-  <strong>failing CI, merge conflicts, bug-bot triage, first-pass review</strong>.
-  When something needs your call, it becomes a proposal you can edit and approve before anything touches GitHub.</p>
+  <div class="sec-label rv">01 / THESIS</div>
+  <h2 class="rv">REVIEW IS <span class="a">SCARCE</span></h2>
+  <p class="prose rv">AI can write code on demand. Quality still depends on context:
+  <strong>what changed, why, and whether it should land.</strong></p>
+  <p class="prose rv">Bigger models do not fix vague intent. Review is where context becomes enforceable.</p>
+  <p class="prose rv">Charon's rule: <em>changes = review</em>. Yours, a teammate's, or a bot's.</p>
 
   <div class="cards">
     <div class="card rv">
-      <h3><span class="n">▸</span>NOTHING POSTS ITSELF</h3>
-      <p>Every GitHub-facing write starts as a proposal card. Edit it, regenerate it, or dismiss it.
-      Nothing ships until you click <strong>Approve &amp; send</strong>. Your teammates get
-      <strong>you</strong>, not a bot wearing your name.</p>
+      <h3><span class="n">▸</span>BEYOND FILES</h3>
+      <p>Editors optimize writing. Charon optimizes <strong>judging changes</strong>.</p>
     </div>
     <div class="card rv">
-      <h3><span class="n">▸</span>READ-ONLY ON THEIR CODE</h3>
-      <p>Review agents cannot write to teammates' code. Fix agents get an
-      <strong>isolated git worktree</strong> for the one PR they are fixing: no forks,
-      no borrowed branches.</p>
+      <h3><span class="n">▸</span>CRE</h3>
+      <p>A <strong>Code Review Environment</strong>: diffs, checks, comments, agents, decisions.</p>
     </div>
     <div class="card rv">
-      <h3><span class="n">▸</span>EVERY BEHAVIOR IS YOURS</h3>
-      <p>Every event handler has a toggle and a prompt template you can rewrite. Per-repo filters
-      choose what deserves an agent. Hate a behavior? <strong>Edit the
-      prompt.</strong></p>
+      <h3><span class="n">▸</span>YOU APPROVE</h3>
+      <p>No comments, replies, or reviews post themselves. <strong>Edit, send, or dismiss.</strong></p>
     </div>
   </div>
 </section>
@@ -408,58 +401,50 @@ Charon gives you a desktop control room for the PR mess. Agents do the legwork;
 <canvas class="divider" data-flow aria-hidden="true"></canvas>
 
 <section id="tour">
-  <div class="sec-label rv">02 / THE CONTROL ROOM</div>
-  <h2 class="rv">WHAT IT <span class="a">DOES</span></h2>
-  <p class="prose rv">One window per repo. A poller watches checks, mergeability, comments, and
-  reviews, diffs each snapshot into events, then runs <strong>your</strong> prompt.</p>
+  <div class="sec-label rv">02 / PRODUCT</div>
+  <h2 class="rv">REVIEW-FIRST <span class="a">WORKFLOW</span></h2>
+  <p class="prose rv">Watch PRs, run agents, inspect proposals, approve writes.</p>
 
   <div class="feature">
     <div class="ftext rv">
-      <h3 data-n="2.1">BABYSITS YOUR OPEN PRS</h3>
-      <p><em>ci_failed</em>, <em>merge_conflict_detected</em>, <em>bug_bot_finding</em> are the
-      boring alerts. By default, Charon fixes CI, resolves conflicts, and triages bot findings before you've
-      finished your coffee. Self-review findings land <strong>on the diff</strong>,
-      tagged by severity and confidence, one <strong>Apply</strong> away from a fix agent.</p>
+      <h3 data-n="2.1">PRS STAY READY</h3>
+      <p>CI failures, conflicts, bot findings, and teammate reviews become fixes or findings.
+      Severity, confidence, and <strong>Apply</strong> stay on the diff.</p>
     </div>
     <div class="fshot rv" data-cap="open-prs · event feed · proposals"><img src="assets/open-prs.png" alt="Open PRs view" loading="lazy"/></div>
   </div>
 
   <div class="feature flip">
     <div class="ftext rv">
-      <h3 data-n="2.2">DRAFTS REVIEWS YOU'D ACTUALLY SEND</h3>
-      <p>When a teammate requests your review, an agent reads the full diff and drafts inline
-      comments on a native diff view with a file tree, unified/split mode, and resolvable threads. Toggle
-      comments off, rewrite them, change the verdict, then submit the whole review
-      <strong>in one shot</strong>.</p>
+      <h3 data-n="2.2">OWN THE REVIEW</h3>
+      <p>An agent drafts inline comments from the full diff. You edit, disable, change verdict,
+      and submit <strong>once</strong>.</p>
     </div>
     <div class="fshot rv" data-cap="review · anchored comments · one verdict"><img src="assets/review.png" alt="Review view" loading="lazy"/></div>
   </div>
 
   <div class="feature">
     <div class="ftext rv">
-      <h3 data-n="2.3">TREATS DRAFTS AS A WORKSPACE</h3>
-      <p>On your draft PRs, you can select lines the way you do on GitHub. Click
-      <strong>Edit</strong> and an agent implements the change in a worktree, then pushes. Ask a
-      question and it answers read-only. <em>Your draft. Your branch. Keep moving.</em></p>
+      <h3 data-n="2.3">DRAFTS ARE DIFFS</h3>
+      <p>Select lines, ask questions, or request edits. Agents work in isolated worktrees and
+      push to <em>your</em> branch.</p>
     </div>
     <div class="fshot rv" data-cap="drafts · line-scoped edits"><img src="assets/drafts.png" alt="Drafts view" loading="lazy"/></div>
   </div>
 
   <div class="feature flip">
     <div class="ftext rv">
-      <h3 data-n="2.4">SHOWS YOU EVERYTHING</h3>
-      <p>Every run shows its prompt, model, working directory, and <strong>live streamed
-      output</strong> in one feed. Stop a runaway agent with one click.</p>
+      <h3 data-n="2.4">FULL RUN LOG</h3>
+      <p>Prompt, model, working directory, and streamed output in one feed. Stop any run.</p>
     </div>
     <div class="fshot rv" data-cap="activity · live agent streams"><img src="assets/activity.png" alt="Activity feed" loading="lazy"/></div>
   </div>
 
   <div class="feature">
     <div class="ftext rv">
-      <h3 data-n="2.5">AND EVERY BEHAVIOR IS A PROMPT</h3>
-      <p>The event catalog: each handler is a toggle and an editable prompt template with
-      interpolated variables and <em>/skill</em> references. New event types are catalog entries;
-      <strong>the engine stays the same</strong>.</p>
+      <h3 data-n="2.5">PROMPTS ARE POLICY</h3>
+      <p>Every handler is a toggleable prompt with variables and <em>/skill</em> references.
+      Context stays editable.</p>
     </div>
     <div class="fshot rv" data-cap="settings · event catalog"><img src="assets/settings-events.png" alt="Settings event catalog" loading="lazy"/></div>
   </div>
@@ -467,10 +452,10 @@ Charon gives you a desktop control room for the PR mess. Agents do the legwork;
 
 <section id="watch" style="max-width:none;background:var(--ink-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
   <div class="term-wrap">
-    <div class="sec-label rv">03 / LIVE FEED</div>
-    <h2 class="rv">AGENTS, <span class="a">SUPERVISED</span></h2>
-    <p class="prose rv" style="margin-bottom:42px">This is what a run looks like: an event fires, an agent
-    streams logs, and you get a decision to approve, not another post in the thread.</p>
+    <div class="sec-label rv">03 / RUNS</div>
+    <h2 class="rv">AGENTS, <span class="a">REVIEWED</span></h2>
+    <p class="prose rv" style="margin-bottom:42px">The agent gathers context and drafts a decision.
+    Nothing posts until you approve.</p>
     <div class="term rv">
       <div class="term-bar">
         <span class="dot o"></span><span class="dot a"></span><span class="dot"></span>
@@ -482,8 +467,8 @@ Charon gives you a desktop control room for the PR mess. Agents do the legwork;
 </section>
 
 <section id="hood">
-  <div class="sec-label rv">04 / UNDER THE HOOD</div>
-  <h2 class="rv">SMALL MACHINE, <span class="a">SHARP EDGES</span></h2>
+  <div class="sec-label rv">04 / MECHANICS</div>
+  <h2 class="rv">LOCAL. PROMPTABLE. <span class="a">ACP.</span></h2>
   <div class="hood rv">
     <div><h4>Stack</h4><p>Tauri 2 with a Rust backend for HTTP, git, and process spawning; React + TypeScript front end. One window per repo, config stored locally.</p></div>
     <div><h4>Events</h4><p>Every handler is <code>event → { enabled, prompt }</code>. Prompts interpolate <code>{pr-number}</code>, <code>{check-name}</code>, <code>{comment-body}</code>, and <code>/skill</code> references.</p></div>
@@ -493,10 +478,9 @@ Charon gives you a desktop control room for the PR mess. Agents do the legwork;
     <div><h4>Releases</h4><p>Every push to main versions, tags, builds a universal DMG, and publishes it. Installed apps <strong>self-update</strong> with a one-click restart.</p></div>
   </div>
   <div class="callout rv">
-    <strong>Bring your own agent.</strong> Charon speaks the <a href="https://agentclientprotocol.com">Agent Client Protocol</a>,
-    so it runs <a href="https://cursor.com/cli">Cursor</a>, <a href="https://github.com/anthropics/claude-code">Claude Code</a>,
-    <a href="https://github.com/openai/codex">Codex CLI</a>, and <a href="https://opencode.ai">opencode</a> out of the box —
-    each with its models, reasoning levels, and tool calls surfaced natively. Switch any time; point it at any other ACP agent.
+    <strong>Bring your own agent.</strong> Charon speaks <a href="https://agentclientprotocol.com">ACP</a>:
+    <a href="https://cursor.com/cli">Cursor</a>, <a href="https://github.com/anthropics/claude-code">Claude Code</a>,
+    <a href="https://github.com/openai/codex">Codex CLI</a>, <a href="https://opencode.ai">opencode</a>, or any command you configure.
     <a href="https://github.com/mmmeff/charon/issues">Contributions welcome.</a>
   </div>
 </section>
@@ -504,8 +488,8 @@ Charon gives you a desktop control room for the PR mess. Agents do the legwork;
 <div class="outro">
   <canvas id="outro-canvas" data-flow aria-hidden="true"></canvas>
   <div class="outro-inner">
-    <h2 class="rv">TAKE THE <span class="a">HELM</span></h2>
-    <p class="rv">Free. Open source. macOS universal. Updates itself.</p>
+    <h2 class="rv">REVIEW THE <span class="a">CHANGE</span></h2>
+    <p class="rv">Free. Open source. macOS universal.</p>
     <div class="rv"><a class="btn" href="https://github.com/mmmeff/charon/releases/latest">Download Charon</a></div>
   </div>
 </div>
@@ -795,10 +779,10 @@ try{
 }catch(e){ console.warn('ascii shader disabled:', e); }
 
 /* ---------- event ticker ---------- */
-const EVENTS = ['ci_failed','merge_conflict_detected','bug_bot_finding','review_requested',
-  'teammate_review_submitted','pr_opened','check_suite_completed','comment_added',
-  'self_review_finding','proposal_approved','agent_run_completed','draft_edit_requested',
-  'thread_resolved','mergeable_again','push_to_branch'];
+const EVENTS = ['change_detected','context_gap_found','review_requested','ci_failed',
+  'merge_conflict_detected','bug_bot_finding','self_review_finding','proposal_drafted',
+  'teammate_review_submitted','quality_bar_checked','agent_run_completed','draft_edit_requested',
+  'thread_resolved','review_approved','push_to_branch'];
 const tickerEl = document.getElementById('ticker');
 const seq = EVENTS.map(e => `<i>▸</i> ${e} <em>·</em>`).join(' ');
 tickerEl.innerHTML = seq + ' ' + seq;
@@ -828,21 +812,20 @@ document.querySelectorAll('.rv').forEach(el => ro.observe(el));
 
 /* ---------- terminal typing ---------- */
 const SCRIPT = [
-  ['ev','event'], ['dim','  '], ['hl','ci_failed'], ['dim','  pr #482 · "rework dispatch retry queue"  check: '], ['hl','test-linux-x64'], ['nl'],
+  ['ev','change'], ['dim','  '], ['hl','context_gap_found'], ['dim','  pr #482 · "rework dispatch retry queue"'], ['nl'],
   ['dim','──────────────────────────────────────────────'], ['nl'],
-  ['ok','▸ agent spawned'], ['dim','  cursor-agent · worktree /tmp/charon-wt-482 · model auto'], ['nl'],
-  ['dim','  reading failing check output… 3 failures in '], ['hl','retry_queue.test.ts'], ['nl'],
-  ['dim','  > expected backoff of 250ms, received 0ms'], ['nl'],
-  ['dim','  cause: jitter seeded from Date.now() mocked to epoch in CI'], ['nl'],
-  ['dim','  patching '], ['hl','src/queue/backoff.ts'], ['dim','; inject clock, clamp jitter floor'], ['nl'],
+  ['ok','▸ review agent spawned'], ['dim','  cursor-agent · worktree /tmp/charon-wt-482 · model auto'], ['nl'],
+  ['dim','  reading diff, check output, linked issue, and review history'], ['nl'],
+  ['dim','  finding: retry policy changed but product invariant is unstated'], ['nl'],
+  ['dim','  missing context: should user-visible retries preserve the 250ms floor?'], ['nl'],
+  ['dim','  patching '], ['hl','src/queue/backoff.ts'], ['dim','; inject clock, document invariant'], ['nl'],
   ['dim','  $ npm test -- retry_queue   '], ['ok','✓ 41 passed'], ['nl'],
-  ['ok','▸ pushed fix'], ['dim','  2 files · +14 −6 · your branch, your PR'], ['nl'],
+  ['ok','▸ review proposal drafted'], ['dim','  2 findings · 1 fix · 1 context question'], ['nl'],
   ['nl'],
-  ['ev','event'], ['dim','  '], ['hl','teammate_review_submitted'], ['dim','  pr #479 · sarah requested changes'], ['nl'],
-  ['ok','▸ proposal drafted'], ['dim','  reply + 2 code suggestions · '], ['hl','waiting for you'], ['nl'],
+  ['ev','decision'], ['dim','  '], ['hl','waiting_for_you'], ['dim','  approve the fix, edit the context, or send the review'], ['nl'],
   ['dim','  [ edit ]  [ regenerate ]  [ humanize ]  [ '], ['ok','approve & send'], ['dim',' ]  [ dismiss ]'], ['nl'],
   ['nl'],
-  ['acid-note','  nothing was posted. nothing ships until you say so.'], ['nl']
+  ['acid-note','  nothing was posted. every change is review until you say otherwise.'], ['nl']
 ];
 const termEl = document.getElementById('term');
 let started = false;

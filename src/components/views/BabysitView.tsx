@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { eventDef } from "../../lib/defaults";
 import { usePrData } from "../../lib/events";
 import { useRepoStore, useUiStore } from "../../lib/store";
-import { age, sortPrs, timeAgo, type SortKey } from "../../lib/ui";
+import { age, sortPrs, type SortKey } from "../../lib/ui";
 import { ApprovalsBadge, Badge, CiBadge, EmptyState, MergeBadge, RunningAgentsChip, SortPicker } from "../common";
 import { Sidebar } from "../Panels";
 import { PrWorkspace } from "../PrWorkspace";
@@ -17,7 +16,6 @@ export function BabysitView() {
   const myOpen = usePrData((s) => s.myOpen);
   const checks = usePrData((s) => s.checks);
   const proposals = useRepoStore((s) => s.proposals);
-  const eventLog = useRepoStore((s) => s.eventLog);
   const selected = useUiStore((s) => s.focusedPr["open"] ?? null);
   const setSelected = (n: number) => useUiStore.getState().setFocusedPr("open", n);
   const [sort, setSort] = useState<SortKey>("updated");
@@ -74,23 +72,6 @@ export function BabysitView() {
           );
         })}
 
-        {eventLog.length > 0 && (
-          <>
-            <hr />
-            <div className="subtle" style={{ marginBottom: 6 }}>
-              Recent events
-            </div>
-            {eventLog.slice(0, 20).map((e, i) => (
-              <div key={i} style={{ padding: "3px 0", fontSize: 12 }}>
-                <span className="subtle">{timeAgo(e.firedAt)} · </span>
-                <Badge color={e.prClass === "mine" ? "blue" : "purple"}>
-                  {eventDef(e.id)?.label ?? e.id}
-                </Badge>{" "}
-                #{e.prNumber}
-              </div>
-            ))}
-          </>
-        )}
       </Sidebar>
       <div className="content">{pr && <PrWorkspace key={pr.number} pr={pr} variant="babysit" />}</div>
     </div>
