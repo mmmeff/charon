@@ -919,6 +919,7 @@ ${log.slice(-16_000)}
     startAgent({
       kind: "event",
       notifyCategory: "ci_analysis",
+      hiddenFromActivity: true,
       relation: `CI analysis (${check.name})`,
       repo: ctx.repo,
       prNumber: pr.number,

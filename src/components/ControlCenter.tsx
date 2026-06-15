@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isActiveAgentStatus, isVisibleAgentRun } from "../lib/agent-runs";
 import { eventDef } from "../lib/defaults";
 import { resolveHandler, usePrData } from "../lib/events";
 import { runFixFlow } from "../lib/flows";
@@ -37,7 +38,7 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
   const activeRuns = order
     .map((id) => runs[id])
     .filter(
-      (r) => r && r.prNumber === pr.number && (r.status === "running" || r.status === "starting")
+      (r) => r && isVisibleAgentRun(r) && r.prNumber === pr.number && isActiveAgentStatus(r.status)
     ).length;
 
   const guard = async (fn: () => Promise<void>) => {

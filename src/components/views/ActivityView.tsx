@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isActiveAgentStatus, isVisibleAgentRun } from "../../lib/agent-runs";
 import { useAgentStore } from "../../lib/store";
 import { AgentCard } from "../AgentCard";
 import { EmptyState } from "../common";
@@ -13,14 +14,14 @@ export function ActivityView() {
   const [filter, setFilter] = useState<Filter>("all");
   const [confirmClear, setConfirmClear] = useState(false);
 
-  const all = order.map((id) => runs[id]).filter(Boolean);
+  const all = order.map((id) => runs[id]).filter((r) => r && isVisibleAgentRun(r));
   const filtered = all.filter((r) => {
-    if (filter === "active") return r.status === "running" || r.status === "starting";
+    if (filter === "active") return isActiveAgentStatus(r.status);
     if (filter === "done") return r.status === "done";
     if (filter === "failed") return r.status === "error" || r.status === "killed";
     return true;
   });
-  const activeCount = all.filter((r) => r.status === "running" || r.status === "starting").length;
+  const activeCount = all.filter((r) => isActiveAgentStatus(r.status)).length;
   const finishedCount = all.length - activeCount;
 
   return (

@@ -6,6 +6,7 @@ import {
   sortAcpModels,
   type AcpSessionUpdate,
 } from "./acp";
+import { isHiddenAgentRun, isVisibleAgentRun } from "./agent-runs";
 import { activeHarness } from "./defaults";
 import { native } from "./tauri";
 import { notify } from "./notify";
@@ -26,6 +27,7 @@ const agentNotif = (
   category: NotificationCategory,
   extra = ""
 ) => {
+  if (isHiddenAgentRun(run)) return;
   const icon = outcome === "started" ? "▶" : outcome === "finished" ? "✓" : "✗";
   const subject = run.prNumber == null ? run.prTitle : `PR #${run.prNumber} ${run.prTitle}`;
   void notify(
@@ -61,6 +63,8 @@ export interface StartAgentOptions {
   /** Override the lifecycle notification category for this run (e.g. CI triage
    *  runs use "ci_analysis" so they gate separately). Defaults by outcome. */
   notifyCategory?: NotificationCategory;
+  /** Internal/background runs still collect output, but stay out of user-visible agent activity. */
+  hiddenFromActivity?: boolean;
   draftCreate?: DraftCreateRunState;
   onDone?: (run: AgentRun) => void | Promise<void>;
   onSettled?: (run: AgentRun) => void | Promise<void>;
@@ -199,6 +203,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     resultText: "",
     proposalIds: [],
     notifyCategory: opts.notifyCategory,
+    hiddenFromActivity: opts.hiddenFromActivity,
     draftCreate: opts.draftCreate,
   };
   useAgentStore.getState().register(run);
@@ -428,7 +433,7 @@ export async function initAgentPersistence(repo: string): Promise<() => void> {
     const s = useAgentStore.getState();
     const runs = s.order
       .map((id) => s.runs[id])
-      .filter((r) => r && r.repo === repo)
+      .filter((r) => r && r.repo === repo && isVisibleAgentRun(r))
       .slice(0, MAX_PERSISTED_RUNS)
       .map((r) => ({ ...r, entries: r.entries.slice(-MAX_PERSISTED_ENTRIES) }));
     void native

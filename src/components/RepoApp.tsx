@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { refreshModels } from "../lib/agents";
+import { isActiveAgentStatus, isVisibleAgentRun } from "../lib/agent-runs";
 import { GitHubClient } from "../lib/github";
 import { RepoPoller, usePrData } from "../lib/events";
 import type { FlowContext } from "../lib/flows";
@@ -272,9 +273,10 @@ export function RepoApp({ repo }: { repo: string }) {
     );
   }
 
-  const activeAgents = agentOrder.filter(
-    (id) => runs[id]?.status === "running" || runs[id]?.status === "starting"
-  ).length;
+  const activeAgents = agentOrder.filter((id) => {
+    const run = runs[id];
+    return !!run && isVisibleAgentRun(run) && isActiveAgentStatus(run.status);
+  }).length;
 
   const tabs: { id: Tab; label: string; icon: () => JSX.Element; count?: number; hot?: boolean }[] = [
     { id: "drafts", label: "Drafts", icon: IconDrafts, count: prData.myDrafts.length },

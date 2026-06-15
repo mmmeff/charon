@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { isActiveAgentStatus, isVisibleAgentRun } from "../lib/agent-runs";
 import { usePrData } from "../lib/events";
 import { useAgentStore } from "../lib/store";
 import { useFlow } from "./flow";
@@ -16,7 +17,7 @@ export function RunningAgentsChip({ prNumber }: { prNumber: number }) {
     (s) =>
       s.order.filter((id) => {
         const r = s.runs[id];
-        return r && r.prNumber === prNumber && (r.status === "running" || r.status === "starting");
+        return r && isVisibleAgentRun(r) && r.prNumber === prNumber && isActiveAgentStatus(r.status);
       }).length
   );
   if (count === 0) return null;
