@@ -606,6 +606,7 @@ export function defaultGlobalConfig(): GlobalConfig {
     lastRepo: "",
     extraSkillDirs: [],
     notifications: {}, // empty = every category resolves to its catalog default
+    shortcuts: {}, // empty = every action resolves to its catalog default
   };
 }
 

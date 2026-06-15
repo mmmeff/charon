@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Launcher } from "./components/Launcher";
 import { RepoApp } from "./components/RepoApp";
 import { native } from "./lib/tauri";
 import { initNotificationNav } from "./lib/notify-nav";
 import { useGlobalConfig } from "./lib/store";
+import { actionForShortcutEvent, isShortcutRecorderTarget, resolveShortcutMap } from "./lib/shortcuts";
 import { dismissUpdateToast, kickOffUpdate, startUpdateLoop, useUpdateStore } from "./lib/updater";
+import { adjustUiZoom, initUiZoom, resetUiZoom } from "./lib/zoom";
 
 /**
  * Bottom-left toast shown as soon as a newer release is detected. The link
@@ -55,11 +57,28 @@ export default function App() {
   const repo = params.get("repo");
   const explicitPicker = params.has("picker");
   const { loaded, load } = useGlobalConfig();
+  const shortcutPrefs = useGlobalConfig((s) => s.config?.shortcuts);
+  const shortcuts = useMemo(() => resolveShortcutMap(shortcutPrefs), [shortcutPrefs]);
   const [autoOpening, setAutoOpening] = useState(!repo && !explicitPicker);
 
   useEffect(() => {
     startUpdateLoop();
   }, []);
+
+  useEffect(() => initUiZoom(), []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || isShortcutRecorderTarget(e.target)) return;
+      const action = actionForShortcutEvent(e, shortcuts);
+      if (action !== "zoom_in" && action !== "zoom_out" && action !== "zoom_reset") return;
+      e.preventDefault();
+      if (action === "zoom_reset") void resetUiZoom();
+      else void adjustUiZoom(action === "zoom_in" ? 1 : -1);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [shortcuts]);
 
   // route OS notification clicks → the relevant PR (every window listens;
   // backend dedups/routes). Covers cold-start: a tap that launched the app is

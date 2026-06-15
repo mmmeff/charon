@@ -479,7 +479,6 @@ fn build_repo_window(app: &tauri::AppHandle, repo: &str, pr: Option<i64>) -> Res
         .title(format!("Charon — {repo}"))
         .inner_size(w, h)
         .min_inner_size(900.0, 600.0)
-        .zoom_hotkeys_enabled(true)
         .build()
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -543,7 +542,6 @@ fn open_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     .title("Charon")
     .inner_size(760.0, 680.0)
     .min_inner_size(560.0, 480.0)
-    .zoom_hotkeys_enabled(true)
     .build()
     .map_err(|e| e.to_string())?;
     Ok(())

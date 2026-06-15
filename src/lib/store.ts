@@ -406,6 +406,9 @@ interface UiState {
   /** right-hand GitHub activity panel visibility (persisted; topstrip toggle) */
   activityPanelOpen: boolean;
   setActivityPanelOpen(v: boolean): void;
+  /** left-hand PR list sidebar visibility (persisted; topstrip toggle) */
+  prSidebarOpen: boolean;
+  setPrSidebarOpen(v: boolean): void;
   /** commit-diff modal: the commit whose diff is being viewed, or null */
   commitView: { repo: string; sha: string } | null;
   openCommit(repo: string, sha: string): void;
@@ -442,6 +445,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   setActivityPanelOpen(v) {
     localStorage.setItem("prc-activity-open", v ? "on" : "off");
     set({ activityPanelOpen: v });
+  },
+  prSidebarOpen: localStorage.getItem("prc-pr-sidebar-open") !== "off",
+  setPrSidebarOpen(v) {
+    localStorage.setItem("prc-pr-sidebar-open", v ? "on" : "off");
+    set({ prSidebarOpen: v });
   },
   commitView: null,
   openCommit(repo, sha) {

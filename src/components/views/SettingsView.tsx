@@ -12,14 +12,33 @@ import {
 } from "../../lib/defaults";
 import { eventFlowKind, resolveHandler } from "../../lib/events";
 import { loadSkills } from "../../lib/skills";
+import {
+  bindingsEqual,
+  DEFAULT_SHORTCUTS,
+  formatShortcut,
+  normalizeBinding,
+  resolveShortcutMap,
+  shortcutConflict,
+  SHORTCUT_CATALOG,
+} from "../../lib/shortcuts";
 import { native } from "../../lib/tauri";
 import { useScrollMemory } from "../../lib/ui";
 import { useGlobalConfig, useRepoStore, useSkillStore } from "../../lib/store";
-import type { ClassFilters, EventHandlerConfig, GlobalConfig, RepoConfig, SkillSelection } from "../../types";
+import type {
+  ClassFilters,
+  EventHandlerConfig,
+  GlobalConfig,
+  KeyBinding,
+  RepoConfig,
+  ShortcutActionId,
+  ShortcutMap,
+  SkillSelection,
+} from "../../types";
 import { Badge, Spinner } from "../common";
 import { ModelPicker } from "../ModelPicker";
 import { PromptInput } from "../PromptInput";
 import { PrReviewFilterBuilder } from "../PrReviewFilterBuilder";
+import { ShortcutRecorder } from "../ShortcutRecorder";
 
 /**
  * Settings outline: top-level groups, each with its sections in document order.
@@ -141,30 +160,57 @@ export function SettingsView() {
   const saveGlobal = useGlobalConfig((s) => s.save);
   const skills = useSkillStore((s) => s.skills);
   const [saved, setSaved] = useState(false);
+  const [settingsTab, setSettingsTabState] = useState<"general" | "shortcuts">(() =>
+    localStorage.getItem("prc-settings-tab") === "shortcuts" ? "shortcuts" : "general"
+  );
   const mainRef = useRef<HTMLDivElement>(null);
   useScrollMemory(mainRef, `settings:${repo}`);
 
   if (!global) return null;
 
-  const update = (patch: Partial<RepoConfig>) => {
-    void saveConfig({ ...config, ...patch });
+  const markSaved = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  };
+  const setSettingsTab = (next: "general" | "shortcuts") => {
+    localStorage.setItem("prc-settings-tab", next);
+    setSettingsTabState(next);
+  };
+  const update = (patch: Partial<RepoConfig>) => {
+    void saveConfig({ ...config, ...patch });
+    markSaved();
   };
 
   return (
     <div className="main" ref={mainRef}>
-      <div className="settings-layout">
-        <SettingsNav />
-        <div className="settings-body">
       <div className="settings-head">
         <div>
           <div className="settings-eyebrow">{repo}</div>
           <h2>Settings</h2>
         </div>
-        {saved && <Badge color="green">saved</Badge>}
+        <div className="settings-head-actions">
+          <div className="seg">
+            <button
+              className={`small ${settingsTab === "general" ? "primary" : ""}`}
+              onClick={() => setSettingsTab("general")}
+            >
+              General
+            </button>
+            <button
+              className={`small ${settingsTab === "shortcuts" ? "primary" : ""}`}
+              onClick={() => setSettingsTab("shortcuts")}
+            >
+              Keyboard
+            </button>
+          </div>
+          {saved && <Badge color="green">saved</Badge>}
+        </div>
       </div>
 
+      {settingsTab === "general" ? (
+        <div className="settings-layout">
+        <SettingsNav />
+        <div className="settings-body">
       <div className="settings-section" id="s-conn">
         <h3>Connection (global)</h3>
         <p className="subtle">
@@ -562,6 +608,103 @@ export function SettingsView() {
         <EventCatalogEditor config={config} update={update} />
       </div>
         </div>
+        </div>
+      ) : (
+        <ShortcutSettings global={global} save={saveGlobal} onSaved={markSaved} />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function ShortcutSettings({
+  global,
+  save,
+  onSaved,
+}: {
+  global: GlobalConfig;
+  save: (cfg: GlobalConfig) => Promise<void>;
+  onSaved: () => void;
+}) {
+  const effective = resolveShortcutMap(global.shortcuts);
+  const overrides = global.shortcuts ?? {};
+  const groups = [...new Set(SHORTCUT_CATALOG.map((s) => s.group))];
+
+  const saveShortcuts = (shortcuts: ShortcutMap) => {
+    void save({ ...global, shortcuts }).then(onSaved);
+  };
+
+  const assign = (id: ShortcutActionId, binding: KeyBinding | null) => {
+    const next: ShortcutMap = { ...overrides };
+    if (!binding) {
+      next[id] = null;
+      saveShortcuts(next);
+      return;
+    }
+
+    const normalized = normalizeBinding(binding);
+    for (const def of SHORTCUT_CATALOG) {
+      if (def.id !== id && bindingsEqual(effective[def.id], normalized)) next[def.id] = null;
+    }
+    next[id] = normalized;
+    saveShortcuts(next);
+  };
+
+  const reset = (id: ShortcutActionId) => {
+    const next: ShortcutMap = { ...overrides };
+    delete next[id];
+    saveShortcuts(next);
+  };
+
+  return (
+    <div className="settings-shortcuts">
+      <div className="settings-section">
+        <h3>Keyboard Shortcuts</h3>
+        <p className="subtle">
+          Click a shortcut, press the new key combination, or press Delete to clear it. Reusing a
+          shortcut moves it to the new action.
+        </p>
+        <div className="row" style={{ marginBottom: 14 }}>
+          <button className="small" onClick={() => saveShortcuts({})}>
+            Reset all
+          </button>
+        </div>
+
+        {groups.map((group) => (
+          <div key={group} className="shortcut-group">
+            <h4>{group}</h4>
+            <div className="shortcut-list">
+              {SHORTCUT_CATALOG.filter((s) => s.group === group).map((action) => {
+                const binding = effective[action.id];
+                const customized = Object.hasOwn(overrides, action.id);
+                const defaultBinding = DEFAULT_SHORTCUTS[action.id];
+                const conflict = shortcutConflict(action.id, binding, effective);
+                return (
+                  <div key={action.id} className="shortcut-row">
+                    <div className="shortcut-copy">
+                      <div className="row" style={{ gap: 6 }}>
+                        <strong>{action.label}</strong>
+                        {customized && <Badge color="gray">custom</Badge>}
+                      </div>
+                      <div className="desc">{action.description}</div>
+                    </div>
+                    <ShortcutRecorder
+                      action={action}
+                      binding={binding}
+                      conflict={conflict}
+                      onChange={(next) => assign(action.id, next)}
+                      onReset={() => reset(action.id)}
+                    />
+                    <div className="shortcut-default">
+                      default: <code>{formatShortcut(defaultBinding)}</code>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

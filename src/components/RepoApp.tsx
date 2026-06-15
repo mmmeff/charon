@@ -6,10 +6,17 @@ import type { FlowContext } from "../lib/flows";
 import { loadSkills } from "../lib/skills";
 import { initAgentPersistence } from "../lib/agents";
 import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore, useUiStore } from "../lib/store";
+import {
+  actionForShortcutEvent,
+  formatShortcut,
+  isShortcutRecorderTarget,
+  resolveShortcutMap,
+} from "../lib/shortcuts";
 import { native } from "../lib/tauri";
 import { navigateToPr } from "../lib/nav";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { timeAgo, useNow } from "../lib/ui";
+import type { ShortcutActionId } from "../types";
 import { FlowCtx } from "./flow";
 import {
   IconActivity,
@@ -32,10 +39,18 @@ import { SettingsView } from "./views/SettingsView";
 
 type Tab = "drafts" | "open" | "review" | "activity" | "settings";
 const TABS: Tab[] = ["drafts", "open", "review", "activity", "settings"];
+const TAB_SHORTCUTS: Record<Tab, ShortcutActionId> = {
+  drafts: "tab_drafts",
+  open: "tab_open",
+  review: "tab_review",
+  activity: "tab_activity",
+  settings: "tab_settings",
+};
 
 /** One repo, one window: tabbed shell that owns the poller and flow context. */
 export function RepoApp({ repo }: { repo: string }) {
   const global = useGlobalConfig((s) => s.config);
+  const shortcuts = useMemo(() => resolveShortcutMap(global?.shortcuts), [global?.shortcuts]);
   const repoStore = useRepoStore();
   const skills = useSkillStore((s) => s.skills);
   // remember the last tab per repo across launches
@@ -68,6 +83,10 @@ export function RepoApp({ repo }: { repo: string }) {
     ui.navPush(tab, ui.focusedPr[tab] ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const lastNonActivityTab = useRef<Tab>(tab === "activity" ? "open" : tab);
+  useEffect(() => {
+    if (tab !== "activity") lastNonActivityTab.current = tab;
+  }, [tab]);
 
   // tab switches requested elsewhere (e.g. agent-card PR links)
   const requestedTab = useUiStore((s) => s.requestedTab);
@@ -81,6 +100,8 @@ export function RepoApp({ repo }: { repo: string }) {
   const scrolledPr = useUiStore((s) => s.scrolledPrTitle);
   const activityPanelOpen = useUiStore((s) => s.activityPanelOpen);
   const setActivityPanelOpen = useUiStore((s) => s.setActivityPanelOpen);
+  const prSidebarOpen = useUiStore((s) => s.prSidebarOpen);
+  const setPrSidebarOpen = useUiStore((s) => s.setPrSidebarOpen);
   // keep the breadcrumb mounted briefly on hide so it can animate out
   const [crumb, setCrumb] = useState(scrolledPr);
   const [crumbLeaving, setCrumbLeaving] = useState(false);
@@ -195,25 +216,49 @@ export function RepoApp({ repo }: { repo: string }) {
     if (navigateToPr(pendingNavPr)) setPendingNavPr(null);
   }, [pendingNavPr, prData.myDrafts, prData.myOpen, prData.reviewQueue]);
 
-  // ⌘1–⌘5 (ctrl on other platforms) jumps between tabs.
+  // Configurable repo-window shortcuts.
   // Must live above the loading early-returns: hooks can't come after them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-      if (e.key === "[" || e.key === "]") {
+      if (e.defaultPrevented || isShortcutRecorderTarget(e.target)) return;
+      const action = actionForShortcutEvent(e, shortcuts);
+      if (!action || action === "zoom_in" || action === "zoom_out" || action === "zoom_reset") return;
+      const ui = useUiStore.getState();
+      const switchTo = (next: Tab) => {
         e.preventDefault();
-        goHistory(e.key === "[" ? -1 : 1);
+        setTab(next);
+      };
+
+      if (action === "nav_back" || action === "nav_forward") {
+        e.preventDefault();
+        goHistory(action === "nav_back" ? -1 : 1);
         return;
       }
-      const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= TABS.length) {
+      if (action === "toggle_pr_sidebar") {
         e.preventDefault();
-        setTab(TABS[n - 1]);
+        ui.setPrSidebarOpen(!ui.prSidebarOpen);
+        return;
+      }
+      if (action === "toggle_activity_panel") {
+        e.preventDefault();
+        ui.setActivityPanelOpen(!ui.activityPanelOpen);
+        return;
+      }
+      if (action === "toggle_agents") {
+        switchTo(tab === "activity" ? lastNonActivityTab.current : "activity");
+        return;
+      }
+
+      const tabAction = (Object.entries(TAB_SHORTCUTS) as [Tab, ShortcutActionId][]).find(
+        ([, id]) => id === action
+      );
+      if (tabAction) {
+        switchTo(tabAction[0]);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [shortcuts, tab]);
 
   if (!global || !gh) {
     return <div className="empty">Configure the GitHub connection in the launcher window first.</div>;
@@ -238,6 +283,10 @@ export function RepoApp({ repo }: { repo: string }) {
     { id: "activity", label: "Agents", icon: IconActivity, count: activeAgents, hot: activeAgents > 0 },
     { id: "settings", label: "Settings", icon: IconSettings },
   ];
+  const shortcutHint = (id: ShortcutActionId) => {
+    const label = formatShortcut(shortcuts[id]);
+    return label === "Unassigned" ? "" : ` · ${label}`;
+  };
 
   return (
     <FlowCtx.Provider value={{ ctx: ctxRef.current, poller }}>
@@ -250,7 +299,7 @@ export function RepoApp({ repo }: { repo: string }) {
             <button
               key={t.id}
               className={`rail-btn ${tab === t.id ? "active" : ""}`}
-              data-tip={`${t.label}${t.count ? ` — ${t.count}` : ""} · ⌘${i + 1}`}
+              data-tip={`${t.label}${t.count ? ` — ${t.count}` : ""}${shortcutHint(TAB_SHORTCUTS[t.id])}`}
               onClick={() => setTab(t.id)}
             >
               <t.icon />
@@ -284,7 +333,7 @@ export function RepoApp({ repo }: { repo: string }) {
             <button
               className="rail-btn navbtn"
               disabled={navIndex <= 0}
-              title="Back (⌘[)"
+              title={`Back${shortcutHint("nav_back")}`}
               onClick={() => goHistory(-1)}
             >
               ←
@@ -292,7 +341,7 @@ export function RepoApp({ repo }: { repo: string }) {
             <button
               className="rail-btn navbtn"
               disabled={navIndex >= navLen - 1}
-              title="Forward (⌘])"
+              title={`Forward${shortcutHint("nav_forward")}`}
               onClick={() => goHistory(1)}
             >
               →
@@ -338,14 +387,26 @@ export function RepoApp({ repo }: { repo: string }) {
               <IconRefresh />
             </button>
             {(tab === "drafts" || tab === "open" || tab === "review") && (
-              <button
-                className={`rail-btn ${activityPanelOpen ? "active" : ""}`}
-                style={{ width: 26, height: 26 }}
-                onClick={() => setActivityPanelOpen(!activityPanelOpen)}
-                title={activityPanelOpen ? "Hide activity panel" : "Show activity panel"}
-              >
-                <IconSidePanel />
-              </button>
+              <>
+                <button
+                  className={`rail-btn ${prSidebarOpen ? "active" : ""}`}
+                  style={{ width: 26, height: 26 }}
+                  onClick={() => setPrSidebarOpen(!prSidebarOpen)}
+                  title={`${prSidebarOpen ? "Hide" : "Show"} PR list${shortcutHint("toggle_pr_sidebar")}`}
+                >
+                  <span style={{ display: "inline-flex", transform: "scaleX(-1)" }}>
+                    <IconSidePanel />
+                  </span>
+                </button>
+                <button
+                  className={`rail-btn ${activityPanelOpen ? "active" : ""}`}
+                  style={{ width: 26, height: 26 }}
+                  onClick={() => setActivityPanelOpen(!activityPanelOpen)}
+                  title={`${activityPanelOpen ? "Hide" : "Show"} activity panel${shortcutHint("toggle_activity_panel")}`}
+                >
+                  <IconSidePanel />
+                </button>
+              </>
             )}
           </div>
 

@@ -76,7 +76,37 @@ export interface GlobalConfig {
    *  back to the category's catalog default. Gated centrally in notify() so no
    *  call site can bypass them. */
   notifications: Record<string, boolean>;
+  /** Keyboard shortcut overrides keyed by ShortcutActionId; missing keys use
+   *  catalog defaults, null means explicitly unassigned. */
+  shortcuts: ShortcutMap;
 }
+
+export interface KeyBinding {
+  key: string;
+  /** Cmd on macOS, Ctrl elsewhere. */
+  primary?: boolean;
+  ctrl?: boolean;
+  meta?: boolean;
+  alt?: boolean;
+  shift?: boolean;
+}
+
+export type ShortcutActionId =
+  | "zoom_in"
+  | "zoom_out"
+  | "zoom_reset"
+  | "tab_drafts"
+  | "tab_open"
+  | "tab_review"
+  | "tab_activity"
+  | "tab_settings"
+  | "nav_back"
+  | "nav_forward"
+  | "toggle_pr_sidebar"
+  | "toggle_activity_panel"
+  | "toggle_agents";
+
+export type ShortcutMap = Partial<Record<ShortcutActionId, KeyBinding | null>>;
 
 /**
  * Every distinct reason the app raises an OS notification. notify() requires

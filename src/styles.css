@@ -896,6 +896,7 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   display: flex; justify-content: space-between; align-items: flex-end;
   max-width: 880px; margin-bottom: 30px;
 }
+.settings-head-actions { display: flex; align-items: center; gap: 10px; }
 .settings-eyebrow {
   font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--fg-subtle); margin-bottom: 5px;
@@ -946,6 +947,54 @@ tr.flash > td { animation: line-flash 1.8s ease; }
 .event-row textarea:focus { color: var(--fg); }
 .event-row button.link { color: var(--fg-subtle); }
 .event-row button.link:hover { color: var(--orange); }
+
+.settings-shortcuts { max-width: 880px; }
+.shortcut-group + .shortcut-group { margin-top: 22px; }
+.shortcut-list {
+  border: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--border);
+}
+.shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, max-content) 130px;
+  gap: 14px;
+  align-items: center;
+  padding: 11px 14px;
+}
+.shortcut-row + .shortcut-row { border-top: 1px solid var(--border-subtle); }
+.shortcut-row:hover { background: rgba(233, 228, 212, 0.025); }
+.shortcut-copy strong { font-family: var(--sans); font-size: 13px; }
+.shortcut-copy .desc { color: var(--fg-subtle); font-size: 11px; margin-top: 4px; line-height: 1.45; }
+.shortcut-recorder {
+  display: grid;
+  grid-template-columns: minmax(116px, 1fr) max-content max-content;
+  gap: 6px;
+  align-items: center;
+}
+.shortcut-input {
+  min-width: 116px;
+  padding: 6px 10px;
+  background: var(--bg-inset);
+  color: var(--fg);
+  border-color: var(--border);
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.shortcut-input.recording {
+  color: var(--acid);
+  border-color: var(--acid);
+  background: var(--acid-bg);
+}
+.shortcut-note {
+  grid-column: 1 / -1;
+  color: var(--fg-subtle);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+.shortcut-note.err { color: var(--red); }
+.shortcut-default { color: var(--fg-subtle); font-size: 10px; text-align: right; white-space: nowrap; }
+.shortcut-default code { font-size: 10px; }
 
 .review-filter-builder {
   border: 1px solid var(--border-subtle);
