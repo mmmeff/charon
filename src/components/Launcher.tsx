@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { refreshModels } from "../lib/agents";
-import { probeHarness, sortModelIds, summarizeProbe } from "../lib/acp";
+import { labeledModels, probeHarness, summarizeProbe } from "../lib/acp";
 import { AsciiField } from "./AsciiField";
 import { IconCharonMoon } from "./icons";
 import {
@@ -107,9 +107,11 @@ function Onboarding({
       let reasoningOptions: string[] = [];
       let reasoningLabels: Record<string, string> = {};
       if (probe?.ok && probe.models.length) {
-        // raw ids, sorted alphabetically — no name massaging (the id carries
-        // Cursor's reasoning level in its brackets), and no synthetic "auto"
-        models = sortModelIds(probe.models.map((m) => m.modelId));
+        // clean labels (Cursor bracket params -> "(level, context)", default ->
+        // Auto), sorted by label; no synthetic "auto" entry
+        const labeled = labeledModels(probe.models);
+        models = labeled.map((x) => x.modelId);
+        for (const x of labeled) modelLabels[x.modelId] = x.label;
         h.verified = true;
       }
       if (probe?.ok && probe.reasoning?.options.length) {

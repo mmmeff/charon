@@ -85,10 +85,35 @@ export function modelConfigOption(ns: NewSessionResult): AcpConfigOption | undef
   );
 }
 
-/** Sort model ids alphabetically (case-insensitive). The id is also the
- *  display label, so this orders the list exactly as the user sees it. */
-export function sortModelIds(ids: string[]): string[] {
-  return [...ids].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+/**
+ * Display label for a model. Cursor encodes variant params in the modelId
+ * brackets; reformat `model[thinking=true,context=300k,effort=high]` to
+ * `model (high, 300k)` — the reasoning level (effort or reasoning) then the
+ * context window, dropping thinking/fast noise. `default` becomes "Auto".
+ * Harnesses without bracketed ids (e.g. codex) just keep their name.
+ */
+export function modelLabel(m: AcpModel): string {
+  const base = m.modelId.replace(/\[.*\]$/, "");
+  if (base.toLowerCase() === "default") return "Auto";
+  const inner = /\[(.*)\]$/.exec(m.modelId)?.[1] ?? "";
+  const params = new Map<string, string>();
+  for (const kv of inner.split(",")) {
+    if (!kv.trim()) continue;
+    const eq = kv.indexOf("=");
+    params.set(eq < 0 ? kv.trim() : kv.slice(0, eq).trim(), eq < 0 ? "" : kv.slice(eq + 1).trim());
+  }
+  const detail = [params.get("effort") || params.get("reasoning"), params.get("context")]
+    .filter(Boolean)
+    .join(", ");
+  const name = m.name || base;
+  return detail ? `${name} (${detail})` : name;
+}
+
+/** Models paired with display labels, sorted alphabetically by label. */
+export function labeledModels(models: AcpModel[]): { modelId: string; label: string }[] {
+  return models
+    .map((m) => ({ modelId: m.modelId, label: modelLabel(m) }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 }
 
 /** The reasoning-effort config option, if the harness exposes one (codex). */
