@@ -25,8 +25,8 @@ import { useFlow } from "./flow";
 export function ControlCenter({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
   const mine = pr.author === ctx.gh.login;
-  const checks = usePrData((s) => s.checks[pr.number] ?? []);
-  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
+  const checks = usePrData((s) => s.checks[pr.number]) ?? [];
+  const reviews = usePrData((s) => s.reviews[pr.number]) ?? [];
   const runs = useAgentStore((s) => s.runs);
   const order = useAgentStore((s) => s.order);
   const [busy, setBusy] = useState(false);

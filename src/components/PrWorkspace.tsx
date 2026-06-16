@@ -23,8 +23,8 @@ import { useFlow } from "./flow";
  */
 export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" | "babysit" }) {
   const { ctx } = useFlow();
-  const checks = usePrData((s) => s.checks[pr.number] ?? []);
-  const comments = usePrData((s) => s.comments[pr.number] ?? []);
+  const checks = usePrData((s) => s.checks[pr.number]) ?? [];
+  const comments = usePrData((s) => s.comments[pr.number]) ?? [];
   const proposals = useRepoStore((s) => s.proposals);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [diffErr, setDiffErr] = useState("");
@@ -76,7 +76,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   // review-comment threads (bug-bots and humans) anchored onto the diff,
   // each with inline reply
   const threads = groupCommentThreads(comments);
-  const threadInfos = usePrData((s) => s.threads[pr.number] ?? []);
+  const threadInfos = usePrData((s) => s.threads[pr.number]) ?? [];
   const findings = useRepoStore((s) => s.findings).filter(
     (f) => f.prNumber === pr.number && f.status !== "dismissed"
   );

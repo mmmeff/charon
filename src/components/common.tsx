@@ -78,7 +78,7 @@ export function BranchBadge({ head, base }: { head: string; base: string }) {
 /** "n/m approvals" badge for PR list cards — green once requirements met. */
 export function ApprovalsBadge({ prNumber }: { prNumber: number }) {
   const { ctx } = useFlow();
-  const reviews = usePrData((s) => s.reviews[prNumber] ?? []);
+  const reviews = usePrData((s) => s.reviews[prNumber]) ?? [];
   const n = new Set(reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)).size;
   const req = ctx.config.requiredApprovals;
   return (
