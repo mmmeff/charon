@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "icons": "tauri icon app-icon.png",
+    "prebuild": "npm run icons",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

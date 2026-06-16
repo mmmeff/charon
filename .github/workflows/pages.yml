@@ -36,7 +36,7 @@ jobs:
           mkdir -p _site/assets
           cp -r site/. _site/
           rm -rf _site/assets && mkdir -p _site/assets
-          cp docs/*.png docs/tour.gif app-icon.svg _site/assets/
+          cp docs/*.png docs/tour.gif app-icon.png _site/assets/
 
       - uses: actions/configure-pages@v5
         with:

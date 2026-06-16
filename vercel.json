@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "mkdir -p site/assets && cp docs/*.png docs/tour.gif app-icon.svg site/assets/",
+  "buildCommand": "mkdir -p site/assets && cp docs/*.png docs/tour.gif app-icon.png site/assets/",
   "outputDirectory": "site",
   "installCommand": "",
   "framework": null,
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- site/ docs/ app-icon.svg vercel.json"
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- site/ docs/ app-icon.png vercel.json"
 }
