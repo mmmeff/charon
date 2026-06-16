@@ -25,12 +25,8 @@ import { useFlow } from "./flow";
 export function ControlCenter({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
   const mine = pr.author === ctx.gh.login;
-  // fallback OUTSIDE the selector: a `?? []` inside returns a fresh array each
-  // call, which zustand v5 (useSyncExternalStore + Object.is) treats as a
-  // changed snapshot every render → infinite update loop when the PR has no
-  // checks/reviews loaded yet. Selecting the raw value keeps the snapshot stable.
-  const checks = usePrData((s) => s.checks[pr.number]) ?? [];
-  const reviews = usePrData((s) => s.reviews[pr.number]) ?? [];
+  const checks = usePrData((s) => s.checks[pr.number] ?? []);
+  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
   const runs = useAgentStore((s) => s.runs);
   const order = useAgentStore((s) => s.order);
   const [busy, setBusy] = useState(false);

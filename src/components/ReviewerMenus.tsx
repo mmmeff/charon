@@ -45,7 +45,7 @@ const STATE_GLYPH: Record<string, { glyph: string; color: string; label: string 
 /** "n/m approvals" chip → popover listing who stands where. */
 export function ApprovalsMenu({ pr }: { pr: PrSummary }) {
   const { ctx } = useFlow();
-  const reviews = usePrData((s) => s.reviews[pr.number]) ?? [];
+  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, () => setOpen(false), open);

@@ -527,9 +527,9 @@ export function PrActivityPanel({ pr }: { pr: PrSummary }) {
   const { ctx } = useFlow();
   const open = useUiStore((s) => s.activityPanelOpen);
   const openCommit = useUiStore((s) => s.openCommit);
-  const comments = usePrData((s) => s.comments[pr.number]) ?? [];
-  const reviews = usePrData((s) => s.reviews[pr.number]) ?? [];
-  const timeline = usePrData((s) => s.timeline[pr.number]) ?? [];
+  const comments = usePrData((s) => s.comments[pr.number] ?? []);
+  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
+  const timeline = usePrData((s) => s.timeline[pr.number] ?? []);
   const { width, handle } = useResizablePanel("prc-w-activity", 320, 230, 640, "left");
 
   const reviewComments = comments.filter((c) => c.kind === "review_comment");

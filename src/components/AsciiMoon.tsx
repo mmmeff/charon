@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * The marketing site's ASCII Charon, ported: a WebGL2 two-pass shader —
@@ -108,6 +108,7 @@ uniform sampler2D uGlyphs;
 uniform vec2 uCells;
 uniform vec2 uCellPx;
 uniform float uGlyphN;
+const vec3 BG = vec3(0.055, 0.051, 0.039); /* --bg charcoal */
 void main(){
   vec2 cell = floor(gl_FragCoord.xy / uCellPx);
   vec2 cuv = (cell + 0.5) / uCells;
@@ -122,7 +123,7 @@ void main(){
   float a = texture(uGlyphs, guv).a;
   vec3 tint = c / max(luma, 0.02);
   vec3 col = tint * min(1.0, 0.35 + luma*1.1);
-  o = vec4(col, a);
+  o = vec4(mix(BG, col, a), 1.0);
 }`;
 
 const RAMP = " .,:;i+*xeo#%@";
@@ -159,15 +160,7 @@ function program(gl: WebGL2RenderingContext, fs: string): WebGLProgram {
   return p;
 }
 
-export function AsciiMoon({
-  height = 200,
-  className,
-  style,
-}: {
-  height?: number;
-  className?: string;
-  style?: CSSProperties;
-}) {
+export function AsciiMoon({ height = 200 }: { height?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -175,15 +168,11 @@ export function AsciiMoon({
     if (!canvas) return;
     let gl: WebGL2RenderingContext | null = null;
     try {
-      gl = canvas.getContext("webgl2", { antialias: false, alpha: true });
+      gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
     } catch {
       /* fall through */
     }
-    if (!gl) {
-      console.warn("ascii moon: webgl2 unavailable");
-      return; // graceful: empty/canvas background remains
-    }
-    gl.clearColor(0, 0, 0, 0);
+    if (!gl) return; // graceful: charcoal background remains
 
     const dpr = Math.min(devicePixelRatio || 1, 2);
     const CW = Math.round(8 * dpr);
@@ -297,5 +286,5 @@ export function AsciiMoon({
     };
   }, []);
 
-  return <canvas ref={ref} className={className} style={{ width: "100%", height, display: "block", ...style }} aria-hidden />;
+  return <canvas ref={ref} style={{ width: "100%", height, display: "block" }} aria-hidden />;
 }

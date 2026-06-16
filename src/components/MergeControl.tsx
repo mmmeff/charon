@@ -19,7 +19,7 @@ const METHOD_LABELS: Record<MergeMethod, string> = {
  */
 export function MergeControl({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
-  const reviews = usePrData((s) => s.reviews[pr.number]) ?? [];
+  const reviews = usePrData((s) => s.reviews[pr.number] ?? []);
   const [methods, setMethods] = useState<MergeMethod[] | null>(null);
   const [method, setMethod] = useState<MergeMethod>("squash");
   const [canOverride, setCanOverride] = useState(false);

@@ -89,8 +89,8 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   const { ctx, poller } = useFlow();
   const proposals = useRepoStore((s) => s.proposals);
   const upsert = useRepoStore((s) => s.upsertProposal);
-  const comments = usePrData((s) => s.comments[pr.number]) ?? [];
-  const checks = usePrData((s) => s.checks[pr.number]) ?? [];
+  const comments = usePrData((s) => s.comments[pr.number] ?? []);
+  const checks = usePrData((s) => s.checks[pr.number] ?? []);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [error, setError] = useState("");
   // GitHub's per-file viewed state — shared with github.com's own UI, and
@@ -132,7 +132,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   );
 
   // existing GitHub comment threads, with inline reply
-  const threadInfos = usePrData((s) => s.threads[pr.number]) ?? [];
+  const threadInfos = usePrData((s) => s.threads[pr.number] ?? []);
   const threadAnchors: DiffAnchor[] = groupCommentThreads(comments).map(({ root, replies }) => ({
     path: root.path!,
     line: root.line!,
