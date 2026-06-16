@@ -6,7 +6,21 @@
     {
       "layers" : [
         {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "Untitled@2-1465x941(1).png",
+          "name" : "Untitled@2-1465x941(1)",
+          "position" : {
+            "scale" : 0.74,
+            "translation-in-points" : [
+              23.680000000000064,
+              56.80000000000007
+            ]
+          }
+        },
+        {
           "blend-mode" : "normal",
+          "hidden" : true,
           "image-name" : "Untitled@2-1465x941.png",
           "name" : "Untitled@2-1465x941",
           "position" : {

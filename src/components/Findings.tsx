@@ -179,7 +179,7 @@ export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSum
           />
         )}
       </div>
-      {run && <AgentCard run={run} embedded defaultOpen />}
+      {run && <AgentCard run={run} embedded defaultOpen streamContext="inline-comment" />}
     </div>
   );
 }

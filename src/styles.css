@@ -635,9 +635,9 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 /* agent card embedded in the composer (review-in-progress) */
 .agent-embedded { margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); }
 .agent-stream-inline-comment .agent-log {
-  height: 150px;
-  max-height: 150px;
-  min-height: 150px;
+  height: 250px;
+  max-height: 250px;
+  min-height: 250px;
 }
 .agent-pr-link { font-size: 12px; padding: 0; }
 
