@@ -246,6 +246,7 @@ export class GitHubClient {
       autoMerge: p.auto_merge != null,
       requestedReviewers: (p.requested_reviewers ?? []).map((u: any) => String(u.login)),
       requestedTeams: (p.requested_teams ?? []).map((t: any) => String(t.slug)),
+      reviewers: [], // submitted-review authors come from the GraphQL meta query
       requestedFromMe,
       updatedAt: p.updated_at ?? "",
       additions: p.additions ?? 0,
@@ -276,35 +277,55 @@ export class GitHubClient {
     );
   }
 
-  /** Review-decision enum for all open PRs, used by client-side review filters. */
-  async listOpenPullReviewDecisions(
+  /**
+   * Per-open-PR review metadata for client-side review filters: the review
+   * decision plus the set of logins who have already submitted a review.
+   * `latestReviews` carries the latter so a PR the user reviewed (which GitHub
+   * drops from requested_reviewers) still counts as one they're a reviewer on.
+   * One batched GraphQL query — no per-PR REST calls.
+   */
+  async listOpenPullReviewMeta(
     repo: string
-  ): Promise<Record<number, PrSummary["reviewDecision"]>> {
+  ): Promise<Record<number, { decision: PrSummary["reviewDecision"]; reviewers: string[] }>> {
     const [owner, name] = repo.split("/");
+    type Node = {
+      number: number;
+      reviewDecision?: PrSummary["reviewDecision"];
+      latestReviews?: { nodes?: { author?: { login?: string } | null }[] };
+    };
     type Response = {
       repository?: {
         pullRequests?: {
           pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
-          nodes?: { number: number; reviewDecision?: PrSummary["reviewDecision"] }[];
+          nodes?: Node[];
         };
       };
     };
     let after: string | null = null;
-    const out: Record<number, PrSummary["reviewDecision"]> = {};
+    const out: Record<number, { decision: PrSummary["reviewDecision"]; reviewers: string[] }> = {};
     do {
       const data: Response = await this.graphql<Response>(
         `query($owner:String!,$name:String!,$after:String){
           repository(owner:$owner,name:$name){
             pullRequests(states:OPEN,first:100,after:$after,orderBy:{field:UPDATED_AT,direction:DESC}){
               pageInfo{ hasNextPage endCursor }
-              nodes{ number reviewDecision }
+              nodes{ number reviewDecision latestReviews(first:50){ nodes{ author{ login } } } }
             }
           }
         }`,
         { owner, name, after }
       );
       const prs = data?.repository?.pullRequests;
-      for (const p of prs?.nodes ?? []) out[Number(p.number)] = p.reviewDecision ?? null;
+      for (const p of prs?.nodes ?? []) {
+        const reviewers = [
+          ...new Set(
+            (p.latestReviews?.nodes ?? [])
+              .map((r) => r?.author?.login)
+              .filter((l): l is string => !!l)
+          ),
+        ];
+        out[Number(p.number)] = { decision: p.reviewDecision ?? null, reviewers };
+      }
       after = prs?.pageInfo?.hasNextPage ? (prs.pageInfo.endCursor ?? null) : null;
     } while (after);
     return out;

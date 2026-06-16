@@ -17,6 +17,7 @@ import {
   isReviewRequestedFromUser,
   matchesPrReviewFilters,
   reviewFilterNeedsReviews,
+  reviewFilterNeedsReviewMeta,
 } from "./pr-review-filters";
 import { interpolate, truncate } from "./template";
 import { useRepoStore } from "./store";
@@ -496,18 +497,19 @@ export class RepoPoller {
       const isFirstRun = Object.keys(store.snapshots).length === 0;
 
       const needsReviewData = reviewFilterNeedsReviews(config.reviewFilters);
-      const [rawOpenPulls, myTeamSlugs, reviewDecisions] = await Promise.all([
+      const needsReviewMeta = reviewFilterNeedsReviewMeta(config.reviewFilters);
+      type ReviewMeta = Record<number, { decision: PrSummary["reviewDecision"]; reviewers: string[] }>;
+      const [rawOpenPulls, myTeamSlugs, reviewMeta] = await Promise.all([
         gh.listOpenPulls(repo),
         gh.myTeamSlugs(repo).catch(() => new Set<string>()),
-        needsReviewData
-          ? gh
-              .listOpenPullReviewDecisions(repo)
-              .catch(() => ({} as Record<number, PrSummary["reviewDecision"]>))
-          : Promise.resolve({} as Record<number, PrSummary["reviewDecision"]>),
+        needsReviewMeta
+          ? gh.listOpenPullReviewMeta(repo).catch(() => ({}) as ReviewMeta)
+          : Promise.resolve({} as ReviewMeta),
       ]);
       const openPulls = rawOpenPulls.map((p) => ({
         ...p,
-        reviewDecision: reviewDecisions[p.number] ?? p.reviewDecision ?? null,
+        reviewDecision: reviewMeta[p.number]?.decision ?? p.reviewDecision ?? null,
+        reviewers: reviewMeta[p.number]?.reviewers ?? [],
         requestedFromMe: isReviewRequestedFromUser(p, me, myTeamSlugs),
       }));
 
@@ -565,6 +567,9 @@ export class RepoPoller {
         // detail fetch fills mergeable_state (computed lazily by GitHub)
         const detail = await gh.getPull(repo, shallow.number);
         detail.reviewDecision = shallow.reviewDecision ?? detail.reviewDecision ?? null;
+        // carry submitted-review authors from the batched meta (getPull/REST
+        // doesn't return them) so the enriched list keeps full reviewer info
+        detail.reviewers = shallow.reviewers ?? [];
         detail.requestedFromMe = isReviewRequestedFromUser(detail, me, myTeamSlugs);
         detailed[detail.number] = detail;
         const [ch, cm, rv, th, tl] = await Promise.all([

@@ -268,6 +268,10 @@ export interface PrSummary {
   requestedReviewers: string[];
   /** team slugs with an outstanding review request */
   requestedTeams: string[];
+  /** logins who have already submitted a review (GraphQL; poller-populated).
+   *  Combined with requestedReviewers this is the full reviewer set — GitHub
+   *  drops a user from requestedReviewers once they submit any review. */
+  reviewers: string[];
   requestedFromMe: boolean;
   /** GraphQL review decision when available */
   reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
