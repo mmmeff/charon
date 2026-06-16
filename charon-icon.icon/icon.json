@@ -6,39 +6,24 @@
     {
       "layers" : [
         {
-          "glass" : true,
-          "hidden" : false,
-          "image-name" : "Untitled@2-1465x941(1).png",
-          "name" : "Untitled@2-1465x941(1)",
+          "image-name" : "Untitled@2-3089x1285.png",
+          "name" : "Untitled@2-3089x1285",
           "position" : {
-            "scale" : 0.74,
+            "scale" : 0.73,
             "translation-in-points" : [
-              23.680000000000064,
-              56.80000000000007
-            ]
-          }
-        },
-        {
-          "blend-mode" : "normal",
-          "hidden" : true,
-          "image-name" : "Untitled@2-1465x941.png",
-          "name" : "Untitled@2-1465x941",
-          "position" : {
-            "scale" : 0.65,
-            "translation-in-points" : [
-              0,
-              0
+              23.360000000000014,
+              54.75
             ]
           }
         }
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.6
+        "opacity" : 0.5
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.2
+        "value" : 0.5
       }
     }
   ],
