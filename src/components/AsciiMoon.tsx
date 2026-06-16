@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 
 /**
  * The marketing site's ASCII Charon, ported: a WebGL2 two-pass shader —
@@ -108,7 +108,6 @@ uniform sampler2D uGlyphs;
 uniform vec2 uCells;
 uniform vec2 uCellPx;
 uniform float uGlyphN;
-const vec3 BG = vec3(0.055, 0.051, 0.039); /* --bg charcoal */
 void main(){
   vec2 cell = floor(gl_FragCoord.xy / uCellPx);
   vec2 cuv = (cell + 0.5) / uCells;
@@ -123,7 +122,7 @@ void main(){
   float a = texture(uGlyphs, guv).a;
   vec3 tint = c / max(luma, 0.02);
   vec3 col = tint * min(1.0, 0.35 + luma*1.1);
-  o = vec4(mix(BG, col, a), 1.0);
+  o = vec4(col, a);
 }`;
 
 const RAMP = " .,:;i+*xeo#%@";
@@ -160,7 +159,15 @@ function program(gl: WebGL2RenderingContext, fs: string): WebGLProgram {
   return p;
 }
 
-export function AsciiMoon({ height = 200 }: { height?: number }) {
+export function AsciiMoon({
+  height = 200,
+  className,
+  style,
+}: {
+  height?: number;
+  className?: string;
+  style?: CSSProperties;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -168,11 +175,15 @@ export function AsciiMoon({ height = 200 }: { height?: number }) {
     if (!canvas) return;
     let gl: WebGL2RenderingContext | null = null;
     try {
-      gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
+      gl = canvas.getContext("webgl2", { antialias: false, alpha: true });
     } catch {
       /* fall through */
     }
-    if (!gl) return; // graceful: charcoal background remains
+    if (!gl) {
+      console.warn("ascii moon: webgl2 unavailable");
+      return; // graceful: empty/canvas background remains
+    }
+    gl.clearColor(0, 0, 0, 0);
 
     const dpr = Math.min(devicePixelRatio || 1, 2);
     const CW = Math.round(8 * dpr);
@@ -286,5 +297,5 @@ export function AsciiMoon({ height = 200 }: { height?: number }) {
     };
   }, []);
 
-  return <canvas ref={ref} style={{ width: "100%", height, display: "block" }} aria-hidden />;
+  return <canvas ref={ref} className={className} style={{ width: "100%", height, display: "block", ...style }} aria-hidden />;
 }

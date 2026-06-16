@@ -1057,14 +1057,31 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   line-height: 1.4;
 }
 .new-draft-workspace { width: 100%; }
-.new-draft-hero {
-  min-height: 100%;
+.new-draft-workspace .ws-main.pr-shell {
   display: flex;
   flex-direction: column;
-  align-items: center;
+}
+.new-draft-hero {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+.new-draft-hero .new-draft-hero-moon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 .new-draft-hero .pr-hero-id,
 .new-draft-hero .ws-section {
+  position: relative;
+  z-index: 1;
   width: min(100%, 760px);
   min-width: 0;
   box-sizing: border-box;

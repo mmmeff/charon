@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { runDraftCreate } from "../lib/flows";
 import { useAgentStore, useUiStore } from "../lib/store";
+import { AsciiMoon } from "./AsciiMoon";
 import { Section, Spinner } from "./common";
 import { ModelPicker, ReasoningPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
@@ -73,6 +74,12 @@ export function NewDraftWorkspace({
     <div className="workspace new-draft-workspace">
       <div className="ws-main pr-shell">
         <header className="pr-hero new-draft-hero">
+          <div
+            className="new-draft-hero-moon"
+            aria-hidden
+          >
+            <AsciiMoon style={{ position: "absolute", inset: 0, height: "100%" }} />
+          </div>
           <div className="pr-hero-id">
             <h2>New draft PR</h2>
           </div>

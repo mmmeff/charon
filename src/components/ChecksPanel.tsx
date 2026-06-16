@@ -134,7 +134,7 @@ export function ChecksPanel({ pr }: { pr: PrSummary }) {
   // fix agents push to the PR branch — own PRs only; teammates get a
   // read-only panel (logs + retry, both plain GitHub actions)
   const mine = pr.author === ctx.gh.login;
-  const allChecks = usePrData((s) => s.checks[pr.number] ?? []);
+  const allChecks = usePrData((s) => s.checks[pr.number]) ?? [];
   // skipped jobs are noise (path filters, matrix exclusions) — hide them
   const checks = allChecks.filter((c) => c.conclusion !== "skipped");
   const failing = checks.filter((c) => c.conclusion === "failure" || c.conclusion === "error");
