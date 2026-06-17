@@ -102,7 +102,7 @@ function CheckOverflowMenu({
     };
   }, [open]);
   return (
-    <div className="overflow-menu" ref={ref}>
+    <div className="overflow-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
       <button className="link small" title="More actions" onClick={() => setOpen((o) => !o)}>
         ⋯
       </button>
@@ -307,58 +307,96 @@ ${log.slice(-AGENT_LOG_TAIL)}
             ["failure", "error", "cancelled", "timed_out"].includes(c.conclusion ?? "") &&
             GitHubClient.actionsJobRef(c.url) !== null;
           const retryState = retrying[c.name];
+          const status = failed
+            ? "failed"
+            : !c.conclusion
+              ? "running"
+              : c.conclusion === "success"
+                ? "passed"
+                : "other";
           return (
-            <div key={c.name} className="check-row">
-              <div className="row">
-                <span className="check-glyph" style={{ color: g.color }}>
-                  {g.glyph}
-                </span>
-                <span className="check-name">{c.name}</span>
-                {c.outputTitle && <span className="subtle check-output">{c.outputTitle}</span>}
-                <span style={{ flex: 1 }} />
-                <span className="subtle">{duration(c)}</span>
-                <button className="link small" onClick={() => toggleLog(c)}>
-                  {log?.open ? "hide logs" : "logs"}
-                </button>
-                {failed && !ignored.includes(c.name) && !analyses[analysisKey(c)] && (
-                  <button
-                    className="link small"
-                    title="Run a fast read-only agent to summarize this failure"
-                    onClick={() => analyze(c)}
-                  >
-                    ✦ analyze
-                  </button>
-                )}
-                {retryable &&
-                  (retryState === "queued" ? (
-                    <span className="subtle" style={{ fontSize: 10.5 }}>
-                      re-queued ✓
-                    </span>
-                  ) : (
-                    <button
-                      className="small"
-                      disabled={retryState === "busy"}
-                      title="Re-run this job (falls back to re-running all failed jobs when GitHub won't re-run it alone)"
-                      onClick={() => void retry(c)}
+            <div
+              key={c.name}
+              className={`check-row check-${status} ${log?.open ? "expanded" : ""}`}
+            >
+              <div
+                className="check-row-header"
+                title="Click to toggle logs"
+                onClick={() => toggleLog(c)}
+              >
+                <div className="row check-row-main">
+                  <span className="check-glyph check-chevron" style={{ color: g.color }}>
+                    {log?.open ? "▾" : g.glyph}
+                  </span>
+                  <span className="check-name">{c.name}</span>
+                  <span className="check-row-actions">
+                    {failed && !ignored.includes(c.name) && !analyses[analysisKey(c)] && (
+                      <button
+                        className="link small"
+                        title="Run a fast read-only agent to summarize this failure"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          analyze(c);
+                        }}
+                      >
+                        ✦ analyze
+                      </button>
+                    )}
+                    <CheckOverflowMenu
+                      ignored={ignored.includes(c.name)}
+                      onToggleIgnore={() => setCheckIgnored(c.name, !ignored.includes(c.name))}
+                    />
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="subtle"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {retryState === "busy" ? <Spinner /> : "↻"} Retry
-                    </button>
-                  ))}
-                {failed && mine && (
-                  <button
-                    className={`small ${fixOpen[c.name] ? "" : "primary"}`}
-                    onClick={() => setFixOpen((f) => ({ ...f, [c.name]: !f[c.name] }))}
-                  >
-                    Fix with agent
-                  </button>
+                      ↗
+                    </a>
+                  </span>
+                </div>
+                {(c.outputTitle || duration(c) || retryable || (failed && mine)) && (
+                  <div className="check-row-sub">
+                    <span className="check-row-sub-text">
+                      {c.outputTitle && <span className="subtle check-output">{c.outputTitle}</span>}
+                      {c.outputTitle && duration(c) && <span className="subtle"> · </span>}
+                      {duration(c) && <span className="subtle">{duration(c)}</span>}
+                    </span>
+                    <span className="check-row-sub-actions">
+                      {retryable &&
+                        (retryState === "queued" ? (
+                          <span className="subtle" style={{ fontSize: 10.5 }}>
+                            re-queued ✓
+                          </span>
+                        ) : (
+                          <button
+                            className="small"
+                            disabled={retryState === "busy"}
+                            title="Re-run this job (falls back to re-running all failed jobs when GitHub won't re-run it alone)"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void retry(c);
+                            }}
+                          >
+                            {retryState === "busy" ? <Spinner /> : "↻"} Retry
+                          </button>
+                        ))}
+                      {failed && mine && (
+                        <button
+                          className={`small ${fixOpen[c.name] ? "" : "primary"}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFixOpen((f) => ({ ...f, [c.name]: !f[c.name] }));
+                          }}
+                        >
+                          Fix
+                        </button>
+                      )}
+                    </span>
+                  </div>
                 )}
-                <CheckOverflowMenu
-                  ignored={ignored.includes(c.name)}
-                  onToggleIgnore={() => setCheckIgnored(c.name, !ignored.includes(c.name))}
-                />
-                <a href={c.url} target="_blank" rel="noreferrer" className="subtle">
-                  ↗
-                </a>
               </div>
               {retryState && retryState !== "busy" && retryState !== "queued" && (
                 <div style={{ color: "var(--red)", fontSize: 11, marginTop: 2 }}>

@@ -856,17 +856,75 @@ button.chip-add:hover:not(:disabled) { background: rgba(233, 228, 212, 0.06); bo
 }
 .checks-head { position: relative; padding: 6px 8px; }
 .checks-list { overflow-y: auto; flex: 1; min-height: 0; }
-.check-row { border-top: 1px solid var(--border-subtle); padding: 6px 8px; }
+.check-row { border-top: 1px solid var(--border-subtle); padding: 6px 8px; position: relative; transition: background-color 120ms ease; }
+.check-row-header { cursor: pointer; }
+.check-row:hover { background: var(--bg-raised); }
+.check-row.expanded { background: var(--bg-raised); }
+/* status accents: left border + subtle background tint */
+.check-row.check-failed {
+  border-left: 3px solid var(--red);
+  background: var(--red-bg);
+}
+.check-row.check-running {
+  border-left: 3px solid var(--amber);
+  background: var(--amber-bg);
+}
+.check-row.check-passed {
+  border-left: 3px solid var(--acid);
+}
+.check-row.check-other {
+  border-left: 3px solid var(--border);
+}
+.check-row.check-failed:hover,
+.check-row.check-failed.expanded { background: rgba(255, 70, 51, 0.18); }
+.check-row.check-running:hover,
+.check-row.check-running.expanded { background: rgba(255, 176, 0, 0.16); }
+.check-row.check-passed:hover,
+.check-row.check-other:hover { background: var(--bg-raised); }
+.check-row-main { flex-wrap: nowrap; min-width: 0; }
 .check-glyph { font-size: 13px; width: 14px; text-align: center; flex-shrink: 0; }
-.check-name { font-size: 12.5px; font-weight: 600; }
-.check-output { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30%; }
+.check-name {
+  font-size: 12.5px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex-shrink: 1; min-width: 0;
+}
+.check-output {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex-shrink: 1; min-width: 0; max-width: 100%;
+}
+.check-row-sub {
+  display: flex; align-items: baseline; gap: 8px;
+  justify-content: space-between;
+  margin-top: 2px;
+  padding-left: 22px; /* align past the glyph */
+  font-size: 10.5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.check-row-sub-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; flex: 1;
+}
+.check-row-sub-actions {
+  display: flex; align-items: center; gap: 6px;
+  flex: none;
+  white-space: nowrap;
+}
+.check-row-sub .check-output { max-width: none; }
+.check-row-actions {
+  display: flex; align-items: center; gap: 8px;
+  flex: none;
+  white-space: nowrap;
+  margin-left: auto;
+}
 .check-log {
   margin: 6px 0 4px 22px;
   background: var(--bg-inset); border: 1px solid var(--border-subtle);
   max-height: 320px; overflow: auto; padding: 8px 10px;
   position: relative; /* offsetTop of log lines resolves against the scroller */
 }
-.check-log .log-line { min-height: 1.4em; }
+.check-log .log-line { min-height: 1.4em; white-space: pre; }
 .check-log .log-err { color: var(--red); }
 .check-log .log-warn { color: var(--amber); }
 
