@@ -191,7 +191,7 @@ export function Badge({
   children,
   title,
 }: {
-  color: "gray" | "green" | "red" | "yellow" | "blue" | "purple";
+  color: "gray" | "green" | "red" | "yellow" | "blue" | "purple" | "orange";
   children: ReactNode;
   title?: string;
 }) {

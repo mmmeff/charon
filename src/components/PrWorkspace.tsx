@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { findLineByText, parseUnifiedDiff } from "../lib/diff";
 import { usePrData } from "../lib/events";
-import { useRepoStore } from "../lib/store";
+import { useRepoStore, useUiStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
 import { timeAgo, usePastHero, useScrollMemory, useScrolledPrTitle } from "../lib/ui";
 import { Badge, BranchBadge, LoadingField, Section } from "./common";
@@ -13,6 +13,7 @@ import { FindingCard, FindingsStrip } from "./Findings";
 import { groupCommentThreads } from "../lib/threads";
 import { DiffCommentThread, PrActivityPanel, PrDescription, PrHeroRail, PrLabels, PrTitle } from "./PrMeta";
 import { ProposalCard } from "./ProposalCard";
+import { PrHeroSidePanel } from "./PrStackDrawer";
 import { useFlow } from "./flow";
 
 /**
@@ -33,6 +34,20 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   useScrolledPrTitle(mainRef, pr);
   useScrollMemory(mainRef, `pr:${ctx.repo}:${pr.number}`);
   const condensed = usePastHero(mainRef, heroRef);
+
+  // Stack control room: jump to a sibling in-app when it's in this view's
+  // list, otherwise fall back to opening it on GitHub.
+  const tab = variant === "draft" ? "drafts" : "open";
+  const jumpList = usePrData((s) => (variant === "draft" ? s.myDrafts : s.myOpen));
+  const openPulls = usePrData((s) => s.openPulls);
+  const jumpToStackPr = (n: number) => {
+    if (jumpList.some((p) => p.number === n)) {
+      useUiStore.getState().setFocusedPr(tab, n);
+    } else {
+      const target = openPulls.find((p) => p.number === n);
+      if (target) window.open(target.url, "_blank", "noreferrer");
+    }
+  };
 
   const loadDiff = async () => {
     setDiffErr("");
@@ -161,20 +176,22 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
             </div>
           </div>
 
-          <Section label="Description">
+          <PrHeroSidePanel
+            pr={pr}
+            onJump={jumpToStackPr}
+            ciContent={
+              checks.some((c) => c.conclusion !== "skipped") || prProposals.length > 0 ? (
+                <>
+                  <ChecksPanel pr={pr} />
+                  {prProposals.map((p) => (
+                    <ProposalCard key={p.id} proposal={p} />
+                  ))}
+                </>
+              ) : undefined
+            }
+          >
             <PrDescription pr={pr} />
-          </Section>
-
-          {/* what needs attention: CI + pending approvals (branch ops moved
-              to the BranchOps block atop the activity panel) */}
-          {(checks.some((c) => c.conclusion !== "skipped") || prProposals.length > 0) && (
-            <Section label="CI">
-              <ChecksPanel pr={pr} />
-              {prProposals.map((p) => (
-                <ProposalCard key={p.id} proposal={p} />
-              ))}
-            </Section>
-          )}
+          </PrHeroSidePanel>
 
           {/* drive agents: ask / change / review + their output */}
           <Section label="Agent">

@@ -13,6 +13,7 @@ import { Sidebar } from "../Panels";
 import { groupCommentThreads } from "../../lib/threads";
 import { DiffCommentThread, PrActivityPanel, PrDescription, PrHeroRail, PrLabels } from "../PrMeta";
 import { InlineCommentEditor, ReviewStrip } from "../ProposalCard";
+import { PrHeroSidePanel } from "../PrStackDrawer";
 import { useFlow } from "../flow";
 import { PrStackCard } from "../PrStackList";
 
@@ -120,6 +121,18 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   useScrolledPrTitle(mainRef, pr);
   useScrollMemory(mainRef, `pr:${ctx.repo}:${pr.number}`);
   const condensed = usePastHero(mainRef, heroRef);
+
+  // Stack control room: jump to a review-queue sibling in-app, else GitHub.
+  const reviewQueue = usePrData((s) => s.reviewQueue);
+  const openPulls = usePrData((s) => s.openPulls);
+  const jumpToStackPr = (n: number) => {
+    if (reviewQueue.some((p) => p.number === n)) {
+      useUiStore.getState().setFocusedPr("review", n);
+    } else {
+      const target = openPulls.find((p) => p.number === n);
+      if (target) window.open(target.url, "_blank", "noreferrer");
+    }
+  };
 
   useEffect(() => {
     ctx.gh
@@ -258,19 +271,19 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
             </div>
           </div>
 
-          {/* teammate PRs may have no body — skip the label rather than show an empty section */}
-          {pr.body?.trim() && (
-            <Section label="Description">
-              <PrDescription pr={pr} />
-            </Section>
-          )}
-
-          {/* CI state (read-only: logs + retry, no fix agents on others' branches) */}
-          {checks.some((c) => c.conclusion !== "skipped") && (
-            <Section label="CI">
-              <ChecksPanel pr={pr} />
-            </Section>
-          )}
+          {/* description + side panel (stack control room + CI) — teammate PRs
+              may have no body, in which case the panel stands alone */}
+          <PrHeroSidePanel
+            pr={pr}
+            onJump={jumpToStackPr}
+            ciContent={
+              checks.some((c) => c.conclusion !== "skipped") ? (
+                <ChecksPanel pr={pr} />
+              ) : undefined
+            }
+          >
+            {pr.body?.trim() && <PrDescription pr={pr} />}
+          </PrHeroSidePanel>
 
           {/* drive the review agent */}
           <Section label="Agent">

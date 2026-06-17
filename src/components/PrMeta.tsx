@@ -486,7 +486,7 @@ export function PrDescription({ pr }: { pr: PrSummary }) {
       >
         <IconExpand />
       </button>
-      <div className="card pr-description">
+      <div className="pr-description">
         <Markdown text={pr.body} html={pr.bodyHtml} />
       </div>
 

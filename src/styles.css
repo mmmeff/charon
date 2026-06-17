@@ -537,6 +537,7 @@ h3, h4 {
 .badge.yellow { background: var(--amber-bg); color: var(--amber); border-color: rgba(255, 176, 0, 0.35); }
 .badge.blue { background: var(--steel-bg); color: var(--steel); border-color: rgba(143, 180, 204, 0.35); }
 .badge.purple { background: var(--rust-bg); color: var(--rust); border-color: rgba(217, 139, 95, 0.35); }
+.badge.orange { background: var(--orange-bg); color: var(--orange); border-color: rgba(255, 79, 0, 0.4); }
 
 /* origin chips: GitHub = solid bone, LOCAL = hatched orange */
 .origin-chip {
@@ -848,13 +849,14 @@ button.chip-add:hover:not(:disabled) { background: rgba(233, 228, 212, 0.06); bo
 .viewtitle:hover .title-edit { opacity: 1; }
 
 /* ---- CI checks panel ---- */
-.checks-panel { padding: 10px 14px; }
+.checks-panel { padding: 0; }
 .checks-title {
   font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--fg-muted);
 }
-.checks-list { max-height: var(--capped-panel); overflow-y: auto; margin-top: 8px; }
-.check-row { border-top: 1px solid var(--border-subtle); padding: 6px 0; }
+.checks-head { position: relative; padding: 6px 8px; }
+.checks-list { overflow-y: auto; flex: 1; min-height: 0; }
+.check-row { border-top: 1px solid var(--border-subtle); padding: 6px 8px; }
 .check-glyph { font-size: 13px; width: 14px; text-align: center; flex-shrink: 0; }
 .check-name { font-size: 12.5px; font-weight: 600; }
 .check-output { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30%; }
@@ -869,10 +871,9 @@ button.chip-add:hover:not(:disabled) { background: rgba(233, 228, 212, 0.06); bo
 .check-log .log-warn { color: var(--amber); }
 
 /* checks header: ambient drift while CI runs */
-.checks-head { position: relative; }
 .checks-head > * { position: relative; }
 .checks-head-fx {
-  position: absolute !important; inset: -4px -14px; overflow: hidden;
+  position: absolute !important; inset: -4px -8px; overflow: hidden;
   pointer-events: none;
 }
 .checks-head-fx canvas { height: 100% !important; }
@@ -1949,7 +1950,7 @@ a.act-event-detail:hover { color: var(--orange); }
 }
 .suggestion-block code { background: none; border: none; padding: 0; }
 
-.pr-description { max-height: var(--capped-panel); overflow-y: auto; }
+.pr-description { overflow-y: auto; }
 .pr-description-wrap { position: relative; }
 .desc-expand {
   position: absolute; top: 6px; right: 6px; z-index: 5;
@@ -2093,3 +2094,261 @@ a.act-event-detail:hover { color: var(--orange); }
   font-size: 12px; line-height: 1; color: var(--fg-faint, var(--fg-muted));
 }
 .update-toast-dismiss:hover { color: var(--fg); }
+
+/* ---- hero side panel: vertical tab strip + content (stack + CI) ---- */
+/* .pr-shell (the central column) is the container query context. Below 1080px
+   of available width the panel drops onto its own row rather than competing
+   with the description. */
+.ws-main.pr-shell {
+  container-type: inline-size;
+  container-name: pr-shell;
+}
+
+.pr-hero-desc-row.has-side-panel {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  /* shared height cap so long descriptions don't stretch the whole hero;
+     each half scrolls independently when it overflows */
+  max-height: 50vh;
+}
+.pr-hero-desc-main {
+  flex: 1; min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+/* frame the description so it visually matches the side panel — same border,
+   padding, and stretch height, so both sides of the resize handle align */
+.pr-hero-desc-main > .pr-description-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pr-hero-desc-main > .pr-description-wrap > .pr-description {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-right: 2px solid var(--orange);
+  padding: 8px 10px;
+  background: var(--bg-inset);
+  background-image: var(--dotgrid);
+  background-size: 7px 7px;
+  background-position: 0 0;
+}
+/* when no description (bodyless teammate PR), collapse the main column */
+.pr-hero-desc-main:empty { display: none; }
+
+@container pr-shell (max-width: 1080px) {
+  .pr-hero-desc-row.has-side-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hero-side-panel {
+    width: 100% !important;
+    flex-basis: auto !important;
+  }
+}
+
+/* ---- the panel: [horizontal tab strip on top] [content below] ---- */
+.hero-side-panel {
+  flex: 0 0 auto;
+  max-width: 960px;
+  align-self: stretch;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  position: relative;
+}
+.hero-side-panel::before {
+  content: "";
+  position: absolute; inset: 0; pointer-events: none;
+  background: var(--dotgrid);
+  background-size: 7px 7px;
+  opacity: 0.5;
+}
+
+/* content area (below the tab strip) */
+.hero-side-content {
+  flex: 1; min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  z-index: 1;
+  padding: 8px;
+}
+/* when showing the stack tree, let it manage its own scrolling */
+.hero-side-content > .stack-drawer-head { padding-top: 2px; }
+
+/* ---- horizontal tab strip ---- */
+.hero-side-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+}
+.hero-tab {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border-subtle);
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  text-align: center;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.hero-tab:last-child { border-right: none; }
+.hero-tab:hover {
+  background: var(--orange-bg);
+  color: var(--fg);
+}
+.hero-tab.active {
+  background: var(--ember-wash), var(--hero-ground);
+  color: var(--orange);
+  border-bottom: 2px solid var(--orange);
+  margin-bottom: -1px;
+}
+.hero-tab-label {
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.hero-tab .badge { font-size: 8px; padding: 1px 5px; }
+
+/* CI tab status indicators */
+.hero-tab-ci-status {
+  display: flex; flex-direction: row; gap: 4px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  line-height: 1.25;
+}
+.hero-tab-ci-status .ci-pass { color: var(--acid); }
+.hero-tab-ci-status .ci-run { color: var(--amber); }
+.hero-tab-ci-status .ci-fail { color: var(--red); }
+.hero-tab-ci-status .ci-other { color: var(--fg-subtle); }
+
+/* ---- stack tab content (reuses stack-drawer-* classes) ---- */
+.stack-drawer-head,
+.stack-drawer-pos,
+.stack-drawer-foot,
+.stack-drawer-row {
+  position: relative;
+  z-index: 1;
+}
+.stack-drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.stack-drawer-title {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--orange);
+}
+.stack-drawer-title .subtle { color: var(--fg-subtle); font-weight: 600; }
+.stack-drawer-pos {
+  display: flex; align-items: center;
+  padding: 4px 10px;
+  font-size: 10px; letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.stack-drawer-body {
+  overflow-y: auto;
+  flex: 1; min-height: 0;
+  padding: 6px 6px 8px;
+}
+
+.stack-drawer-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px 6px 7px;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  border-left: 2px solid var(--border-subtle);
+  background: var(--bg-raised);
+}
+.stack-drawer-row:hover {
+  border-color: var(--border);
+  border-left-color: var(--orange);
+}
+.stack-drawer-row.current {
+  border-color: rgba(255, 79, 0, 0.35);
+  border-left-color: var(--orange);
+  background: var(--ember-wash), var(--hero-ground);
+  box-shadow: inset 10px 0 28px -14px rgba(255, 79, 0, 0.22);
+}
+
+/* tree connector rails */
+.stack-drawer-tree {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  min-height: 100%;
+  padding-top: 7px;
+}
+.stack-drawer-rail {
+  width: 10px;
+  border-right: 1px solid var(--border-subtle);
+  margin-right: 4px;
+}
+.stack-drawer-node {
+  width: 7px; height: 7px; margin-top: 4px;
+  background: var(--fg-subtle);
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.stack-drawer-row.current .stack-drawer-node { background: var(--orange); border-color: var(--orange); }
+
+.stack-drawer-main {
+  flex: 1; min-width: 0;
+  background: none; border: none; padding: 0; cursor: pointer;
+  text-align: left; color: inherit; font: inherit;
+  text-transform: none; letter-spacing: normal;
+}
+.stack-drawer-id {
+  display: flex; align-items: baseline; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--fg);
+}
+.stack-drawer-num { color: var(--orange); font-weight: 700; flex: 0 0 auto; }
+.stack-drawer-title-text {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stack-drawer-meta {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: 3px;
+}
+.stack-drawer-meta .badge { font-size: 8.5px; padding: 1px 5px; }
+.stack-drawer-sub {
+  margin-top: 3px;
+  font-size: 9.5px; letter-spacing: 0.03em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stack-drawer-ext {
+  flex: 0 0 auto;
+  padding: 6px 2px 0;
+  font-size: 11px; text-decoration: none;
+}
+.stack-drawer-ext:hover { color: var(--orange); }
+
+.stack-drawer-foot {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 10px; letter-spacing: 0.06em;
+}

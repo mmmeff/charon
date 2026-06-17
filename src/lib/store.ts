@@ -444,6 +444,9 @@ interface UiState {
   /** right-hand GitHub activity panel visibility (persisted; topstrip toggle) */
   activityPanelOpen: boolean;
   setActivityPanelOpen(v: boolean): void;
+  /** hero side panel active tab: "stack" | "ci" | null (persisted; null = collapsed) */
+  heroSideTab: "stack" | "ci" | null;
+  setHeroSideTab(v: "stack" | "ci" | null): void;
   /** left-hand PR list sidebar visibility (persisted; topstrip toggle) */
   prSidebarOpen: boolean;
   setPrSidebarOpen(v: boolean): void;
@@ -487,6 +490,14 @@ export const useUiStore = create<UiState>((set, get) => ({
   setActivityPanelOpen(v) {
     localStorage.setItem("prc-activity-open", v ? "on" : "off");
     set({ activityPanelOpen: v });
+  },
+  heroSideTab: (() => {
+    const saved = localStorage.getItem("prc-hero-side-tab");
+    return saved === "stack" || saved === "ci" ? saved : "stack";
+  })(),
+  setHeroSideTab(v) {
+    localStorage.setItem("prc-hero-side-tab", v ?? "");
+    set({ heroSideTab: v });
   },
   prSidebarOpen: localStorage.getItem("prc-pr-sidebar-open") !== "off",
   setPrSidebarOpen(v) {
