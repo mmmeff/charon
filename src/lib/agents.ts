@@ -82,6 +82,22 @@ interface ActiveRun {
 const active = new Map<string, ActiveRun>();
 const doneCallbacks = new Map<string, (run: AgentRun) => void | Promise<void>>();
 const settledCallbacks = new Map<string, (run: AgentRun) => void | Promise<void>>();
+// runs whose turn produced a harness "can't reach the model provider" error —
+// the turn still ends end_turn, so finalize() converts these to a failure
+const providerFailures = new Map<string, string>();
+
+/**
+ * Detect a harness "can't reach the model provider" error in agent output
+ * (e.g. Cursor's `Provider Error … trouble connecting to the model provider`,
+ * which arrives as a normal message chunk with stopReason end_turn). Returns a
+ * clean message to fail the run with, or null for ordinary content.
+ */
+function harnessProviderError(text: string): string | null {
+  if (/provider error|trouble connecting to the model provider/i.test(text)) {
+    return "The harness couldn't reach this model's provider — it may be unavailable on your plan or temporarily down. Try a different model.";
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // session/update → store translation
@@ -132,8 +148,14 @@ function applyUpdate(id: string, u: AcpSessionUpdate): void {
     case "agent_message_chunk": {
       const t = textOf((u as any).content);
       if (t) {
-        store.appendChunk(id, "message", t);
-        store.appendResultText(id, t); // drives proposal/finding extraction
+        const provErr = harnessProviderError(t);
+        if (provErr) {
+          // suppress the raw provider error; finalize() fails the run cleanly
+          providerFailures.set(id, provErr);
+        } else {
+          store.appendChunk(id, "message", t);
+          store.appendResultText(id, t); // drives proposal/finding extraction
+        }
       }
       break;
     }
@@ -220,6 +242,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     }
     useAgentStore.getState().update(id, { status: "error", error: msg, endedAt: Date.now(), steerable: false });
     doneCallbacks.delete(id);
+    providerFailures.delete(id);
     active.delete(id);
     agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — " + msg.slice(0, 80));
     runSettledCallback(id);
@@ -315,6 +338,16 @@ function finalize(id: string, status: "done" | "killed") {
   const store = useAgentStore.getState();
   const run = store.runs[id];
   if (!run) return;
+  // a clean end_turn whose only content was a provider error is really a failure
+  const provErr = providerFailures.get(id);
+  providerFailures.delete(id);
+  if (status === "done" && provErr) {
+    store.update(id, { status: "error", error: provErr, endedAt: Date.now(), exitCode: 1, steerable: false });
+    agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — " + provErr.slice(0, 80));
+    doneCallbacks.delete(id); // don't run post-processing on a failed turn
+    runSettledCallback(id);
+    return;
+  }
   store.update(id, {
     status,
     endedAt: Date.now(),
