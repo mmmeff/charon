@@ -157,7 +157,14 @@ export function RepoApp({ repo }: { repo: string }) {
   // without restarting it.
   const ctxRef = useRef<FlowContext | null>(null);
   if (gh && global && repoStore.loaded) {
-    ctxRef.current = { gh, repo, config: repoStore.config, global, skills };
+    ctxRef.current = {
+      gh,
+      repo,
+      config: repoStore.config,
+      global,
+      skills,
+      prStacks: prData.prStacks,
+    };
   }
   const [poller] = useState(() => new RepoPoller(() => ctxRef.current!));
   const reviewFiltersKey = repoStore.loaded ? JSON.stringify(repoStore.config.reviewFilters) : "";
@@ -297,7 +304,7 @@ export function RepoApp({ repo }: { repo: string }) {
   };
 
   return (
-    <FlowCtx.Provider value={{ ctx: ctxRef.current, poller }}>
+    <FlowCtx.Provider value={{ ctx: ctxRef.current, poller, prStacks: prData.prStacks }}>
       <div className="app">
         <nav className="rail">
           <div className="rail-brand" title="Charon">

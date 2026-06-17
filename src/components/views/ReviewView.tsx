@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
+import { stackedPrList, type PrStackRenderItem } from "../../lib/pr-stacks";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
-import { age, sortPrs, usePastHero, useScrollMemory, useScrolledPrTitle, type SortKey } from "../../lib/ui";
+import { age, usePastHero, useScrollMemory, useScrolledPrTitle, type SortKey } from "../../lib/ui";
 import { Badge, BranchBadge, CiBadge, EmptyState, LoadingField, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
 import { ChecksPanel } from "../ChecksPanel";
 import { Composer, RunResults, type ComposerMode } from "../Composer";
@@ -13,6 +14,7 @@ import { groupCommentThreads } from "../../lib/threads";
 import { DiffCommentThread, PrActivityPanel, PrDescription, PrHeroRail, PrLabels } from "../PrMeta";
 import { InlineCommentEditor, ReviewStrip } from "../ProposalCard";
 import { useFlow } from "../flow";
+import { PrStackCard } from "../PrStackList";
 
 /**
  * Review: teammate PRs needing my attention. Runs the automated self-review
@@ -20,12 +22,13 @@ import { useFlow } from "../flow";
  * tweaking, then submits the final review — only on explicit approval.
  */
 export function ReviewView() {
+  const { prStacks } = useFlow();
   const queue = usePrData((s) => s.reviewQueue);
   const selected = useUiStore((s) => s.focusedPr["review"] ?? null);
   const setSelected = (n: number) => useUiStore.getState().setFocusedPr("review", n);
   const [sort, setSort] = useState<SortKey>("updated");
-  const sorted = sortPrs(queue, sort);
-  const pr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;
+  const stacked = stackedPrList(queue, prStacks, sort);
+  const pr = stacked.find((item) => item.pr.number === selected)?.pr ?? stacked[0]?.pr ?? null;
 
   if (queue.length === 0) {
     return (
@@ -37,30 +40,42 @@ export function ReviewView() {
     );
   }
 
-  const needsAttention = sorted.filter((p) => p.requestedFromMe);
-  const repositoryPrs = sorted.filter((p) => !p.requestedFromMe);
-
-  const card = (p: PrSummary) => (
-    <div
-      key={p.number}
-      className={`card selectable ${pr?.number === p.number ? "selected" : ""}`}
-      onClick={() => setSelected(p.number)}
-    >
-      <h4>
-        #{p.number} {p.title}
-      </h4>
-      <div className="meta">
-        <RunningAgentsChip prNumber={p.number} />
-        <span>by {p.author}</span>
-        <span>
-          +{p.additions} −{p.deletions}
-        </span>
-        <Badge color="gray" title={`updated ${p.updatedAt}`}>
-          {age(p.updatedAt)}
-        </Badge>
-      </div>
-    </div>
+  const needsAttention = stackedPrList(
+    queue.filter((p) => p.requestedFromMe),
+    prStacks,
+    sort
   );
+  const repositoryPrs = stackedPrList(
+    queue.filter((p) => !p.requestedFromMe),
+    prStacks,
+    sort
+  );
+
+  const card = (item: PrStackRenderItem) => {
+    const p = item.pr;
+    return (
+      <PrStackCard
+        key={p.number}
+        item={item}
+        selected={pr?.number === p.number}
+        onClick={() => setSelected(p.number)}
+      >
+        <h4>
+          #{p.number} {p.title}
+        </h4>
+        <div className="meta">
+          <RunningAgentsChip prNumber={p.number} />
+          <span>by {p.author}</span>
+          <span>
+            +{p.additions} −{p.deletions}
+          </span>
+          <Badge color="gray" title={`updated ${p.updatedAt}`}>
+            {age(p.updatedAt)}
+          </Badge>
+        </div>
+      </PrStackCard>
+    );
+  };
 
   return (
     <div className="main split">

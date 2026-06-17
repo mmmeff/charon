@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { usePrData } from "../../lib/events";
+import { stackedPrList } from "../../lib/pr-stacks";
 import { useRepoStore, useUiStore } from "../../lib/store";
-import { age, sortPrs, type SortKey } from "../../lib/ui";
+import { age, type SortKey } from "../../lib/ui";
 import { ApprovalsBadge, Badge, CiBadge, EmptyState, MergeBadge, RunningAgentsChip, SortPicker } from "../common";
+import { useFlow } from "../flow";
 import { Sidebar } from "../Panels";
+import { PrStackCard } from "../PrStackList";
 import { PrWorkspace } from "../PrWorkspace";
 
 /**
@@ -13,14 +16,15 @@ import { PrWorkspace } from "../PrWorkspace";
  * comments anchored in place, pending proposals, and manual fix triggers.
  */
 export function BabysitView() {
+  const { prStacks } = useFlow();
   const myOpen = usePrData((s) => s.myOpen);
   const checks = usePrData((s) => s.checks);
   const proposals = useRepoStore((s) => s.proposals);
   const selected = useUiStore((s) => s.focusedPr["open"] ?? null);
   const setSelected = (n: number) => useUiStore.getState().setFocusedPr("open", n);
   const [sort, setSort] = useState<SortKey>("updated");
-  const sorted = sortPrs(myOpen, sort);
-  const pr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;
+  const stacked = stackedPrList(myOpen, prStacks, sort);
+  const pr = stacked.find((item) => item.pr.number === selected)?.pr ?? stacked[0]?.pr ?? null;
 
 
   if (myOpen.length === 0) {
@@ -42,14 +46,16 @@ export function BabysitView() {
           </span>
           <SortPicker value={sort} onChange={setSort} />
         </div>
-        {sorted.map((p) => {
+        {stacked.map((item) => {
+          const p = item.pr;
           const pending = proposals.filter(
             (x) => x.prNumber === p.number && x.status === "pending"
           ).length;
           return (
-            <div
+            <PrStackCard
               key={p.number}
-              className={`card selectable ${pr?.number === p.number ? "selected" : ""}`}
+              item={item}
+              selected={pr?.number === p.number}
               onClick={() => setSelected(p.number)}
             >
               <h4>
@@ -68,7 +74,7 @@ export function BabysitView() {
                 </Badge>
                 {pending > 0 && <Badge color="yellow">{pending} pending</Badge>}
               </div>
-            </div>
+            </PrStackCard>
           );
         })}
 

@@ -5,6 +5,7 @@ import type {
   LineSelection,
   Proposal,
   ProposedInlineComment,
+  PrStackIndex,
   PrSummary,
   RepoConfig,
   ReviewFinding,
@@ -59,6 +60,7 @@ export interface FlowContext {
   config: RepoConfig;
   global: GlobalConfig;
   skills: Skill[];
+  prStacks: PrStackIndex;
 }
 
 const MAX_DIFF_CHARS = 90_000;

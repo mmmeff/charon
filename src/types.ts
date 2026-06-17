@@ -281,6 +281,26 @@ export interface PrSummary {
   changedFiles: number;
 }
 
+export interface PrStackEntry {
+  prNumber: number;
+  headRef: string;
+  baseRef: string;
+  parentPrNumber: number | null;
+  childPrNumbers: number[];
+  depth: number;
+  rootPrNumber: number;
+  stackPrNumbers: number[];
+  /** True when this PR directly targets the repository's main branch. */
+  targetsMain: boolean;
+}
+
+export interface PrStackIndex {
+  byNumber: Record<number, PrStackEntry>;
+  rootPrNumbers: number[];
+  branchToPrNumber: Record<string, number>;
+  maxDepth: number;
+}
+
 export interface CheckInfo {
   name: string;
   status: string; // queued | in_progress | completed

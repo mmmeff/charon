@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { deleteDraftCreateArtifacts } from "../../lib/flows";
 import { usePrData } from "../../lib/events";
+import { stackedPrList } from "../../lib/pr-stacks";
 import { useAgentStore, useUiStore } from "../../lib/store";
 import { formatShortcut, resolveShortcutMap } from "../../lib/shortcuts";
-import { age, sortPrs, type SortKey } from "../../lib/ui";
+import { age, type SortKey } from "../../lib/ui";
 import type { AgentRun } from "../../types";
 import { AgentCard } from "../AgentCard";
 import { ApprovalsBadge, Badge, CiBadge, EmptyState, RunningAgentsChip, SortPicker, Spinner } from "../common";
 import { useFlow } from "../flow";
 import { Sidebar } from "../Panels";
+import { PrStackCard } from "../PrStackList";
 import { PrWorkspace } from "../PrWorkspace";
 import { NewDraftWorkspace } from "../NewDraftWorkspace";
 
@@ -18,7 +20,7 @@ import { NewDraftWorkspace } from "../NewDraftWorkspace";
  * general feedback run read-only.
  */
 export function DraftsView() {
-  const { ctx } = useFlow();
+  const { ctx, prStacks } = useFlow();
   const drafts = usePrData((s) => s.myDrafts);
   const checks = usePrData((s) => s.checks);
   const selected = useUiStore((s) => s.focusedPr["drafts"] ?? null);
@@ -51,11 +53,11 @@ export function DraftsView() {
     setSelectedPendingId(id);
   };
   const [sort, setSort] = useState<SortKey>("updated");
-  const sorted = sortPrs(drafts, sort);
+  const stacked = stackedPrList(drafts, prStacks, sort);
   const selectedPending = selectedPendingId
     ? pendingDraftRuns.find((r) => r.id === selectedPendingId) ?? null
     : null;
-  const defaultPr = sorted.find((p) => p.number === selected) ?? sorted[0] ?? null;
+  const defaultPr = stacked.find((item) => item.pr.number === selected)?.pr ?? stacked[0]?.pr ?? null;
   const visiblePending = selectedPending ?? (!creating && !defaultPr ? pendingDraftRuns[0] ?? null : null);
   const pr = creating || visiblePending ? null : defaultPr;
   const clearPendingSelection = () => setSelectedPendingId(null);
@@ -100,30 +102,34 @@ export function DraftsView() {
             onClick={() => selectPending(run.id)}
           />
         ))}
-        {sorted.map((p) => (
-          <div
-            key={p.number}
-            className={`card selectable ${!creating && pr?.number === p.number ? "selected" : ""}`}
-            onClick={() => setSelected(p.number)}
-          >
-            <h4>
-              #{p.number} {p.title}
-            </h4>
-            <div className="meta">
-              <RunningAgentsChip prNumber={p.number} />
-              <Badge color="gray">draft</Badge>
-              <CiBadge checks={checks[p.number] ?? []} />
-              <ApprovalsBadge prNumber={p.number} />
-              <span>{p.headRef}</span>
-              <span>
-                +{p.additions} −{p.deletions}
-              </span>
-              <Badge color="gray" title={`updated ${p.updatedAt}`}>
-                {age(p.updatedAt)}
-              </Badge>
-            </div>
-          </div>
-        ))}
+        {stacked.map((item) => {
+          const p = item.pr;
+          return (
+            <PrStackCard
+              key={p.number}
+              item={item}
+              selected={!creating && pr?.number === p.number}
+              onClick={() => setSelected(p.number)}
+            >
+              <h4>
+                #{p.number} {p.title}
+              </h4>
+              <div className="meta">
+                <RunningAgentsChip prNumber={p.number} />
+                <Badge color="gray">draft</Badge>
+                <CiBadge checks={checks[p.number] ?? []} />
+                <ApprovalsBadge prNumber={p.number} />
+                <span>{p.headRef}</span>
+                <span>
+                  +{p.additions} −{p.deletions}
+                </span>
+                <Badge color="gray" title={`updated ${p.updatedAt}`}>
+                  {age(p.updatedAt)}
+                </Badge>
+              </div>
+            </PrStackCard>
+          );
+        })}
       </Sidebar>
       <div className="content">
         {creating ? (

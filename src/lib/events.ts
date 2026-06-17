@@ -5,6 +5,7 @@ import type {
   EventHandlerConfig,
   FiredEvent,
   PrSnapshot,
+  PrStackIndex,
   PrSummary,
   ReviewInfo,
   TimelineEventInfo,
@@ -22,6 +23,7 @@ import {
 import { interpolate, truncate } from "./template";
 import { useRepoStore } from "./store";
 import { pruneBranchWorktree } from "./worktree";
+import { buildPrStackIndex, EMPTY_PR_STACK_INDEX } from "./pr-stacks";
 
 // ---------------------------------------------------------------------------
 // Live PR data for the UI (refreshed by the poller)
@@ -29,6 +31,7 @@ import { pruneBranchWorktree } from "./worktree";
 
 interface PrDataState {
   openPulls: PrSummary[];
+  prStacks: PrStackIndex;
   myDrafts: PrSummary[];
   myOpen: PrSummary[];
   reviewQueue: PrSummary[];
@@ -49,6 +52,7 @@ interface PrDataState {
 
 export const usePrData = create<PrDataState>((set) => ({
   openPulls: [],
+  prStacks: EMPTY_PR_STACK_INDEX,
   myDrafts: [],
   myOpen: [],
   reviewQueue: [],
@@ -61,7 +65,12 @@ export const usePrData = create<PrDataState>((set) => ({
   lastPollAt: null,
   nextPollAt: null,
   pollError: null,
-  patch: (p) => set(p),
+  patch: (p) =>
+    set(
+      p.openPulls !== undefined && p.prStacks === undefined
+        ? { ...p, prStacks: buildPrStackIndex(p.openPulls) }
+        : p
+    ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -442,13 +451,14 @@ export class RepoPoller {
                 : p
             )
           : l.filter((p) => p.number !== number);
+      const openPulls = swap(d.openPulls);
       d.patch({
         checks: { ...d.checks, [number]: ch },
         comments: { ...d.comments, [number]: cm },
         reviews: { ...d.reviews, [number]: rv },
         threads: { ...d.threads, [number]: th },
         timeline: { ...d.timeline, [number]: tl },
-        openPulls: swap(d.openPulls),
+        openPulls,
         myDrafts: swap(d.myDrafts),
         myOpen: swap(d.myOpen),
         reviewQueue: swap(d.reviewQueue),
@@ -646,8 +656,9 @@ export class RepoPoller {
 
       await store.saveSnapshots(newSnapshots);
       const enrich = (p: PrSummary) => detailed[p.number] ?? p;
+      const enrichedOpenPulls = openPulls.map(enrich);
       data.patch({
-        openPulls: openPulls.map(enrich),
+        openPulls: enrichedOpenPulls,
         myDrafts: myDrafts.map(enrich),
         myOpen: myNonDraft.map(enrich),
         reviewQueue: teammate.map(enrich),

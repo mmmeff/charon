@@ -448,6 +448,31 @@ h3, h4 {
   color: var(--fg-muted); font-size: 10.5px; display: flex; gap: 8px; flex-wrap: wrap;
   align-items: center; letter-spacing: 0.02em;
 }
+.pr-stack-card {
+  --stack-depth: 0;
+  position: relative;
+  margin-left: calc(var(--stack-depth) * 18px);
+}
+.pr-stack-card.stack-child::before {
+  content: "";
+  position: absolute;
+  left: -15px;
+  top: -11px;
+  width: 12px;
+  height: calc(50% + 11px);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  pointer-events: none;
+}
+.pr-stack-card.stack-parent::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  bottom: -11px;
+  height: 11px;
+  border-left: 1px solid var(--border-subtle);
+  pointer-events: none;
+}
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .row.between { justify-content: space-between; }
 .stack > * + * { margin-top: 10px; }
