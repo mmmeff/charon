@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { runDraftCreate } from "../lib/flows";
 import { useAgentStore, useUiStore } from "../lib/store";
 import { Section, Spinner } from "./common";
+import { AsciiMoon } from "./AsciiMoon";
 import { ModelPicker, ReasoningPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
 import { useFlow } from "./flow";
@@ -71,6 +72,8 @@ export function NewDraftWorkspace({
 
   return (
     <div className="workspace new-draft-workspace">
+      <AsciiMoon fill />
+      <div className="empty-stage-scrim" aria-hidden />
       <div className="ws-main pr-shell">
         <header className="pr-hero new-draft-hero">
           <div className="pr-hero-id">

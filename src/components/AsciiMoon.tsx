@@ -160,7 +160,13 @@ function program(gl: WebGL2RenderingContext, fs: string): WebGLProgram {
   return p;
 }
 
-export function AsciiMoon({ height = 200 }: { height?: number }) {
+
+/**
+ * `fill` renders the canvas absolutely positioned to cover the nearest
+ * positioned ancestor — the marketing-site hero treatment, used as a
+ * full-bleed animated backdrop behind empty states and the draft form.
+ */
+export function AsciiMoon({ height = 200, fill = false }: { height?: number; fill?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -217,7 +223,7 @@ export function AsciiMoon({ height = 200 }: { height?: number }) {
       gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
       gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
       gl!.bindFramebuffer(gl!.FRAMEBUFFER, fbo);
-      gl!.framebufferTexture2D(gl!.FRAMEBUFFER, gl!.COLOR_ATTACHMENT0, gl!.TEXTURE_2D, sceneTex, 0);
+      gl!.framebufferTexture2D(gl!.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
       gl!.bindFramebuffer(gl!.FRAMEBUFFER, null);
     };
 
@@ -282,9 +288,25 @@ export function AsciiMoon({ height = 200 }: { height?: number }) {
       io.disconnect();
       document.removeEventListener("visibilitychange", onVis);
       removeEventListener("pointermove", onPointer);
-      gl?.getExtension("WEBGL_lose_context")?.loseContext();
+      // NOTE: do NOT call WEBGL_lose_context.loseContext() here. getContext()
+      // is idempotent per-canvas — it returns the same context object on the
+      // next call. Under React 18 <StrictMode> (dev), effects run twice: the
+      // first cleanup would permanently lose the context, so the second mount
+      // gets back that same dead context and createShader() returns null.
+      // Let GC reclaim it when the canvas leaves the DOM.
     };
   }, []);
 
-  return <canvas ref={ref} style={{ width: "100%", height, display: "block" }} aria-hidden />;
+  return (
+    <canvas
+      ref={ref}
+      style={
+        fill
+          ? { position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }
+          : { width: "100%", height, display: "block" }
+      }
+      aria-hidden
+    />
+  );
 }
+

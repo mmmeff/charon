@@ -19,6 +19,8 @@ export function BabysitView() {
   const { prStacks } = useFlow();
   const myOpen = usePrData((s) => s.myOpen);
   const checks = usePrData((s) => s.checks);
+  const lastPollAt = usePrData((s) => s.lastPollAt);
+  const loading = lastPollAt === null;
   const proposals = useRepoStore((s) => s.proposals);
   const selected = useUiStore((s) => s.focusedPr["open"] ?? null);
   const setSelected = (n: number) => useUiStore.getState().setFocusedPr("open", n);
@@ -30,7 +32,7 @@ export function BabysitView() {
   if (myOpen.length === 0) {
     return (
       <div className="main">
-        <EmptyState title="No open PRs">
+        <EmptyState title="No open PRs" loading={loading}>
           Your open pull requests are watched here — CI, merge state, and incoming feedback, with agents on call.
         </EmptyState>
       </div>

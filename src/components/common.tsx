@@ -88,22 +88,34 @@ export function ApprovalsBadge({ prNumber }: { prNumber: number }) {
   );
 }
 
-/** Empty-state block: the orbiting ASCII Charon + tracked uppercase title. */
+/** Empty-state block: full-bleed ASCII Charon backdrop + tracked uppercase title. */
 export function EmptyState({
   title,
   children,
   action,
+  loading,
 }: {
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  /** When true, shows a spinner and suppresses the action — used while the
+   *  first data fetch is still in flight so the user can tell "loading" from
+   *  "genuinely empty". */
+  loading?: boolean;
 }) {
   return (
-    <div className="empty">
-      <AsciiMoon height={190} />
-      <h3>{title}</h3>
-      {children && <p>{children}</p>}
-      {action && <div className="empty-action">{action}</div>}
+    <div className="empty-stage">
+      <AsciiMoon fill />
+      <div className="empty-stage-scrim" aria-hidden />
+      <div className="empty">
+        <h3>{loading ? <span className="empty-loading-title"><Spinner /> Loading…</span> : title}</h3>
+        {loading ? (
+          <p>Fetching from GitHub.</p>
+        ) : (
+          children && <p>{children}</p>
+        )}
+        {!loading && action && <div className="empty-action">{action}</div>}
+      </div>
     </div>
   );
 }

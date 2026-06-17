@@ -24,6 +24,8 @@ import { PrStackCard } from "../PrStackList";
 export function ReviewView() {
   const { prStacks } = useFlow();
   const queue = usePrData((s) => s.reviewQueue);
+  const lastPollAt = usePrData((s) => s.lastPollAt);
+  const loading = lastPollAt === null;
   const selected = useUiStore((s) => s.focusedPr["review"] ?? null);
   const setSelected = (n: number) => useUiStore.getState().setFocusedPr("review", n);
   const [sort, setSort] = useState<SortKey>("updated");
@@ -33,7 +35,7 @@ export function ReviewView() {
   if (queue.length === 0) {
     return (
       <div className="main">
-        <EmptyState title="Nothing to review">
+        <EmptyState title="Nothing to review" loading={loading}>
           Open pull requests by other people appear here when they match your To Review filters.
         </EmptyState>
       </div>

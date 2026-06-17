@@ -317,6 +317,41 @@ h3, h4 {
 .content { flex: 1; overflow: hidden; padding: 0; display: flex; min-width: 0; }
 
 .empty { color: var(--fg-muted); text-align: center; padding: 40px 24px; max-width: 720px; margin: 0 auto; }
+.empty-loading-title { display: inline-flex; align-items: center; gap: 10px; }
+
+/* Full-bleed ASCII Charon backdrop for zero states and the draft form.
+   The stage fills its scroll parent; the canvas + scrim sit behind the
+   centered content. */
+.empty-stage {
+  position: relative;
+  min-height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.empty-stage > .empty {
+  position: relative;
+  z-index: 2;
+  /* the backdrop is busy — give the floating text a soft surface so it
+     stays legible against the ASCII Charon canvas behind it */
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+}
+.empty-stage-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 45%, transparent 0%, color-mix(in srgb, var(--bg) 62%, transparent) 70%, var(--bg) 100%),
+    linear-gradient(to top, var(--bg) 0%, transparent 18%);
+}
 .empty h3 {
   color: var(--fg); font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase;
   margin: 14px 0 6px;
@@ -1081,13 +1116,20 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   font-size: 11.5px;
   line-height: 1.4;
 }
-.new-draft-workspace { width: 100%; }
-.new-draft-hero {
+.new-draft-workspace { width: 100%; position: relative; overflow: hidden; }
+.new-draft-workspace > .ws-main { position: relative; z-index: 2; }
+.new-draft-workspace > .empty-stage-scrim { z-index: 1; }
+.new-draft-hero.pr-hero {
   min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* let the AsciiMoon backdrop show through; the form card provides its own
+     solid surface, and the scrim underneath softens the moon for legibility */
+  background: transparent;
+  border-bottom: none;
 }
+.new-draft-hero.pr-hero::after { display: none; }
 .new-draft-hero .pr-hero-id,
 .new-draft-hero .ws-section {
   width: min(100%, 760px);

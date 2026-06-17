@@ -23,6 +23,8 @@ export function DraftsView() {
   const { ctx, prStacks } = useFlow();
   const drafts = usePrData((s) => s.myDrafts);
   const checks = usePrData((s) => s.checks);
+  const lastPollAt = usePrData((s) => s.lastPollAt);
+  const loading = lastPollAt === null;
   const selected = useUiStore((s) => s.focusedPr["drafts"] ?? null);
   const requestedNewDraft = useUiStore((s) => s.requestedNewDraft);
   const [creating, setCreating] = useState(false);
@@ -152,6 +154,7 @@ export function DraftsView() {
           <div className="main">
             <EmptyState
               title="No drafts"
+              loading={loading}
               action={
                 <button className="primary empty-primary-action" onClick={startCreating}>
                   + Draft
