@@ -122,11 +122,21 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
   useScrollMemory(mainRef, `pr:${ctx.repo}:${pr.number}`);
   const condensed = usePastHero(mainRef, heroRef);
 
-  // Stack control room: jump to a review-queue sibling in-app, else GitHub.
+  // Stack control room: jump to a sibling PR in-app, switching tabs if it
+  // lives in another view, or fall back to opening it on GitHub.
+  const myDrafts = usePrData((s) => s.myDrafts);
+  const myOpen = usePrData((s) => s.myOpen);
   const reviewQueue = usePrData((s) => s.reviewQueue);
   const openPulls = usePrData((s) => s.openPulls);
   const jumpToStackPr = (n: number) => {
-    if (reviewQueue.some((p) => p.number === n)) {
+    if (myDrafts.some((p) => p.number === n)) {
+      useUiStore.getState().requestTab("drafts");
+      useUiStore.getState().setFocusedPr("drafts", n);
+    } else if (myOpen.some((p) => p.number === n)) {
+      useUiStore.getState().requestTab("open");
+      useUiStore.getState().setFocusedPr("open", n);
+    } else if (reviewQueue.some((p) => p.number === n)) {
+      useUiStore.getState().requestTab("review");
       useUiStore.getState().setFocusedPr("review", n);
     } else {
       const target = openPulls.find((p) => p.number === n);
@@ -286,7 +296,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
           </PrHeroSidePanel>
 
           {/* drive the review agent */}
-          <Section label="Agent">
+          <Section>
             <Composer pr={pr} modes={consoleModes} reviewKind="teammate" />
             <RunResults pr={pr} />
             {error && <p style={{ color: "var(--red)" }}>{error}</p>}
