@@ -137,17 +137,17 @@ export function PrHeroSidePanel({
     <div className="hero-side-tabs">
       {hasStack && (
         <button
-          className={`hero-tab stack ${showing === "stack" ? "active" : ""}`}
+          className={`hero-tab hero-tab-stack ${showing === "stack" ? "active" : ""}`}
           title="Stack control room"
           onClick={() => toggle("stack")}
         >
           <span className="hero-tab-label">Stack</span>
-          <Badge color="orange">{stackNodes.length}</Badge>
+          <span className="hero-tab-stack-count">{stackNodes.length}</span>
         </button>
       )}
       {hasCi && (
         <button
-          className={`hero-tab ci ${showing === "ci" ? "active" : ""}`}
+          className={`hero-tab hero-tab-ci ${showing === "ci" ? "active" : ""}`}
           title="CI checks"
           onClick={() => toggle("ci")}
         >

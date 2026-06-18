@@ -2262,11 +2262,13 @@ a.act-event-detail:hover { color: var(--orange); }
   z-index: 1;
 }
 .hero-tab {
-  display: flex;
+  display: inline-flex;
   flex-direction: row;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  height: 30px;
+  padding: 0 14px;
+  line-height: 1;
   background: none;
   border: none;
   border-right: 1px solid var(--border-subtle);
@@ -2291,13 +2293,19 @@ a.act-event-detail:hover { color: var(--orange); }
   font-size: 9.5px; font-weight: 800; letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.hero-tab .badge { font-size: 8px; padding: 1px 5px; }
+
+.hero-tab-stack-count {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  align-self: center;
+  color: var(--orange);
+}
 
 /* CI tab status indicators */
 .hero-tab-ci-status {
   display: flex; flex-direction: row; gap: 4px;
+  align-items: center;
+  justify-content: center;
   font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
-  line-height: 1.25;
 }
 .hero-tab-ci-status .ci-pass { color: var(--acid); }
 .hero-tab-ci-status .ci-run { color: var(--amber); }
