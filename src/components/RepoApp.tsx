@@ -17,8 +17,8 @@ import { native } from "../lib/tauri";
 import { navigateToPr } from "../lib/nav";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { timeAgo, useNow } from "../lib/ui";
-import type { ShortcutActionId } from "../types";
-import { FlowCtx } from "./flow";
+import type { ShortcutActionId, PrSummary } from "../types";
+import { FlowCtx, useFlow } from "./flow";
 import {
   IconActivity,
   IconCharonMoon,
@@ -32,6 +32,8 @@ import {
 } from "./icons";
 import { AsciiField } from "./AsciiField";
 import { CommitDiffModal } from "./CommitDiffModal";
+import { CommandPalette } from "./CommandPalette";
+import { PrWorkspace } from "./PrWorkspace";
 import { ActivityView } from "./views/ActivityView";
 import { BabysitView } from "./views/BabysitView";
 import { DraftsView } from "./views/DraftsView";
@@ -103,6 +105,7 @@ export function RepoApp({ repo }: { repo: string }) {
   const setActivityPanelOpen = useUiStore((s) => s.setActivityPanelOpen);
   const prSidebarOpen = useUiStore((s) => s.prSidebarOpen);
   const setPrSidebarOpen = useUiStore((s) => s.setPrSidebarOpen);
+  const orphanPr = useUiStore((s) => s.orphanPr);
   // keep the breadcrumb mounted briefly on hide so it can animate out
   const [crumb, setCrumb] = useState(scrolledPr);
   const [crumbLeaving, setCrumbLeaving] = useState(false);
@@ -260,6 +263,11 @@ export function RepoApp({ repo }: { repo: string }) {
         e.preventDefault();
         setTab("drafts");
         ui.requestNewDraft();
+        return;
+      }
+      if (action === "command_palette") {
+        e.preventDefault();
+        ui.setPaletteOpen(true);
         return;
       }
 
@@ -430,9 +438,76 @@ export function RepoApp({ repo }: { repo: string }) {
           {tab === "review" && <ReviewView />}
           {tab === "activity" && <ActivityView />}
           {tab === "settings" && <SettingsView />}
+
+          {orphanPr != null && (
+            <OrphanPrView
+              prNumber={orphanPr}
+              onClose={() => useUiStore.getState().setOrphanPr(null)}
+            />
+          )}
         </div>
       </div>
+      <CommandPalette />
       <CommitDiffModal />
     </FlowCtx.Provider>
+  );
+}
+
+/**
+ * Orphan PR view: a PR opened by number that isn't in any filtered list (or
+ * that the user wants to view without the sidebar). Overlays the normal tab
+ * content with a full-height PR workspace — fetched on demand from GitHub.
+ */
+function OrphanPrView({ prNumber, onClose }: { prNumber: number; onClose: () => void }) {
+  const { ctx, poller } = useFlow();
+  const [pr, setPr] = useState<PrSummary | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setPr(null);
+    setError("");
+    ctx.gh
+      .getPull(ctx.repo, prNumber)
+      .then(setPr)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prNumber, ctx.repo]);
+
+  const mine = pr?.author === ctx.gh.login;
+  const variant = mine ? (pr?.draft ? "draft" : "babysit") : "babysit";
+
+  return (
+    <div className="orphan-pr-overlay">
+      <div className="orphan-pr-bar">
+        <button className="link small" onClick={onClose} title="Close (Esc)">
+          ✕ close
+        </button>
+        <span className="subtle" style={{ fontWeight: 700, letterSpacing: "0.08em" }}>
+          ORPHAN PR
+        </span>
+        {pr && (
+          <a href={pr.url} target="_blank" rel="noreferrer" className="subtle">
+            #{pr.number} ↗
+          </a>
+        )}
+        <span style={{ flex: 1 }} />
+        {pr && (
+          <button
+            className="link small"
+            title="Refresh this PR"
+            onClick={() => void poller.refreshPr(pr.number)}
+          >
+            ↻ refresh
+          </button>
+        )}
+      </div>
+      {error && <div className="empty" style={{ padding: 40, color: "var(--red)" }}>{error}</div>}
+      {!pr && !error && (
+        <div className="empty" style={{ padding: 40 }}>
+          <span className="spin" /> Loading PR #{prNumber}…
+        </div>
+      )}
+      {pr && <PrWorkspace pr={pr} variant={variant} />}
+    </div>
   );
 }

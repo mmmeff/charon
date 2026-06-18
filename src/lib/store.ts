@@ -447,6 +447,12 @@ interface UiState {
   /** hero side panel active tab: "stack" | "ci" | null (persisted; null = collapsed) */
   heroSideTab: "stack" | "ci" | null;
   setHeroSideTab(v: "stack" | "ci" | null): void;
+  /** orphan PR view: a PR number opened outside the normal tab/sidebar flow */
+  orphanPr: number | null;
+  setOrphanPr(v: number | null): void;
+  /** command palette visibility */
+  paletteOpen: boolean;
+  setPaletteOpen(v: boolean): void;
   /** left-hand PR list sidebar visibility (persisted; topstrip toggle) */
   prSidebarOpen: boolean;
   setPrSidebarOpen(v: boolean): void;
@@ -498,6 +504,14 @@ export const useUiStore = create<UiState>((set, get) => ({
   setHeroSideTab(v) {
     localStorage.setItem("prc-hero-side-tab", v ?? "");
     set({ heroSideTab: v });
+  },
+  orphanPr: null,
+  setOrphanPr(v) {
+    set({ orphanPr: v });
+  },
+  paletteOpen: false,
+  setPaletteOpen(v) {
+    set({ paletteOpen: v });
   },
   prSidebarOpen: localStorage.getItem("prc-pr-sidebar-open") !== "off",
   setPrSidebarOpen(v) {

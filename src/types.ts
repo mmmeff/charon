@@ -105,7 +105,8 @@ export type ShortcutActionId =
   | "nav_forward"
   | "toggle_pr_sidebar"
   | "toggle_activity_panel"
-  | "toggle_agents";
+  | "toggle_agents"
+  | "command_palette";
 
 export type ShortcutMap = Partial<Record<ShortcutActionId, KeyBinding | null>>;
 

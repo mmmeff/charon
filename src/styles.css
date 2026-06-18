@@ -2201,12 +2201,18 @@ a.act-event-detail:hover { color: var(--orange); }
 
 @container pr-shell (max-width: 1080px) {
   .pr-hero-desc-row.has-side-panel {
-    flex-direction: column;
-    align-items: stretch;
+    /* stop being a flex row: let each child handle its own height/overflow
+       independently, ignoring the side-by-side stretch and shared max-height */
+    display: block;
+    max-height: none;
   }
   .hero-side-panel {
     width: 100% !important;
     flex-basis: auto !important;
+    max-height: var(--capped-panel);
+  }
+  .pr-hero-desc-main {
+    max-height: var(--capped-panel);
   }
 }
 
@@ -2410,3 +2416,77 @@ a.act-event-detail:hover { color: var(--orange); }
   border-top: 1px solid var(--border-subtle);
   font-size: 10px; letter-spacing: 0.06em;
 }
+
+/* ---- command palette (⌘K) ---- */
+.palette-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.palette {
+  width: 560px; max-width: 90vw;
+  max-height: 60vh;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--orange);
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.palette-input {
+  background: var(--bg-inset);
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 12px 16px;
+  outline: none;
+}
+.palette-input::placeholder { color: var(--fg-subtle); }
+.palette-results {
+  overflow-y: auto;
+  flex: 1; min-height: 0;
+  padding: 4px 0;
+}
+.palette-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 16px;
+  background: none; border: none;
+  text-align: left; cursor: pointer;
+  color: var(--fg);
+  font-family: var(--mono); font-size: 12px;
+  transition: background-color 80ms ease;
+}
+.palette-item.selected {
+  background: var(--orange-bg);
+  border-left: 2px solid var(--orange);
+  padding-left: 14px;
+}
+.palette-item:hover { background: var(--orange-bg); }
+.palette-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-item-label .subtle { color: var(--fg-subtle); font-weight: 400; }
+.palette-item-hint {
+  flex: none;
+  font-size: 10px; color: var(--fg-subtle);
+  letter-spacing: 0.04em;
+}
+.palette-empty { padding: 16px; text-align: center; font-size: 12px; }
+
+/* ---- orphan PR overlay ---- */
+.orphan-pr-overlay {
+  position: absolute; inset: 0; z-index: 50;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+}
+.orphan-pr-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-inset);
+  font-size: 11px;
+}
+.orphan-pr-overlay > .workspace { flex: 1; min-height: 0; }

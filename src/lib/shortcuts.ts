@@ -107,6 +107,13 @@ export const SHORTCUT_CATALOG: ShortcutDef[] = [
     description: "Move forward through the tab and PR focus history.",
     defaultBinding: { primary: true, key: "]" },
   },
+  {
+    id: "command_palette",
+    group: "Navigation",
+    label: "Command palette",
+    description: "Open the command palette to find PRs and run commands.",
+    defaultBinding: { primary: true, key: "k" },
+  },
 ];
 
 export const DEFAULT_SHORTCUTS: Record<ShortcutActionId, KeyBinding | null> = Object.fromEntries(
