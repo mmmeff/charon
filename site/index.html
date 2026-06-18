@@ -195,6 +195,16 @@ h2 .a{color:var(--acid)}
 .card h3 .n{color:var(--orange);margin-right:8px}
 .card p{font-size:13px;color:var(--bone-dim)}
 .card p strong{color:var(--bone)}
+.card a{color:var(--bone)}
+.card a:hover{color:var(--acid)}
+.card .cmd{
+  display:block;margin:12px 0;padding:8px 10px;
+  background:var(--ink);border:1px solid var(--line);
+  font-size:12px;color:var(--acid);overflow-x:auto;white-space:nowrap;
+}
+.card .cmd::before{content:"$ ";color:var(--bone-dim)}
+.harness-note{margin-top:28px;font-size:13px;color:var(--bone-dim);max-width:680px}
+.harness-note a{color:var(--acid)}
 
 /* ---------- feature rows ---------- */
 .feature{
@@ -460,9 +470,46 @@ in one place. Edit proposals. <strong>Approve what lands.</strong></p>
   </div>
 </section>
 
+<section id="harnesses">
+  <div class="sec-label rv">03 / HARNESSES</div>
+  <h2 class="rv">BRING YOUR OWN <span class="a">AGENT</span></h2>
+  <p class="prose rv">Charon drives coding agents over the
+  <a href="https://agentclientprotocol.com">Agent Client Protocol</a> — the open JSON-RPC standard
+  for editor↔agent communication. Each one's models, reasoning levels, and tool calls surface
+  natively in the UI. Supported out of the box:</p>
+
+  <div class="cards">
+    <div class="card rv">
+      <h3><span class="n">▸</span><a href="https://cursor.com/cli">CURSOR</a></h3>
+      <code class="cmd">cursor-agent acp</code>
+      <p>Native ACP server. Run <strong>cursor-agent login</strong> first.</p>
+    </div>
+    <div class="card rv">
+      <h3><span class="n">▸</span><a href="https://github.com/anthropics/claude-code">CLAUDE CODE</a></h3>
+      <code class="cmd">npx @zed-industries/claude-code-acp</code>
+      <p>Adapter; needs an <strong>ANTHROPIC_API_KEY</strong>.</p>
+    </div>
+    <div class="card rv">
+      <h3><span class="n">▸</span><a href="https://github.com/openai/codex">CODEX CLI</a></h3>
+      <code class="cmd">npx @zed-industries/codex-acp</code>
+      <p>ACP bridge; uses your Codex login or <strong>OPENAI_API_KEY</strong>.</p>
+    </div>
+    <div class="card rv">
+      <h3><span class="n">▸</span><a href="https://opencode.ai">OPENCODE</a></h3>
+      <code class="cmd">opencode acp</code>
+      <p>Native ACP server. Configure a provider/API key first.</p>
+    </div>
+  </div>
+
+  <p class="harness-note rv">Any ACP-speaking harness drops in behind the same
+  <em style="color:var(--acid);font-style:normal">event → { enabled, prompt }</em> interface, and you
+  can switch between them any time from Settings — each keeps its own model and reasoning
+  preferences. Onboarding picks one and verifies the connection live.</p>
+</section>
+
 <section id="watch" style="max-width:none;background:var(--ink-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
   <div class="term-wrap">
-    <div class="sec-label rv">03 / RUNS</div>
+    <div class="sec-label rv">04 / RUNS</div>
     <h2 class="rv">AGENTS, <span class="a">REVIEWED</span></h2>
     <p class="prose rv" style="margin-bottom:42px">The agent gathers context and drafts a decision.
     Nothing posts until you approve.</p>
@@ -477,7 +524,7 @@ in one place. Edit proposals. <strong>Approve what lands.</strong></p>
 </section>
 
 <section id="hood">
-  <div class="sec-label rv">04 / MECHANICS</div>
+  <div class="sec-label rv">05 / MECHANICS</div>
   <h2 class="rv">LOCAL. PROMPTABLE. <span class="a">ACP.</span></h2>
   <div class="hood rv">
     <div><h4>Stack</h4><p>Tauri 2 with a Rust backend for HTTP, git, and process spawning; React + TypeScript front end. One window per repo, config stored locally.</p></div>
