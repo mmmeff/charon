@@ -203,8 +203,29 @@ h2 .a{color:var(--acid)}
   font-size:12px;color:var(--acid);overflow-x:auto;white-space:nowrap;
 }
 .card .cmd::before{content:"$ ";color:var(--bone-dim)}
-.harness-note{margin-top:28px;font-size:13px;color:var(--bone-dim);max-width:680px}
+.harness-note{margin-top:40px;font-size:13px;color:var(--bone-dim);max-width:680px}
 .harness-note a{color:var(--acid)}
+
+/* harness "app launcher" — icon tiles with a label, like desktop shortcuts */
+.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:52px;max-width:720px}
+@media(max-width:640px){.apps{grid-template-columns:repeat(2,1fr);gap:28px}}
+.app{display:flex;flex-direction:column;align-items:center;gap:14px;text-decoration:none}
+.app:hover{text-decoration:none}
+.app-tile{
+  width:96px;height:96px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--line);border-radius:22px;
+  background:radial-gradient(130% 130% at 30% 18%, var(--ink-3), var(--ink));
+  box-shadow:0 12px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(233,228,212,.05);
+  transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.app:hover .app-tile{
+  transform:translateY(-5px);
+  border-color:var(--orange);
+  box-shadow:0 18px 44px rgba(255,79,0,.22), inset 0 1px 0 rgba(233,228,212,.08);
+}
+.app-tile svg{width:46px;height:46px}
+.app-name{font-size:12px;letter-spacing:.16em;color:var(--bone);text-transform:uppercase;text-align:center}
+.app:hover .app-name{color:var(--acid)}
 
 /* ---------- feature rows ---------- */
 .feature{
@@ -474,31 +495,59 @@ in one place. Edit proposals. <strong>Approve what lands.</strong></p>
   <div class="sec-label rv">03 / HARNESSES</div>
   <h2 class="rv">BRING YOUR OWN <span class="a">AGENT</span></h2>
   <p class="prose rv">Charon drives coding agents over the
-  <a href="https://agentclientprotocol.com">Agent Client Protocol</a> — the open JSON-RPC standard
-  for editor↔agent communication. Each one's models, reasoning levels, and tool calls surface
-  natively in the UI. Supported out of the box:</p>
+  <a href="https://agentclientprotocol.com">Agent Client Protocol</a> and supports the following
+  harnesses:</p>
 
-  <div class="cards">
-    <div class="card rv">
-      <h3><span class="n">▸</span><a href="https://cursor.com/cli">CURSOR</a></h3>
-      <code class="cmd">cursor-agent acp</code>
-      <p>Native ACP server. Run <strong>cursor-agent login</strong> first.</p>
-    </div>
-    <div class="card rv">
-      <h3><span class="n">▸</span><a href="https://github.com/anthropics/claude-code">CLAUDE CODE</a></h3>
-      <code class="cmd">npx @zed-industries/claude-code-acp</code>
-      <p>Adapter; needs an <strong>ANTHROPIC_API_KEY</strong>.</p>
-    </div>
-    <div class="card rv">
-      <h3><span class="n">▸</span><a href="https://github.com/openai/codex">CODEX CLI</a></h3>
-      <code class="cmd">npx @zed-industries/codex-acp</code>
-      <p>ACP bridge; uses your Codex login or <strong>OPENAI_API_KEY</strong>.</p>
-    </div>
-    <div class="card rv">
-      <h3><span class="n">▸</span><a href="https://opencode.ai">OPENCODE</a></h3>
-      <code class="cmd">opencode acp</code>
-      <p>Native ACP server. Configure a provider/API key first.</p>
-    </div>
+  <div class="apps rv">
+    <a class="app" href="https://cursor.com/cli" title="Cursor — cursor-agent acp">
+      <div class="app-tile">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <path d="M24 4 41 14 24 24 7 14Z" fill="#e9e4d4"/>
+          <path d="M7 14 24 24 24 44 7 34Z" fill="#8f8a7a"/>
+          <path d="M41 14 24 24 24 44 41 34Z" fill="#ff4f00"/>
+        </svg>
+      </div>
+      <span class="app-name">Cursor</span>
+    </a>
+    <a class="app" href="https://github.com/anthropics/claude-code" title="Claude Code — npx @zed-industries/claude-code-acp">
+      <div class="app-tile">
+        <svg viewBox="0 0 48 48" stroke="#ff4f00" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+          <g transform="translate(24 24)">
+            <line y1="-7" y2="-19" transform="rotate(0)"/>
+            <line y1="-7" y2="-13" transform="rotate(30)"/>
+            <line y1="-7" y2="-19" transform="rotate(60)"/>
+            <line y1="-7" y2="-13" transform="rotate(90)"/>
+            <line y1="-7" y2="-19" transform="rotate(120)"/>
+            <line y1="-7" y2="-13" transform="rotate(150)"/>
+            <line y1="-7" y2="-19" transform="rotate(180)"/>
+            <line y1="-7" y2="-13" transform="rotate(210)"/>
+            <line y1="-7" y2="-19" transform="rotate(240)"/>
+            <line y1="-7" y2="-13" transform="rotate(270)"/>
+            <line y1="-7" y2="-19" transform="rotate(300)"/>
+            <line y1="-7" y2="-13" transform="rotate(330)"/>
+          </g>
+        </svg>
+      </div>
+      <span class="app-name">Claude Code</span>
+    </a>
+    <a class="app" href="https://github.com/openai/codex" title="Codex CLI — npx @zed-industries/codex-acp">
+      <div class="app-tile">
+        <svg viewBox="0 0 48 48" fill="none" stroke="#e9e4d4" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true">
+          <path d="M24 5 39 14 39 32 24 41 9 32 9 14Z"/>
+          <path d="M24 14 32 19 32 29 24 34 16 29 16 19Z" stroke="#ff4f00"/>
+        </svg>
+      </div>
+      <span class="app-name">Codex CLI</span>
+    </a>
+    <a class="app" href="https://opencode.ai" title="opencode — opencode acp">
+      <div class="app-tile">
+        <svg viewBox="0 0 48 48" fill="none" stroke="#e9e4d4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 8c-5 0-5 6-5 10 0 4-3 6-5 6 2 0 5 2 5 6 0 4 0 10 5 10"/>
+          <path d="M29 8c5 0 5 6 5 10 0 4 3 6 5 6-2 0-5 2-5 6 0 4 0 10-5 10" stroke="#ff4f00"/>
+        </svg>
+      </div>
+      <span class="app-name">opencode</span>
+    </a>
   </div>
 
   <p class="harness-note rv">Any ACP-speaking harness drops in behind the same
