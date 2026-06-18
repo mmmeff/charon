@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/hero.svg" alt="Charon — Code Review Agent" width="100%"/>
+  <img src="docs/charon-logo.png" alt="Charon" width="128"/>
 </p>
 
 <p align="center">
