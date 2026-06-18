@@ -41,48 +41,48 @@ churn, bot fixes — review is the unit of work.
 
 ## What it does
 
+### Starts PRs from a prompt
+
+Describe the change you want. An agent cuts a branch, implements it in a fresh worktree, and opens
+the draft PR — the starting point for everything below.
+
+<img src="docs/new-draft.png" alt="New draft PR view: describe a change and an agent scaffolds the draft PR" width="100%"/>
+
+### Turns drafts into diffs
+
+Now shape it. Select lines on your draft PRs, ask a question read-only, or click *Edit* and an agent
+patches a worktree and pushes to your branch.
+
+<img src="docs/drafts.png" alt="Drafts view: line-scoped agent edits on your draft PRs" width="100%"/>
+
 ### Keeps PRs review-ready
 
-A per-repo poller snapshots checks, mergeability, comments, and reviews, then diffs the snapshots
-into **events**: `ci_failed`, `merge_conflict_detected`, `bug_bot_finding`,
-`teammate_review_submitted`, and twenty more. Each event runs your prompt against the coding agent
-of your choice. CI failures, conflicts, bot findings, and teammate reviews become anchored findings,
-fixes, or proposals you can approve.
+Once it's open, a per-repo poller snapshots checks, mergeability, comments, and reviews, then diffs
+the snapshots into **events**: `ci_failed`, `merge_conflict_detected`, `bug_bot_finding`,
+`teammate_review_submitted`, and twenty more. Each runs your prompt against the coding agent of your
+choice — CI failures, conflicts, bot findings, and teammate reviews become anchored findings, fixes,
+or proposals you can approve.
 
 <img src="docs/open-prs.png" alt="Open PRs view: CI status, event feed, pending proposals, inline findings on the diff" width="100%"/>
 
 ### Drafts reviews you own
 
-An agent reads the full diff and drafts inline comments with severity, confidence, and editable
-body. Toggle comments, rewrite, change verdict, submit once.
+Then return the favor. An agent reads the full diff and drafts inline comments with severity,
+confidence, and editable body. Toggle comments, rewrite, change verdict, submit once.
 
 <img src="docs/review.png" alt="Review view: proposed inline comments with severity and confidence, anchored on the diff" width="100%"/>
 
-### Turns drafts into diffs
-
-Select lines on your draft PRs. Ask a question read-only, or click *Edit* and an agent patches a
-worktree and pushes to your branch.
-
-<img src="docs/drafts.png" alt="Drafts view: line-scoped agent edits on your draft PRs" width="100%"/>
-
-### Starts PRs from a prompt
-
-Describe the change you want. An agent cuts a branch, implements it in a fresh worktree, and opens
-the draft PR — then it's yours to review like any other.
-
-<img src="docs/new-draft.png" alt="New draft PR view: describe a change and an agent scaffolds the draft PR" width="100%"/>
-
 ### Shows every run
 
-Plan, tool calls, prompt, model, working directory, and streamed output in one feed. Steer or stop
-any agent mid-run.
+All of it, in the open: plan, tool calls, prompt, model, working directory, and streamed output in
+one feed. Steer or stop any agent mid-run.
 
 <img src="docs/activity.png" alt="Agents activity feed: live runs with plans, tool calls, and streamed output" width="100%"/>
 
 ### Makes prompts policy
 
-Every handler is a toggle plus a prompt template. Per-repo filters decide what deserves an agent.
-New event types are catalog entries.
+And every behavior above is yours. Each handler is a toggle plus a prompt template; per-repo filters
+decide what deserves an agent. New event types are catalog entries.
 
 <img src="docs/settings-events.png" alt="Settings: the event catalog — every behavior is a toggle plus an editable prompt" width="100%"/>
 

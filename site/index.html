@@ -402,49 +402,50 @@ in one place. Edit proposals. <strong>Approve what lands.</strong></p>
 <section id="tour">
   <div class="sec-label rv">02 / PRODUCT</div>
   <h2 class="rv">REVIEW-FIRST <span class="a">WORKFLOW</span></h2>
-  <p class="prose rv">Watch PRs, run agents, inspect proposals, approve writes.</p>
+  <p class="prose rv">Follow a change end to end: spin it up, work the draft, keep it green, review what
+  comes back, watch every agent, and tune the rules.</p>
 
   <div class="feature">
     <div class="ftext rv">
-      <h3 data-n="2.1">PRS STAY READY</h3>
-      <p>CI failures, conflicts, bot findings, and teammate reviews become fixes or findings.
-      Severity, confidence, and <strong>Apply</strong> stay on the diff.</p>
+      <h3 data-n="2.1">START FROM A PROMPT</h3>
+      <p>Describe the change. An agent branches, implements it in a fresh worktree, and opens the
+      draft PR — the starting point for everything below.</p>
+    </div>
+    <div class="fshot rv" data-cap="new draft · prompt to PR"><img src="assets/new-draft.png" alt="New draft PR view" loading="lazy"/></div>
+  </div>
+
+  <div class="feature flip">
+    <div class="ftext rv">
+      <h3 data-n="2.2">DRAFTS ARE DIFFS</h3>
+      <p>Now shape it. Select lines, ask questions, or request edits — agents work in isolated
+      worktrees and push to <em>your</em> branch.</p>
+    </div>
+    <div class="fshot rv" data-cap="drafts · line-scoped edits"><img src="assets/drafts.png" alt="Drafts view" loading="lazy"/></div>
+  </div>
+
+  <div class="feature">
+    <div class="ftext rv">
+      <h3 data-n="2.3">PRS STAY READY</h3>
+      <p>Once it's open, Charon keeps it green. CI failures, conflicts, bot findings, and teammate
+      reviews become fixes or findings — severity, confidence, and <strong>Apply</strong> on the diff.</p>
     </div>
     <div class="fshot rv" data-cap="open-prs · event feed · proposals"><img src="assets/open-prs.png" alt="Open PRs view" loading="lazy"/></div>
   </div>
 
   <div class="feature flip">
     <div class="ftext rv">
-      <h3 data-n="2.2">OWN THE REVIEW</h3>
-      <p>An agent drafts inline comments from the full diff. You edit, disable, change verdict,
-      and submit <strong>once</strong>.</p>
+      <h3 data-n="2.4">OWN THE REVIEW</h3>
+      <p>Then return the favor. An agent drafts inline comments from the full diff; you edit,
+      disable, change verdict, and submit <strong>once</strong>.</p>
     </div>
     <div class="fshot rv" data-cap="review · anchored comments · one verdict"><img src="assets/review.png" alt="Review view" loading="lazy"/></div>
   </div>
 
   <div class="feature">
     <div class="ftext rv">
-      <h3 data-n="2.3">DRAFTS ARE DIFFS</h3>
-      <p>Select lines, ask questions, or request edits. Agents work in isolated worktrees and
-      push to <em>your</em> branch.</p>
-    </div>
-    <div class="fshot rv" data-cap="drafts · line-scoped edits"><img src="assets/drafts.png" alt="Drafts view" loading="lazy"/></div>
-  </div>
-
-  <div class="feature flip">
-    <div class="ftext rv">
-      <h3 data-n="2.4">START FROM A PROMPT</h3>
-      <p>Describe the change. An agent branches, implements it in a fresh worktree, and opens the
-      draft PR — then it's <strong>yours</strong> to review like any other.</p>
-    </div>
-    <div class="fshot rv" data-cap="new draft · prompt to PR"><img src="assets/new-draft.png" alt="New draft PR view" loading="lazy"/></div>
-  </div>
-
-  <div class="feature">
-    <div class="ftext rv">
       <h3 data-n="2.5">FULL RUN LOG</h3>
-      <p>Every run live — plan, tool calls, prompt, model, and streamed output in one feed. Steer
-      or stop any agent mid-run.</p>
+      <p>All of it, in the open. Every run live — plan, tool calls, prompt, model, and streamed
+      output in one feed. Steer or stop any agent mid-run.</p>
     </div>
     <div class="fshot rv" data-cap="agents · live runs, plans & tools"><img src="assets/activity.png" alt="Agents activity feed" loading="lazy"/></div>
   </div>
@@ -452,8 +453,8 @@ in one place. Edit proposals. <strong>Approve what lands.</strong></p>
   <div class="feature flip">
     <div class="ftext rv">
       <h3 data-n="2.6">PROMPTS ARE POLICY</h3>
-      <p>Every handler is a toggleable prompt with variables and <em>/skill</em> references.
-      Context stays editable.</p>
+      <p>And every behavior above is yours. Each handler is a toggleable prompt with variables and
+      <em>/skill</em> references. Context stays editable.</p>
     </div>
     <div class="fshot rv" data-cap="settings · event catalog"><img src="assets/settings-events.png" alt="Settings event catalog" loading="lazy"/></div>
   </div>
