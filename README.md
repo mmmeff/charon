@@ -65,11 +65,19 @@ worktree and pushes to your branch.
 
 <img src="docs/drafts.png" alt="Drafts view: line-scoped agent edits on your draft PRs" width="100%"/>
 
+### Starts PRs from a prompt
+
+Describe the change you want. An agent cuts a branch, implements it in a fresh worktree, and opens
+the draft PR — then it's yours to review like any other.
+
+<img src="docs/new-draft.png" alt="New draft PR view: describe a change and an agent scaffolds the draft PR" width="100%"/>
+
 ### Shows every run
 
-Prompt, model, working directory, and streamed output in one feed. Stop any run.
+Plan, tool calls, prompt, model, working directory, and streamed output in one feed. Steer or stop
+any agent mid-run.
 
-<img src="docs/activity.png" alt="Activity feed: live streaming agent runs" width="100%"/>
+<img src="docs/activity.png" alt="Agents activity feed: live runs with plans, tool calls, and streamed output" width="100%"/>
 
 ### Makes prompts policy
 
