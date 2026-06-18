@@ -1,4 +1,5 @@
 /** 16×16 stroke icons for the nav rail — single-weight, square-cornered. */
+import charonLogo from "../assets/charon-logo.png";
 
 const base = {
   width: 17,
@@ -88,23 +89,8 @@ export const IconAgent = () => (
   </svg>
 );
 
-/** Brand mark: the moon Charon — bone-gray disk, dusty red polar cap,
- *  equatorial chasm. Filled (not stroked) since it's a mark, not a glyph.
- *  `id` must be unique per render site: clip-path ids are document-global. */
-export const IconCharonMoon = ({ size = 20, id = "moon" }: { size?: number; id?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-label="Charon">
-    <defs>
-      <clipPath id={`charon-${id}`}>
-        <circle cx="12" cy="12" r="10" />
-      </clipPath>
-    </defs>
-    <circle cx="12" cy="12" r="10" fill="#cfc9ba" />
-    <g clipPath={`url(#charon-${id})`}>
-      <ellipse cx="13" cy="3.6" rx="9.6" ry="5.8" fill="#9c4a22" />
-      <path d="M2 12.6 q5 -1.8 10 0 t10 -0.6" fill="none" stroke="#5d5749" strokeWidth="1.1" opacity="0.6" />
-      <circle cx="8.2" cy="17.2" r="1.5" fill="#5d5749" opacity="0.35" />
-      <circle cx="15.8" cy="16" r="1" fill="#5d5749" opacity="0.3" />
-    </g>
-    <circle cx="12" cy="12" r="10" fill="none" stroke="#0e0d0a" strokeWidth="1.5" opacity="0.5" />
-  </svg>
+/** Brand mark: the Charon cube logo. `id` is kept for call-site
+ *  compatibility but no longer used (was a clip-path id). */
+export const IconCharonMoon = ({ size = 20 }: { size?: number; id?: string }) => (
+  <img src={charonLogo} width={size} height={size} alt="Charon" style={{ display: "block" }} />
 );

@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="Charon — Code Review Agent"/>
 <meta name="twitter:description" content="Review AI code before it lands."/>
 <link rel="canonical" href="https://charon.sh/"/>
-<link rel="icon" type="image/png" href="assets/app-icon.png"/>
+<link rel="icon" type="image/png" href="assets/charon-logo.png"/>
 <style>
 :root{
   --ink:#0e0d0a;
@@ -206,8 +206,13 @@ h2 .a{color:var(--acid)}
 .harness-note{margin-top:40px;font-size:13px;color:var(--bone-dim);max-width:680px}
 .harness-note a{color:var(--acid)}
 
+/* harnesses — contrasting band, centered content */
+#harnesses{max-width:none;background:var(--ink-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.harness-inner{max-width:900px;margin:0 auto;text-align:center}
+.harness-inner .prose,.harness-inner .harness-note{margin-left:auto;margin-right:auto}
+
 /* harness "app launcher" — icon tiles with a label, like desktop shortcuts */
-.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:52px;max-width:720px}
+.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:52px auto 0;max-width:720px;justify-items:center}
 @media(max-width:640px){.apps{grid-template-columns:repeat(2,1fr);gap:28px}}
 .app{display:flex;flex-direction:column;align-items:center;gap:14px;text-decoration:none}
 .app:hover{text-decoration:none}
@@ -368,14 +373,7 @@ footer .right{margin-left:auto;display:flex;gap:20px}
 <body>
 
 <nav>
-  <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
-    <defs><clipPath id="nm"><circle cx="32" cy="32" r="26"/></clipPath></defs>
-    <circle cx="32" cy="32" r="26" fill="#cfc9ba"/>
-    <g clip-path="url(#nm)">
-      <ellipse cx="30" cy="10" rx="30" ry="16" fill="#9c4a22"/>
-      <path d="M8 40 Q 24 34 34 42 T 58 44 L 58 50 Q 34 54 8 46 Z" fill="#5d5749" opacity=".55"/>
-    </g>
-  </svg>
+  <img class="mark" src="assets/charon-logo.png" alt="Charon" aria-hidden="true"/>
   <span class="name">CHARON</span>
   <div class="links">
     <a href="https://github.com/mmmeff/charon">GITHUB</a>
@@ -493,6 +491,7 @@ in one place. Edit proposals. <strong>Approve what lands.</strong></p>
 </section>
 
 <section id="harnesses">
+  <div class="harness-inner">
   <div class="sec-label rv">03 / HARNESSES</div>
   <h2 class="rv">BRING YOUR OWN <span class="a">AGENT</span></h2>
   <p class="prose rv">Charon drives coding agents over the
@@ -530,9 +529,10 @@ in one place. Edit proposals. <strong>Approve what lands.</strong></p>
   <em style="color:var(--acid);font-style:normal">event → { enabled, prompt }</em> interface, and you
   can switch between them any time from Settings — each keeps its own model and reasoning
   preferences. Onboarding picks one and verifies the connection live.</p>
+  </div>
 </section>
 
-<section id="watch" style="max-width:none;background:var(--ink-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+<section id="watch">
   <div class="term-wrap">
     <div class="sec-label rv">04 / RUNS</div>
     <h2 class="rv">AGENTS, <span class="a">REVIEWED</span></h2>
