@@ -2199,7 +2199,7 @@ a.act-event-detail:hover { color: var(--orange); }
 /* when no description (bodyless teammate PR), collapse the main column */
 .pr-hero-desc-main:empty { display: none; }
 
-@container pr-shell (max-width: 1080px) {
+@container pr-shell (max-width: 875px) {
   .pr-hero-desc-row.has-side-panel {
     /* stop being a flex row: let each child handle its own height/overflow
        independently, ignoring the side-by-side stretch and shared max-height */
