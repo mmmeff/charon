@@ -188,13 +188,8 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
             pr={pr}
             onJump={jumpToStackPr}
             ciContent={
-              checks.some((c) => c.conclusion !== "skipped") || prProposals.length > 0 ? (
-                <>
-                  <ChecksPanel pr={pr} />
-                  {prProposals.map((p) => (
-                    <ProposalCard key={p.id} proposal={p} />
-                  ))}
-                </>
+              checks.some((c) => c.conclusion !== "skipped") ? (
+                <ChecksPanel pr={pr} />
               ) : undefined
             }
           >
@@ -207,6 +202,16 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
             <FindingsStrip pr={pr} />
             <RunResults pr={pr} onReloadDiff={() => void loadDiff()} />
           </Section>
+
+          {/* pending PR-facing proposals (PR comments, replies, reviews) —
+              kept out of the CI tab so they don't get buried under Checks */}
+          {prProposals.length > 0 && (
+            <Section label="Pending proposals">
+              {prProposals.map((p) => (
+                <ProposalCard key={p.id} proposal={p} />
+              ))}
+            </Section>
+          )}
         </header>
 
         {/* ── the diff: the main "canvas" view below the hero ── */}
