@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, memo, useMemo } from "react";
 import { killAgent, steerAgent } from "../lib/agents";
 import { navigateToPr } from "../lib/nav";
 import { activeHarness, harnessReasoningCollapsed } from "../lib/defaults";
@@ -105,8 +105,19 @@ function PlanView({ plan }: { plan: AgentPlanEntry[] }) {
 /** A collapsible group of consecutive reasoning/thinking entries. Rendered
  *  as a <details>; its initial open state is the inverse of the harness's
  *  `reasoningCollapsed` setting (default-on => collapsed). Reasoning is never
- *  dropped outright — it's always available one click away. */
-function ReasoningGroup({
+ *  dropped outright — it's always available one click away.
+ *
+ *  The <details> is UNCONTROLLED: we set `open` imperatively on mount via a ref
+ *  and never pass it as a prop. This is critical for streaming performance —
+ *  ActivityView subscribes to the whole runs map, so every chunk re-renders
+ *  every visible AgentCard. A controlled `open` prop would (a) diff the
+ *  attribute against the DOM on every re-render for every group and (b) reset
+ *  the user's click-toggle on every chunk. With the ref approach React never
+ *  touches `open` after mount; the native toggle persists across re-renders.
+ *  memoized so a stable `entries` prop (cached by Transcript's useMemo) skips
+ *  the inner re-render — and the `shortenRootPaths` regex work — for cards
+ *  whose `run` didn't change. */
+const ReasoningGroup = memo(function ReasoningGroup({
   entries,
   defaultOpen,
   roots,
@@ -117,10 +128,16 @@ function ReasoningGroup({
   roots: string[];
   startKey: number;
 }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  // set the initial open state before first paint; defaultOpen is stable
+  // (derived from the harness config), so this runs once on mount only.
+  useLayoutEffect(() => {
+    if (ref.current) ref.current.open = defaultOpen;
+  }, [defaultOpen]);
   if (entries.length === 0) return null;
   const label = entries.length === 1 ? "reasoning" : `reasoning (${entries.length})`;
   return (
-    <details className="agent-reasoning" open={defaultOpen} key={startKey}>
+    <details className="agent-reasoning" ref={ref} key={startKey}>
       <summary className="agent-reasoning-summary">{label}</summary>
       <div className="agent-reasoning-body">
         {entries.map((e, i) => (
@@ -129,71 +146,49 @@ function ReasoningGroup({
       </div>
     </details>
   );
-}
+});
 
 /** Render the structured ACP transcript (or legacy lines for hydrated runs).
  *  Reasoning/thinking entries are tucked behind a collapsible disclosure whose
  *  default open state is the inverse of the active harness's
  *  `reasoningCollapsed` setting (default-on => collapsed). Consecutive
  *  reasoning entries are grouped into one disclosure so the stream stays
- *  scannable. */
+ *  scannable.
+ *
+ *  The whole grouping is memoized on `[run, defaultOpen]`. ActivityView
+ *  subscribes to the entire runs map, so a chunk on ONE agent re-renders EVERY
+ *  visible AgentCard — but only the card whose `run` actually changed gets a
+ *  new `run` reference; the others hit the cache and skip the O(n) grouping
+ *  pass, the `shortenRootPaths` regex construction (which builds `new RegExp`
+ *  per root per entry), and the `buf`/`out`/`{text}` allocations. This is the
+ *  dominant cost during streaming, so the cache turns an O(cards × n) per-chunk
+ *  cost into O(n) for the single active card. */
 function Transcript({ run, reasoningCollapsed }: { run: AgentRun; reasoningCollapsed: boolean }) {
-  const roots = pathRoots(run);
   const defaultOpen = !reasoningCollapsed;
+  const isLegacy = (!run.entries || run.entries.length === 0) && !!(run.lines && run.lines.length > 0);
 
-  // legacy pre-ACP runs persisted `lines` and no entries
-  if ((!run.entries || run.entries.length === 0) && run.lines && run.lines.length > 0) {
-    const out: ReactNode[] = [];
-    let buf: { text: string }[] = [];
-    let groupStart = 0;
-    const flush = (key: number) => {
-      if (buf.length > 0) {
-        out.push(
-          <ReasoningGroup
-            key={`r-${key}`}
-            entries={buf}
-            defaultOpen={defaultOpen}
-            roots={roots}
-            startKey={key}
-          />
-        );
-        buf = [];
-      }
-    };
-    run.lines.forEach((l: AgentLine, i) => {
-      if (l.kind === "thinking") {
-        if (buf.length === 0) groupStart = i;
-        buf.push({ text: l.text });
-        return;
-      }
-      flush(groupStart);
-      if (l.kind === "tool") {
-        out.push(
-          <div key={i} className="agent-tool-row">
-            <div className="agent-tool-head">
-              <span className="agent-tool-glyph">⚙</span>
-              <span className="agent-tool-arg">{shortenRootPaths(l.text, roots)}</span>
-            </div>
-          </div>
-        );
-      } else if (l.kind === "text") {
-        out.push(
-          <div key={i} className="agent-msg">
-            <Markdown text={shortenRootPaths(l.text, roots) ?? l.text} className="compact" />
-          </div>
-        );
-      } else {
-        out.push(
-          <div key={i} className={`agent-line ${l.kind === "stderr" ? "stderr" : ""}`}>
-            {shortenRootPaths(l.text, roots)}
-          </div>
-        );
-      }
-    });
-    flush(groupStart);
-    return <>{out}</>;
-  }
+  // Memoized on `[run, defaultOpen]`: a chunk on one agent re-renders every
+  // visible AgentCard (ActivityView selects the whole runs map), but only the
+  // card whose `run` actually changed gets a new `run` reference — the others
+  // hit the cache and skip the O(n) grouping pass, the `shortenRootPaths`
+  // regex construction, and the `buf`/`out`/`{text}` allocations.
+  // `roots` is derived inside the memo (from `run`) for the same reason.
+  const out = useMemo(() => {
+    const roots = pathRoots(run);
+    if (isLegacy) return buildLegacyTranscript(run.lines!, roots, defaultOpen);
+    return buildEntryTranscript(run.entries, run.tools, roots, defaultOpen);
+  }, [isLegacy, run, defaultOpen]);
 
+  return <>{out}</>;
+}
+
+/** Group legacy pre-ACP `lines` into transcript nodes, tucking consecutive
+ *  `thinking` lines into collapsible ReasoningGroups. */
+function buildLegacyTranscript(
+  lines: AgentLine[],
+  roots: string[],
+  defaultOpen: boolean
+): ReactNode[] {
   const out: ReactNode[] = [];
   let buf: { text: string }[] = [];
   let groupStart = 0;
@@ -211,7 +206,66 @@ function Transcript({ run, reasoningCollapsed }: { run: AgentRun; reasoningColla
       buf = [];
     }
   };
-  run.entries.forEach((e: AgentEntry, i) => {
+  lines.forEach((l: AgentLine, i) => {
+    if (l.kind === "thinking") {
+      if (buf.length === 0) groupStart = i;
+      buf.push({ text: l.text });
+      return;
+    }
+    flush(groupStart);
+    if (l.kind === "tool") {
+      out.push(
+        <div key={i} className="agent-tool-row">
+          <div className="agent-tool-head">
+            <span className="agent-tool-glyph">⚙</span>
+            <span className="agent-tool-arg">{shortenRootPaths(l.text, roots)}</span>
+          </div>
+        </div>
+      );
+    } else if (l.kind === "text") {
+      out.push(
+        <div key={i} className="agent-msg">
+          <Markdown text={shortenRootPaths(l.text, roots) ?? l.text} className="compact" throttleMs={120} />
+        </div>
+      );
+    } else {
+      out.push(
+        <div key={i} className={`agent-line ${l.kind === "stderr" ? "stderr" : ""}`}>
+          {shortenRootPaths(l.text, roots)}
+        </div>
+      );
+    }
+  });
+  flush(groupStart);
+  return out;
+}
+
+/** Group structured ACP `entries` into transcript nodes, tucking consecutive
+ *  `thought` entries into collapsible ReasoningGroups. */
+function buildEntryTranscript(
+  entries: AgentEntry[],
+  tools: Record<string, AgentToolCall>,
+  roots: string[],
+  defaultOpen: boolean
+): ReactNode[] {
+  const out: ReactNode[] = [];
+  let buf: { text: string }[] = [];
+  let groupStart = 0;
+  const flush = (key: number) => {
+    if (buf.length > 0) {
+      out.push(
+        <ReasoningGroup
+          key={`r-${key}`}
+          entries={buf}
+          defaultOpen={defaultOpen}
+          roots={roots}
+          startKey={key}
+        />
+      );
+      buf = [];
+    }
+  };
+  entries.forEach((e: AgentEntry, i) => {
     if (e.type === "thought") {
       if (buf.length === 0) groupStart = i;
       buf.push({ text: e.text });
@@ -221,7 +275,7 @@ function Transcript({ run, reasoningCollapsed }: { run: AgentRun; reasoningColla
     if (e.type === "message") {
       out.push(
         <div key={i} className="agent-msg">
-          <Markdown text={shortenRootPaths(e.text, roots) ?? e.text} className="compact" />
+          <Markdown text={shortenRootPaths(e.text, roots) ?? e.text} className="compact" throttleMs={120} />
         </div>
       );
     } else if (e.type === "steer") {
@@ -231,12 +285,12 @@ function Transcript({ run, reasoningCollapsed }: { run: AgentRun; reasoningColla
         </div>
       );
     } else if (e.type === "tool") {
-      const tool = run.tools[e.toolCallId];
+      const tool = tools[e.toolCallId];
       if (tool) out.push(<ToolRow key={i} tool={tool} roots={roots} />);
     }
   });
   flush(groupStart);
-  return <>{out}</>;
+  return out;
 }
 
 /** One agent run in the Activity Feed: relation, transcript, steering. */
@@ -369,7 +423,34 @@ export function AgentCard({
           )}
         </div>
       </div>
-      {run.error && <div style={{ color: "var(--red)", marginTop: 6, fontSize: 12.5 }}>{run.error}</div>}
+      {run.error && (
+        <div style={{ color: "var(--red)", marginTop: 6, fontSize: 12.5 }}>
+          {run.error}
+          {run.errorDetail && (
+            <details style={{ marginTop: 4 }}>
+              <summary className="subtle" style={{ cursor: "pointer", fontSize: 11.5 }}>
+                diagnostic details
+              </summary>
+              <pre
+                style={{
+                  margin: "6px 0 0",
+                  padding: 8,
+                  background: "var(--bg-inset)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  fontSize: 11.5,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  maxHeight: 320,
+                  overflow: "auto",
+                }}
+              >
+                {run.errorDetail}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
       {open && (
         <>
           <div className="row" style={{ marginTop: 8 }}>

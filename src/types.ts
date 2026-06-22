@@ -499,6 +499,14 @@ export interface AgentRun {
    *  branch tip the run started from) — links straight to its diff */
   commitSha?: string;
   error?: string;
+  /**
+   * Full diagnostic dump for a failed run: the RPC `code`/`data` the harness
+   * returned plus the tail of its stderr — everything we captured beyond the
+   * one-line `error`. Rendered in an expandable disclosure on the activity
+   * card so a failure is actually debuggable instead of just showing e.g.
+   * "Internal error: OpenCode service failure".
+   */
+  errorDetail?: string;
 }
 
 /** Legacy pre-ACP transcript line (kept for hydrated old runs). */

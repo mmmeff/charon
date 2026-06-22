@@ -10,7 +10,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "integ": "node --test --test-force-exit tests/integration/acp-harnesses.test.mjs"
   },
   "dependencies": {
     "@choochmeque/tauri-plugin-notifications-api": "^0.4.6",

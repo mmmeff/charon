@@ -159,6 +159,101 @@ interface JsonRpcMsg {
   error?: { code: number; message: string; data?: unknown };
 }
 
+/**
+ * An error from the ACP wire layer: a JSON-RPC error response, a spawn
+ * failure, or a non-zero agent exit. Carries the structured RPC `code`
+ * and `data` (which harnesses like opencode use to explain internal
+ * failures) plus a tail of the agent's stderr (where the harness logs
+ * diagnostic context that the JSON-RPC `message` doesn't include), so
+ * the caller can surface a debuggable trace instead of just
+ * `error.message` — which by itself is often a one-liner like
+ * "Internal error: OpenCode service failure".
+ */
+export class AcpRpcError extends Error {
+  /** JSON-RPC `error.code` when the harness replied with an error; undefined for spawn/exit failures. */
+  readonly rpcCode?: number;
+  /** JSON-RPC `error.data` (structured harness detail). */
+  readonly rpcData?: unknown;
+  /** Up to ~4 KiB of the agent's most recent stderr at the time of failure. */
+  readonly stderr?: string;
+  /** Process exit code, when the failure was an exit (or -9 for a kill). */
+  readonly exitCode?: number;
+  /** The agent id (spawn key) so a logged error points back to the run. */
+  readonly agentId?: string;
+  /** The ACP method we sent that the harness rejected (e.g. "session/prompt").
+   *  Set by the connection when a per-request rejection lands; absent on
+   *  connection-wide deaths (spawn-error/exit) where no single method is at
+   *  fault. Logging this is what makes "Internal error: OpenCode service
+   *  failure" actionable — you see *which* call the harness choked on. */
+  method?: string;
+
+  constructor(message: string, opts: { rpcCode?: number; rpcData?: unknown; stderr?: string; exitCode?: number; agentId?: string; method?: string; cause?: unknown }) {
+    super(message, opts.cause !== undefined ? { cause: opts.cause } : undefined);
+    this.name = "AcpRpcError";
+    this.rpcCode = opts.rpcCode;
+    this.rpcData = opts.rpcData;
+    this.stderr = opts.stderr?.trim() || undefined;
+    this.exitCode = opts.exitCode;
+    this.agentId = opts.agentId;
+    this.method = opts.method;
+  }
+
+  /** Multi-line, human-readable dump of everything we know — for logs/UI detail. */
+  toDetail(): string {
+    const lines: string[] = [];
+    lines.push(`agent: ${this.agentId ?? "(unknown)"}`);
+    if (this.method) lines.push(`method: ${this.method}`);
+    if (this.rpcCode !== undefined) lines.push(`rpc code: ${this.rpcCode}`);
+    if (this.rpcData !== undefined) {
+      let dataStr: string;
+      try {
+        dataStr = JSON.stringify(this.rpcData, null, 2);
+      } catch {
+        dataStr = String(this.rpcData);
+      }
+      lines.push(`rpc data: ${dataStr}`);
+    }
+    if (this.exitCode !== undefined) lines.push(`exit code: ${this.exitCode}`);
+    if (this.stderr) lines.push(`agent stderr (tail):\n${this.stderr}`);
+    return lines.join("\n");
+  }
+}
+
+/**
+ * Format the user-facing summary line: keep the harness's `message` verbatim
+ * (it's the only clue when `data` is empty), prepend the method we sent when
+ * known, append the RPC code, and a short stderr tail when present. Bounded
+ * length so it fits in the activity card; the full dump lives on
+ * `AcpRpcError.toDetail()`.
+ */
+export function summarizeAcpError(e: AcpRpcError): string {
+  let summary = e.message || "ACP error";
+  if (e.method) summary = `${e.method}: ${summary}`;
+  if (e.rpcCode !== undefined) summary += ` (rpc ${e.rpcCode})`;
+  if (e.stderr) {
+    const tail = e.stderr.split("\n").filter(Boolean).slice(-3).join(" ⏎ ");
+    if (tail && tail.length <= 300) summary += ` · ${tail}`;
+  }
+  return summary;
+}
+
+/**
+ * Attach the ACP method we sent to a rejection error so logs/surfaces can show
+ * "session/prompt failed" rather than an anonymous "id 4 failed". If the error
+ * is already an `AcpRpcError` (e.g. an RPC error response) we just set `method`
+ * when absent; otherwise we wrap the plain Error in an `AcpRpcError` carrying
+ * the method and the connection's current stderr tail.
+ */
+function stampMethod(err: Error, method: string): AcpRpcError {
+  if (err instanceof AcpRpcError) {
+    if (!err.method) err.method = method;
+    return err;
+  }
+  // Wrap so connection-level deaths (e.g. "agent killed") carry the in-flight
+  // method too — preserved via Error.cause so the original stack stays reachable.
+  return new AcpRpcError(err.message, { method, cause: err });
+}
+
 // ---------------------------------------------------------------------------
 // One agent subprocess + JSON-RPC loop. id == the agent-run id (spawn key).
 // ---------------------------------------------------------------------------
@@ -181,7 +276,7 @@ export interface AcpHandlers {
 export class AcpConnection {
   readonly id: string;
   private nextId = 1;
-  private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+  private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void; method: string }>();
   private buf = "";
   private stderr = "";
   private dead = false;
@@ -214,9 +309,22 @@ export class AcpConnection {
     } else if (ev.kind === "stderr" && ev.line) {
       this.stderr = (this.stderr + ev.line + "\n").slice(-4000);
     } else if (ev.kind === "spawn-error") {
-      this.fail(new Error(ev.line ?? "spawn failed"));
+      this.fail(
+        new AcpRpcError(ev.line ?? "spawn failed", {
+          agentId: this.id,
+          stderr: this.stderr,
+        })
+      );
     } else if (ev.kind === "exit") {
-      this.fail(new Error(this.stderr.trim() || `agent exited (code ${ev.code ?? "?"})`));
+      // Surface the exit code on the error so callers/logs can tell a crash
+      // apart from a harness that exited cleanly with stderr noise.
+      this.fail(
+        new AcpRpcError(this.stderr.trim() || `agent exited (code ${ev.code ?? "?"})`, {
+          exitCode: ev.code ?? undefined,
+          stderr: this.stderr,
+          agentId: this.id,
+        })
+      );
       this.exitResolve(ev.code ?? 0);
       connections.delete(this.id);
     }
@@ -225,7 +333,10 @@ export class AcpConnection {
   private fail(err: Error) {
     if (this.dead) return;
     this.dead = true;
-    for (const { reject } of this.pending.values()) reject(err);
+    // Stamp each in-flight request's method onto the rejection so logs say
+    // "session/prompt: agent killed" rather than a context-less "agent killed"
+    // when the whole connection dies mid-turn.
+    for (const { reject, method } of this.pending.values()) reject(stampMethod(err, method));
     this.pending.clear();
   }
 
@@ -241,8 +352,23 @@ export class AcpConnection {
       const p = this.pending.get(msg.id as number);
       if (!p) return;
       this.pending.delete(msg.id as number);
-      if (msg.error) p.reject(new Error(msg.error.message || "ACP error"));
-      else p.resolve(msg.result);
+      if (msg.error) {
+        // Preserve the harness's structured error — `code`/`data` plus the
+        // stderr it logged alongside the failure, and the method we sent —
+        // instead of flattening to just `error.message`. opencode returns
+        // `data` with the real cause of "Internal error: OpenCode service
+        // failure"; Cursor returns a provider-specific code. Without this
+        // we only see the one-liner and have to guess which call failed.
+        p.reject(
+          new AcpRpcError(msg.error.message || "ACP error", {
+            rpcCode: msg.error.code,
+            rpcData: msg.error.data,
+            stderr: this.stderr,
+            agentId: this.id,
+            method: p.method,
+          })
+        );
+      } else p.resolve(msg.result);
       return;
     }
     // agent→client request (must respond)
@@ -283,16 +409,16 @@ export class AcpConnection {
   }
 
   private request<T = any>(method: string, params: unknown): Promise<T> {
-    if (this.dead) return Promise.reject(new Error("agent connection closed"));
+    if (this.dead) return Promise.reject(stampMethod(new Error("agent connection closed"), method));
     const id = this.nextId++;
-    const p = new Promise<T>((resolve, reject) => this.pending.set(id, { resolve, reject }));
+    const p = new Promise<T>((resolve, reject) => this.pending.set(id, { resolve, reject, method }));
     void native
       .agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", id, method, params }))
       .catch((e) => {
         const pend = this.pending.get(id);
         if (pend) {
           this.pending.delete(id);
-          pend.reject(e instanceof Error ? e : new Error(String(e)));
+          pend.reject(stampMethod(e instanceof Error ? e : new Error(String(e)), method));
         }
       });
     return p;
@@ -411,6 +537,11 @@ export async function probeHarness(
     return result;
   } catch (e) {
     let msg = e instanceof Error ? e.message : String(e);
+    // Surface the structured RPC context the harness gave us — without this
+    // the verify result just says "Internal error: OpenCode service failure".
+    if (e instanceof AcpRpcError) {
+      msg = summarizeAcpError(e);
+    }
     // a non-ACP command launches an interactive REPL and bails on our piped
     // stdin ("stdin is not a terminal") — translate to something actionable
     if (/not a terminal|stdin|interactive|\btty\b|raw mode/i.test(msg)) {

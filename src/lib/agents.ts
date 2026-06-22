@@ -1,9 +1,10 @@
 import {
   AcpConnection,
+  AcpRpcError,
   labeledModels,
-  modelConfigOption,
   probeHarness,
   reasoningConfigOption,
+  summarizeAcpError,
   type AcpSessionUpdate,
 } from "./acp";
 import { isHiddenAgentRun, isVisibleAgentRun } from "./agent-runs";
@@ -233,14 +234,20 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
   if (opts.onSettled) settledCallbacks.set(id, opts.onSettled);
   agentNotif(run, "started", lifecycleCategory(run, "started"));
 
-  const fail = (msg: string) => {
+  const fail = (msg: string, detail?: string) => {
     const cur = useAgentStore.getState().runs[id];
     // don't clobber a run already finalized (e.g. by a graceful-cancel race)
     if (cur && cur.status !== "running" && cur.status !== "starting") {
       active.delete(id);
       return;
     }
-    useAgentStore.getState().update(id, { status: "error", error: msg, endedAt: Date.now(), steerable: false });
+    useAgentStore.getState().update(id, {
+      status: "error",
+      error: msg,
+      errorDetail: detail,
+      endedAt: Date.now(),
+      steerable: false,
+    });
     doneCallbacks.delete(id);
     providerFailures.delete(id);
     active.delete(id);
@@ -281,21 +288,42 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
         mode: ns.modes?.currentModeId,
       });
 
-      // set mode (default session mode is "agent")
+      // set mode (default session mode is "agent"). We no longer swallow
+      // setup-call errors — a `-32603 / {service:"session"}` from set_mode
+      // used to be `.catch(() => {})`-ed away, after which session/prompt
+      // ran against a corrupted session and surfaced a misleading
+      // "prompt failed" instead of the real "set_mode failed". Now any
+      // setup throw propagates to the surrounding catch and is attributed
+      // to the call that actually failed (the AcpRpcError carries
+      // `method: "session/set_mode"` etc.).
       const targetMode = ACP_MODE[opts.mode ?? "write"];
       if (targetMode && ns.modes && ns.modes.currentModeId !== targetMode &&
           ns.modes.availableModes.some((m) => m.id === targetMode)) {
-        await conn.setMode(sessionId, targetMode).catch(() => {});
+        await conn.setMode(sessionId, targetMode);
       }
-      // set model — opts.model is already in the active harness's id space;
-      // apply via whichever mechanism this harness exposes (native models →
-      // set_model; a `model` config option → set_config_option, e.g. codex)
-      if (opts.model && opts.model !== "auto") {
-        if (ns.models?.availableModels?.length) {
-          await conn.setModel(sessionId, opts.model).catch(() => {});
-        } else if (modelConfigOption(ns)) {
-          await conn.setConfigOption(sessionId, "model", opts.model).catch(() => {});
-        }
+      // set model — only via the harness's NATIVE set_model mechanism
+      // (cursor and anything that exposes `models.availableModels` over
+      // ACP). Harnesses that instead expose model as a `model` config
+      // option (opencode, codex) deliberately keep pr-copilot's hands off:
+      //
+      //   opencode 1.15.13's `session/set_config_option("model", …)` succeeds
+      //   but emits `session.next.model.switched`, whose handler calls
+      //   `appendMessage` with `seq = NULL` over an empty `session_message`
+      //   table (`MAX(seq)` returns NULL, no COALESCE) → SQLite NOT NULL
+      //   constraint failure, propagated synchronously inside every subsequent
+      //   `session/prompt`'s `createUserMessage` and surfaced as
+      //   `-32603 / {service:"session"}`. Switching the model at all
+      //   corrupts the session — pr-copilot's per-run override would fail
+      //   every agent, every time, on opencode 1.15.13. The user's harness-
+      //   level config (`opencode.json`, codex's `~/.codex/config.toml`)
+      //   is the source of truth for these harnesses' default model; pr-copilot
+      //   shouldn't override what the user already configured there. The
+      //   model picker for such harnesses stays informational (the probe list
+      //   populates `cfg.models` for display only). Native `set_model` is a
+      //   real ACP method with its own handler, exercised and reliable on
+      //   cursor; keep that path.
+      if (opts.model && opts.model !== "auto" && ns.models?.availableModels?.length) {
+        await conn.setModel(sessionId, opts.model);
       }
       // reasoning effort — a separate config-option axis where the harness
       // exposes it (codex). Per-flow override > global default.
@@ -303,7 +331,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
       const reasoning = cfg?.reasoningOverrides?.[opts.kind] || cfg?.reasoningEffort;
       const rc = reasoningConfigOption(ns);
       if (reasoning && rc && rc.options!.some((o) => o.value === reasoning)) {
-        await conn.setConfigOption(sessionId, rc.id, reasoning).catch(() => {});
+        await conn.setConfigOption(sessionId, rc.id, reasoning);
       }
 
       // prompt turn loop — steering re-prompts the same session
@@ -326,7 +354,24 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
       finalize(id, cancelled ? "killed" : "done");
     } catch (e) {
       conn.kill();
-      fail(e instanceof Error ? e.message : String(e));
+      // Log the *whole* error object so `tauri dev` and devtools show the
+      // structured RPC code/data + stderr tail — these are what's missing
+      // from "Internal error: OpenCode service failure" and they're discarded
+      // if we only read `e.message`.
+      console.error(`[agent] run ${id} failed (${run.relation} · ${run.repo})`, e);
+      let msg: string;
+      let detail: string | undefined;
+      if (e instanceof AcpRpcError) {
+        msg = summarizeAcpError(e);
+        detail = e.toDetail();
+      } else if (e instanceof Error) {
+        msg = e.message;
+        detail = `${e.name}: ${e.message}\n${e.stack ?? ""}`;
+      } else {
+        msg = String(e);
+        detail = String(e);
+      }
+      fail(msg, detail);
     }
   })();
 
