@@ -120,12 +120,10 @@ function PlanView({ plan }: { plan: AgentPlanEntry[] }) {
 const ReasoningGroup = memo(function ReasoningGroup({
   entries,
   defaultOpen,
-  roots,
   startKey,
 }: {
   entries: { text: string }[];
   defaultOpen: boolean;
-  roots: string[];
   startKey: number;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
@@ -141,7 +139,7 @@ const ReasoningGroup = memo(function ReasoningGroup({
       <summary className="agent-reasoning-summary">{label}</summary>
       <div className="agent-reasoning-body">
         {entries.map((e, i) => (
-          <div key={i} className="agent-thinking">{shortenRootPaths(e.text, roots)}</div>
+          <div key={i} className="agent-thinking">{e.text}</div>
         ))}
       </div>
     </details>
@@ -199,7 +197,6 @@ function buildLegacyTranscript(
           key={`r-${key}`}
           entries={buf}
           defaultOpen={defaultOpen}
-          roots={roots}
           startKey={key}
         />
       );
@@ -258,7 +255,6 @@ function buildEntryTranscript(
           key={`r-${key}`}
           entries={buf}
           defaultOpen={defaultOpen}
-          roots={roots}
           startKey={key}
         />
       );
@@ -268,7 +264,7 @@ function buildEntryTranscript(
   entries.forEach((e: AgentEntry, i) => {
     if (e.type === "thought") {
       if (buf.length === 0) groupStart = i;
-      buf.push({ text: e.text });
+      buf.push({ text: shortenRootPaths(e.text, roots) ?? e.text });
       return;
     }
     flush(groupStart);
