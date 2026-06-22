@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { killAgent, steerAgent } from "../lib/agents";
 import { navigateToPr } from "../lib/nav";
+import { activeHarness, harnessReasoningCollapsed } from "../lib/defaults";
 import { useGlobalConfig, useUiStore } from "../lib/store";
 import type { AgentEntry, AgentLine, AgentPlanEntry, AgentRun, AgentToolCall, ToolKind } from "../types";
 import { timeAgo, useNow } from "../lib/ui";
@@ -101,58 +102,141 @@ function PlanView({ plan }: { plan: AgentPlanEntry[] }) {
   );
 }
 
-/** Render the structured ACP transcript (or legacy lines for hydrated runs). */
-function Transcript({ run }: { run: AgentRun }) {
+/** A collapsible group of consecutive reasoning/thinking entries. Rendered
+ *  as a <details>; its initial open state is the inverse of the harness's
+ *  `reasoningCollapsed` setting (default-on => collapsed). Reasoning is never
+ *  dropped outright — it's always available one click away. */
+function ReasoningGroup({
+  entries,
+  defaultOpen,
+  roots,
+  startKey,
+}: {
+  entries: { text: string }[];
+  defaultOpen: boolean;
+  roots: string[];
+  startKey: number;
+}) {
+  if (entries.length === 0) return null;
+  const label = entries.length === 1 ? "reasoning" : `reasoning (${entries.length})`;
+  return (
+    <details className="agent-reasoning" open={defaultOpen} key={startKey}>
+      <summary className="agent-reasoning-summary">{label}</summary>
+      <div className="agent-reasoning-body">
+        {entries.map((e, i) => (
+          <div key={i} className="agent-thinking">{shortenRootPaths(e.text, roots)}</div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/** Render the structured ACP transcript (or legacy lines for hydrated runs).
+ *  Reasoning/thinking entries are tucked behind a collapsible disclosure whose
+ *  default open state is the inverse of the active harness's
+ *  `reasoningCollapsed` setting (default-on => collapsed). Consecutive
+ *  reasoning entries are grouped into one disclosure so the stream stays
+ *  scannable. */
+function Transcript({ run, reasoningCollapsed }: { run: AgentRun; reasoningCollapsed: boolean }) {
   const roots = pathRoots(run);
+  const defaultOpen = !reasoningCollapsed;
+
   // legacy pre-ACP runs persisted `lines` and no entries
   if ((!run.entries || run.entries.length === 0) && run.lines && run.lines.length > 0) {
-    return (
-      <>
-        {run.lines.map((l: AgentLine, i) =>
-          l.kind === "tool" ? (
-            <div key={i} className="agent-tool-row">
-              <div className="agent-tool-head">
-                <span className="agent-tool-glyph">⚙</span>
-                <span className="agent-tool-arg">{shortenRootPaths(l.text, roots)}</span>
-              </div>
+    const out: ReactNode[] = [];
+    let buf: { text: string }[] = [];
+    let groupStart = 0;
+    const flush = (key: number) => {
+      if (buf.length > 0) {
+        out.push(
+          <ReasoningGroup
+            key={`r-${key}`}
+            entries={buf}
+            defaultOpen={defaultOpen}
+            roots={roots}
+            startKey={key}
+          />
+        );
+        buf = [];
+      }
+    };
+    run.lines.forEach((l: AgentLine, i) => {
+      if (l.kind === "thinking") {
+        if (buf.length === 0) groupStart = i;
+        buf.push({ text: l.text });
+        return;
+      }
+      flush(groupStart);
+      if (l.kind === "tool") {
+        out.push(
+          <div key={i} className="agent-tool-row">
+            <div className="agent-tool-head">
+              <span className="agent-tool-glyph">⚙</span>
+              <span className="agent-tool-arg">{shortenRootPaths(l.text, roots)}</span>
             </div>
-          ) : l.kind === "thinking" ? (
-            <div key={i} className="agent-thinking">{l.text}</div>
-          ) : l.kind === "text" ? (
-            <div key={i} className="agent-msg">
-              <Markdown text={shortenRootPaths(l.text, roots) ?? l.text} className="compact" />
-            </div>
-          ) : (
-            <div key={i} className={`agent-line ${l.kind === "stderr" ? "stderr" : ""}`}>
-              {shortenRootPaths(l.text, roots)}
-            </div>
-          )
-        )}
-      </>
-    );
+          </div>
+        );
+      } else if (l.kind === "text") {
+        out.push(
+          <div key={i} className="agent-msg">
+            <Markdown text={shortenRootPaths(l.text, roots) ?? l.text} className="compact" />
+          </div>
+        );
+      } else {
+        out.push(
+          <div key={i} className={`agent-line ${l.kind === "stderr" ? "stderr" : ""}`}>
+            {shortenRootPaths(l.text, roots)}
+          </div>
+        );
+      }
+    });
+    flush(groupStart);
+    return <>{out}</>;
   }
-  return (
-    <>
-      {run.entries.map((e: AgentEntry, i) => {
-        if (e.type === "message")
-          return (
-            <div key={i} className="agent-msg">
-              <Markdown text={shortenRootPaths(e.text, roots) ?? e.text} className="compact" />
-            </div>
-          );
-        if (e.type === "thought")
-          return <div key={i} className="agent-thinking">{shortenRootPaths(e.text, roots)}</div>;
-        if (e.type === "steer")
-          return (
-            <div key={i} className="agent-steer-echo">
-              ↪ {shortenRootPaths(e.text, roots)}
-            </div>
-          );
-        const tool = run.tools[e.toolCallId];
-        return tool ? <ToolRow key={i} tool={tool} roots={roots} /> : null;
-      })}
-    </>
-  );
+
+  const out: ReactNode[] = [];
+  let buf: { text: string }[] = [];
+  let groupStart = 0;
+  const flush = (key: number) => {
+    if (buf.length > 0) {
+      out.push(
+        <ReasoningGroup
+          key={`r-${key}`}
+          entries={buf}
+          defaultOpen={defaultOpen}
+          roots={roots}
+          startKey={key}
+        />
+      );
+      buf = [];
+    }
+  };
+  run.entries.forEach((e: AgentEntry, i) => {
+    if (e.type === "thought") {
+      if (buf.length === 0) groupStart = i;
+      buf.push({ text: e.text });
+      return;
+    }
+    flush(groupStart);
+    if (e.type === "message") {
+      out.push(
+        <div key={i} className="agent-msg">
+          <Markdown text={shortenRootPaths(e.text, roots) ?? e.text} className="compact" />
+        </div>
+      );
+    } else if (e.type === "steer") {
+      out.push(
+        <div key={i} className="agent-steer-echo">
+          ↪ {shortenRootPaths(e.text, roots)}
+        </div>
+      );
+    } else if (e.type === "tool") {
+      const tool = run.tools[e.toolCallId];
+      if (tool) out.push(<ToolRow key={i} tool={tool} roots={roots} />);
+    }
+  });
+  flush(groupStart);
+  return <>{out}</>;
 }
 
 /** One agent run in the Activity Feed: relation, transcript, steering. */
@@ -177,6 +261,12 @@ export function AgentCard({
   const openCommit = useUiStore((s) => s.openCommit);
   const prUrl = run.prNumber == null ? "" : `${githubUrl}/${run.repo}/pull/${run.prNumber}`;
   const active = run.status === "running" || run.status === "starting";
+  // Reasoning/thinking entries render inside a collapsible disclosure; this
+  // sets its initial open state (default-on => collapsed). Resolved per render
+  // from the live global config so a settings flip takes effect on the next
+  // chunk.
+  const cfg = useGlobalConfig.getState().config;
+  const reasoningCollapsed = cfg ? harnessReasoningCollapsed(activeHarness(cfg)) : true;
   useNow(active ? 1000 : 0); // tick the elapsed counter while running
 
   // jump to this PR inside the app (the ↗ stays for web). No-op if the PR left
@@ -297,7 +387,7 @@ export function AgentCard({
               ) : (
                 <span className="subtle">no output</span>
               ))}
-            <Transcript run={run} />
+            <Transcript run={run} reasoningCollapsed={reasoningCollapsed} />
           </div>
           {run.steerable && (
             <div className="agent-steer">

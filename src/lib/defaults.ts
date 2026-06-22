@@ -592,17 +592,31 @@ export function notificationEnabled(
 export function harnessTemplates(cursorBinary = "cursor-agent"): Harness[] {
   return [
     { id: "cursor", name: "Cursor", command: cursorBinary, args: ["acp"], verified: true,
+      reasoningCollapsed: true,
       note: "Run `cursor-agent login` if prompts fail with an auth error." },
     { id: "opencode", name: "opencode", command: "opencode", args: ["acp"], verified: true,
+      reasoningCollapsed: true,
       note: "Configure a provider/API key in opencode first." },
     { id: "claude-code", name: "Claude Code", command: "npx", args: ["-y", "@zed-industries/claude-code-acp"],
+      reasoningCollapsed: true,
       note: "Adapter via npx; needs ANTHROPIC_API_KEY in the environment." },
     // Codex has no native ACP server, so it runs through Zed's codex-acp
     // bridge (a Rust binary shipped via npx). `codex acp` would just open the
     // interactive REPL and fail on piped stdin. Verified firsthand.
     { id: "codex", name: "Codex CLI", command: "npx", args: ["-y", "@zed-industries/codex-acp"], verified: true,
+      reasoningCollapsed: true,
       note: "ACP bridge via npx (@zed-industries/codex-acp); uses your Codex login / OPENAI_API_KEY." },
   ];
+}
+
+/** Resolve the active harness's "reasoning collapsed by default" preference.
+ *  Default-enabled: a harness without an explicit `reasoningCollapsed` (older
+ *  persisted configs, or a custom harness the user hand-edited) is treated as
+ *  collapsing reasoning — only an explicit `false` expands it. Reasoning is
+ *  still rendered, just tucked behind a disclosure; this just picks the
+ *  initial state. */
+export function harnessReasoningCollapsed(h: Harness | undefined | null): boolean {
+  return h?.reasoningCollapsed !== false;
 }
 
 export function defaultGlobalConfig(): GlobalConfig {

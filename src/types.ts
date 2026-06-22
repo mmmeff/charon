@@ -30,6 +30,11 @@ export interface Harness {
   verified?: boolean;
   /** auth / setup hint shown when a connection probe fails */
   note?: string;
+  /** Whether reasoning/thinking entries render collapsed by default in agent
+   *  output streams. Enabled by default (undefined is treated as true — see
+   *  harnessReasoningCollapsed in defaults): reasoning is tucked away behind a
+   *  disclosure the user can expand. Set to false to show it expanded. */
+  reasoningCollapsed?: boolean;
 }
 
 export interface GlobalConfig {

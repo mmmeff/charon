@@ -1551,11 +1551,22 @@ button.draft-create-row:focus-visible {
 /* agent stream: assistant prose */
 .agent-msg { padding: 5px 0; font-size: 12.5px; }
 .agent-msg + .agent-msg { border-top: 1px dashed var(--border-subtle); }
-/* reasoning: quiet, indented, clearly not the message */
+/* reasoning: quiet, indented, clearly not the message. Tucked behind a
+   collapsible <details>; the harness setting picks its default open state. */
+.agent-reasoning { margin: 3px 0; border-left: 1px dashed var(--border); }
+.agent-reasoning-summary {
+  cursor: pointer; user-select: none;
+  color: var(--fg-subtle); font-size: 10.5px; font-style: italic;
+  padding: 2px 0 2px 9px; list-style: none;
+}
+.agent-reasoning-summary::before { content: "▸ "; }
+.agent-reasoning[open] > .agent-reasoning-summary::before { content: "▾ "; }
+.agent-reasoning-summary::-webkit-details-marker { display: none; }
+.agent-reasoning-body { padding: 0 0 0 9px; }
 .agent-thinking {
   color: var(--fg-subtle); font-size: 11px; font-style: italic; line-height: 1.5;
   white-space: pre-wrap; word-break: break-word;
-  border-left: 1px dashed var(--border); padding: 3px 0 3px 9px; margin: 3px 0;
+  padding: 3px 0;
 }
 /* tool calls: one-line mono entries in steel (legacy line renderer) */
 .agent-tool {
