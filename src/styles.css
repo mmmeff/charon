@@ -284,15 +284,35 @@ h3, h4 {
 .main { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .main.split { display: flex; gap: 0; padding: 0; overflow: hidden; }
 
-/* agent grid: active/running agents as cards in rows */
+/* agent feed: the Activity view host. Sized as a container query context so
+   the active-streams grid can fall back gracefully when the window is narrow
+   (sidebar open, small Tauri shell, etc.) rather than overflowing. */
+.main.agent-feed {
+  container-type: inline-size;
+  container-name: agent-feed;
+}
+
+/* agent grid: active/running agents as cards in rows.
+   Default is three across (each ~1/3 of the feed width); we step down to two
+   and then one as the container shrinks so cards never get crushed below their
+   readable min width. */
 .agent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
 .agent-grid > .card { margin-bottom: 0; }
 .agent-grid > .agent-embedded { margin-bottom: 0; }
+
+/* narrower feed (sidebar pushes content in): two across */
+@container agent-feed (max-width: 900px) {
+  .agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* phone-class feed or very cramped split: one across — full width, no squeeze */
+@container agent-feed (max-width: 520px) {
+  .agent-grid { grid-template-columns: 1fr; }
+}
 
 /* completed runs section heading */
 .agent-completed-section { margin-top: 0; }

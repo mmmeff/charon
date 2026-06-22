@@ -32,7 +32,7 @@ export function ActivityView() {
   const hasFinishedList = filteredFinished.length > 0;
 
   return (
-    <div className="main">
+    <div className="main agent-feed">
       {/* ---- filter + clear toolbar ---- */}
       <div className="row" style={{ marginBottom: 14 }}>
         {(["all", "active", "done", "failed"] as Filter[]).map((f) => (
