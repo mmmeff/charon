@@ -384,11 +384,17 @@ export class AcpConnection {
 
   private async serve(msg: JsonRpcMsg) {
     const respond = (result: unknown) =>
-      native.agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", id: msg.id, result })).catch(() => {});
+      native.agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", id: msg.id, result })).catch((e) => {
+        console.error(`acp send response failed on ${this.id} id=${msg.id}`, e);
+        this.fail(new Error("lost agent connection sending response", { cause: e }));
+      });
     const respondError = (code: number, message: string) =>
       native
         .agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code, message } }))
-        .catch(() => {});
+        .catch((e) => {
+          console.error(`acp send response failed on ${this.id} id=${msg.id}`, e);
+          this.fail(new Error("lost agent connection sending response", { cause: e }));
+        });
 
     switch (msg.method) {
       case "session/request_permission": {
@@ -425,7 +431,9 @@ export class AcpConnection {
   }
 
   private notify(method: string, params: unknown): void {
-    void native.agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", method, params })).catch(() => {});
+    void native.agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", method, params })).catch((e) => {
+      console.error(`acp send notification failed on ${this.id} method=${method}`, e);
+    });
   }
 
   // -- ACP methods ----------------------------------------------------------
@@ -478,7 +486,9 @@ export class AcpConnection {
     this.fail(new Error("agent killed"));
     this.exitResolve(-9);
     connections.delete(this.id);
-    void native.killAgent(this.id).catch(() => {});
+    void native.killAgent(this.id).catch((e) => {
+      console.error(`acp kill failed on ${this.id}`, e);
+    });
   }
 }
 
