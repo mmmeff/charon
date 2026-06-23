@@ -328,6 +328,25 @@ h3, h4 {
   background: var(--bg-inset); color: var(--fg-muted);
   border: 1px solid var(--border); padding: 0 6px; min-width: 18px; height: 16px;
 }
+/* date-bucketed groups inside the completed list */
+.agent-group { margin-bottom: 14px; }
+.agent-group-heading {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fg-subtle); margin: 0 0 8px; padding-bottom: 5px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.agent-group-toggle {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; color: inherit; text-transform: uppercase; width: 100%; text-align: left;
+}
+.agent-group-toggle::before {
+  content: "▸"; color: var(--fg-muted);
+  display: inline-block; width: 1em; transition: transform 0.12s ease;
+}
+.agent-group.open .agent-group-toggle::before { transform: rotate(90deg); }
+.agent-group:not(.open) .agent-group-heading { margin-bottom: 4px; }
+.agent-group-more { display: flex; justify-content: center; padding: 8px 0; }
 .sidebar {
   width: 340px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border);
   padding: 12px; position: relative;
