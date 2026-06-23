@@ -98,8 +98,21 @@ export function RepoApp({ repo }: { repo: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedTab?.nonce]);
   const prData = usePrData();
-  const agentOrder = useAgentStore((s) => s.order);
-  const runs = useAgentStore((s) => s.runs);
+  // Active-agent count drives the rail badge. Derived as a single primitive
+  // so RepoApp re-renders only when the count actually changes — appending a
+  // chunk to any run produces a fresh `runs` ref (store.appendChunk replaces
+  // the object), so a whole-map subscription would re-render RepoApp (and via
+  // it the entire active tab subtree) on EVERY chunk from EVERY background
+  // agent. A number-returning selector falls back to `Object.is` and stays
+  // stable across chunks whose runs don't change the active set.
+  const activeAgents = useAgentStore((s) => {
+    let n = 0;
+    for (const id of s.order) {
+      const r = s.runs[id];
+      if (r && isVisibleAgentRun(r) && isActiveAgentStatus(r.status)) n++;
+    }
+    return n;
+  });
   const scrolledPr = useUiStore((s) => s.scrolledPrTitle);
   const activityPanelOpen = useUiStore((s) => s.activityPanelOpen);
   const setActivityPanelOpen = useUiStore((s) => s.setActivityPanelOpen);
@@ -293,11 +306,6 @@ export function RepoApp({ repo }: { repo: string }) {
       </div>
     );
   }
-
-  const activeAgents = agentOrder.filter((id) => {
-    const run = runs[id];
-    return !!run && isVisibleAgentRun(run) && isActiveAgentStatus(run.status);
-  }).length;
 
   const tabs: { id: Tab; label: string; icon: () => JSX.Element; count?: number; hot?: boolean }[] = [
     { id: "drafts", label: "Drafts", icon: IconDrafts, count: prData.myDrafts.length },

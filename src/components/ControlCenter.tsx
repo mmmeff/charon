@@ -27,19 +27,23 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
   const mine = pr.author === ctx.gh.login;
   const checks = usePrData((s) => s.checks[pr.number]) ?? [];
   const reviews = usePrData((s) => s.reviews[pr.number]) ?? [];
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Number of active visible runs for THIS PR — drives the busy indicator.
+  // Primitive-returning selector (default `Object.is`) skips re-renders on
+  // chunks to runs that don't affect the count (which is all of them, unless
+  // one's for this PR and starts/finishes).
+  const activeRunsCount = useAgentStore((s) => {
+    let n = 0;
+    for (const id of s.order) {
+      const r = s.runs[id];
+      if (r && isVisibleAgentRun(r) && r.prNumber === pr.number && isActiveAgentStatus(r.status)) n++;
+    }
+    return n;
+  });
   const [confirmClose, setConfirmClose] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [approveText, setApproveText] = useState("");
-
-  const activeRuns = order
-    .map((id) => runs[id])
-    .filter(
-      (r) => r && isVisibleAgentRun(r) && r.prNumber === pr.number && isActiveAgentStatus(r.status)
-    ).length;
 
   const guard = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -265,9 +269,9 @@ export function ControlCenter({ pr }: { pr: PrSummary }) {
         </>
       )}
 
-      {activeRuns > 0 && (
+      {activeRunsCount > 0 && (
         <div className="row subtle" style={{ fontSize: 11 }}>
-          <Spinner /> {activeRuns} agent{activeRuns > 1 ? "s" : ""} working — see Agents
+          <Spinner /> {activeRunsCount} agent{activeRunsCount > 1 ? "s" : ""} working — see Agents
         </div>
       )}
       {error && <div style={{ color: "var(--red)", fontSize: 11.5 }}>{error}</div>}

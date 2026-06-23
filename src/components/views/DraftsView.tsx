@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { deleteDraftCreateArtifacts } from "../../lib/flows";
 import { usePrData } from "../../lib/events";
 import { stackedPrList } from "../../lib/pr-stacks";
@@ -29,18 +30,24 @@ export function DraftsView() {
   const requestedNewDraft = useUiStore((s) => s.requestedNewDraft);
   const [creating, setCreating] = useState(false);
   const [selectedPendingId, setSelectedPendingId] = useState<string | null>(null);
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
-  const pendingDraftRuns = order
-    .map((id) => runs[id])
-    .filter(
-      (r): r is AgentRun =>
-        !!r &&
-        r.kind === "draft_create" &&
-        r.repo === ctx.repo &&
-        r.prNumber == null &&
-        !r.draftCreate?.dismissed
-    );
+  // Pending draft_create runs (prNumber == null, not dismissed) — slice to a
+  // shallow-compared array so chunks to unrelated runs never re-render the
+  // Drafts list. Each chunk on a matching run bumps that run's ref; the array
+  // shallow-changes and we re-render only then.
+  const pendingDraftRuns = useAgentStore(
+    useShallow((s) =>
+      s.order
+        .map((id) => s.runs[id])
+        .filter(
+          (r): r is AgentRun =>
+            !!r &&
+            r.kind === "draft_create" &&
+            r.repo === ctx.repo &&
+            r.prNumber == null &&
+            !r.draftCreate?.dismissed
+        )
+    )
+  );
   const setSelected = (n: number) => {
     setCreating(false);
     setSelectedPendingId(null);

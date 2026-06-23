@@ -23,18 +23,24 @@ export function NewDraftWorkspace({
   const [error, setError] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("");
   const [branchErr, setBranchErr] = useState("");
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
-  const activeRun = order
-    .map((id) => runs[id])
-    .find(
-      (r): r is AgentRun =>
-        !!r &&
+  // The active draft_create run for this repo (not dismissed, still running).
+  // Slice to a single AgentRun ref — the default `Object.is` equality means
+  // we re-render only when this run changes, ignoring chunks on other agents.
+  const activeRun = useAgentStore((s) => {
+    for (const id of s.order) {
+      const r = s.runs[id];
+      if (
+        r &&
         r.kind === "draft_create" &&
         r.repo === ctx.repo &&
         !r.draftCreate?.dismissed &&
         (r.status === "running" || r.status === "starting")
-    );
+      ) {
+        return r;
+      }
+    }
+    return undefined;
+  });
   const draftCfg = ctx.config.draftCreate;
   const canSubmit = !!prompt.trim() && !busy && !activeRun && (!!draftCfg.baseBranch.trim() || !!defaultBranch);
 

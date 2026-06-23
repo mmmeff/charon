@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { cleanResultText } from "../lib/agents";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/defaults";
 import { runDraftEdit, runDraftQuestion, runReviewFlow, runSelfReviewFlow } from "../lib/flows";
 import { interpolate, prVars } from "../lib/template";
 import { useAgentStore } from "../lib/store";
-import type { LineSelection, PrSummary } from "../types";
+import type { AgentRun, LineSelection, PrSummary } from "../types";
 import { timeAgo } from "../lib/ui";
 import { AgentCard } from "./AgentCard";
 import { Badge, Spinner } from "./common";
@@ -89,18 +90,24 @@ export function Composer({
   const [error, setError] = useState("");
   // one-shot model pick: local to this composer instance, no cross-form memory
   const [model, setModel] = useState("");
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
-
-  const activeReview = order
-    .map((id) => runs[id])
-    .find(
-      (r) =>
+  // Slice to just the run we care about (a review on this PR still
+  // starting/running). Returns a single AgentRun ref; default `Object.is`
+  // equality means we re-render only when the matching review run updates —
+  // chunks to other agents don't even loop past first match.
+  const activeReview = useAgentStore((s) => {
+    for (const id of s.order) {
+      const r = s.runs[id];
+      if (
         r &&
         r.prNumber === pr.number &&
         r.kind === "review" &&
         (r.status === "running" || r.status === "starting")
-    );
+      ) {
+        return r;
+      }
+    }
+    return undefined;
+  });
   const reviewing = !!activeReview;
 
   const meta = MODE_META[mode];
@@ -217,14 +224,21 @@ export function Composer({
 
 /** Recent Ask/Change runs for a PR — answers and push confirmations. */
 export function RunResults({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?: () => void }) {
-  const runs = useAgentStore((s) => s.runs);
-  const order = useAgentStore((s) => s.order);
-  const myRuns = order
-    .map((id) => runs[id])
-    .filter(
-      (r) => r && r.prNumber === pr.number && (r.kind === "draft_edit" || r.kind === "draft_question")
+  // Slice to a shallow-compared array of this PR's draft_edit/draft_question
+  // runs (capped at 6). useShallow keeps the ref stable across chunks to
+  // unrelated runs: each such chunk produces a new `runs` ref but the array
+  // contents shallow-equal the previous one → no re-render.
+  const myRuns = useAgentStore(
+    useShallow((s) =>
+      s.order
+        .map((id) => s.runs[id])
+        .filter(
+          (r): r is AgentRun =>
+            !!r && r.prNumber === pr.number && (r.kind === "draft_edit" || r.kind === "draft_question")
+        )
+        .slice(0, 6)
     )
-    .slice(0, 6);
+  );
   if (myRuns.length === 0) return null;
   return (
     <div style={{ marginBottom: 14 }}>
