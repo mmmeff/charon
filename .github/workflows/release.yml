@@ -30,9 +30,13 @@ on:
         type: string
   workflow_call:
     inputs:
+      ref:
+        description: "Git ref to build — commit SHA, branch, or tag"
+        required: false
+        type: string
       tag:
-        description: "Existing tag to build and release (e.g. v0.3.0)"
-        required: true
+        description: "Intended release tag name (e.g. v1.6.4); tag created on success if not yet present"
+        required: false
         type: string
 
 permissions:
@@ -44,27 +48,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.ref || inputs.tag || github.ref }}
           fetch-depth: 0 # full history + tags so the changelog can diff against the previous tag
 
       - name: Build changelog
         id: changelog
         shell: bash
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ -n "$INPUT_TAG" ]; then
-            CURRENT="$INPUT_TAG"; TO="$INPUT_TAG"
-          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            CURRENT="$GITHUB_REF_NAME"; TO="$CURRENT"
-          else
-            CURRENT="(unreleased)"; TO="HEAD"
-          fi
-          if [ "$TO" = "HEAD" ]; then
-            PREV=$(git tag --sort=-version:refname | head -1)
-          else
-            PREV=$(git tag --sort=-version:refname | grep -vFx "$CURRENT" | head -1)
-          fi
+          set -euo pipefail
+          APP_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          CURRENT="v${APP_VER}"
+          # Git ref containing the bumped version files (HEAD of checked-out tree)
+          TO=HEAD
+          # Latest released tag whose version is strictly less than current (works whether
+          # CURRENT already exists as a tag or we're building an untagged bump commit).
+          PREV=$(git tag --sort=-version:refname | while read -r t; do
+            v="${t#v}"; IFS=. read -r a b c <<< "$v"
+            cur_v="$APP_VER"; IFS=. read -r x y z <<< "$cur_v"
+            less=0
+            if [ "$a" -lt "$x" ]; then less=1
+            elif [ "$a" = "$x" ] && [ "$b" -lt "$y" ]; then less=1
+            elif [ "$a" = "$x" ] && [ "$b" = "$y" ] && [ "$c" -lt "$z" ]; then less=1; fi
+            [ "$less" = 1 ] && echo "$t" && break
+          done)
           if [ -n "$PREV" ]; then
             HEADER="### Changes since ${PREV}"
             LOG=$(git log --no-merges --pretty=format:'- %s' "${PREV}..${TO}")
@@ -155,3 +161,17 @@ jobs:
           releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           args: --target universal-apple-darwin
+
+      - name: Tag commit on successful publish (tag-after-build)
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          TAG="v${APP_VER}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git tag -l "$TAG" | grep -qFx "$TAG"; then
+            # Tag the built commit only now that publish succeeded — failed builds never orphan a tag.
+            git tag "$TAG" HEAD
+            git push origin "$TAG"
+          fi

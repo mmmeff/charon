@@ -36,6 +36,7 @@ jobs:
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') && !contains(github.event.head_commit.message, '#norelease') }}
     outputs:
       tag: ${{ steps.bump.outputs.tag }}
+      commit: ${{ steps.bump.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,14 +111,17 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
           git commit -m "chore(release): v${NEXT}"
-          git tag "v${NEXT}"
-          git push origin main "v${NEXT}"
           echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # Tag after build: release.yml tags this commit only if the build + publish succeeds,
+          # so failed releases never leave orphaned tags that shrink the next changelog range.
+          git push origin main
 
   release:
     needs: bump
     if: ${{ needs.bump.outputs.tag != '' }}
     uses: ./.github/workflows/release.yml
     with:
+      ref: ${{ needs.bump.outputs.commit }}
       tag: ${{ needs.bump.outputs.tag }}
     secrets: inherit
