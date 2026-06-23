@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode, useState } from "react";
 
 type Props = {
   children: ReactNode;
@@ -21,6 +21,20 @@ function formatError(error: Error, componentStack: string, crashedAt: string | n
   return sections.join("\n\n");
 }
 
+function useCopyToClipboard() {
+  const [copied, setCopied] = useState(false);
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return { copied, copy };
+}
+
 function CrashFallback({
   error,
   componentStack,
@@ -30,6 +44,8 @@ function CrashFallback({
   componentStack: string;
   crashedAt: string | null;
 }) {
+  const { copied, copy } = useCopyToClipboard();
+  const formatted = formatError(error, componentStack, crashedAt);
   return (
     <main className="crash-screen" role="alert" aria-live="assertive">
       <div className="crash-panel">
@@ -43,10 +59,17 @@ function CrashFallback({
           <button className="primary" onClick={() => window.location.reload()}>
             Reload app
           </button>
+          <button
+            className="secondary"
+            onClick={() => copy(formatted)}
+            aria-live="polite"
+          >
+            {copied ? "Copied!" : "Copy crash to clipboard"}
+          </button>
         </div>
         <details className="crash-details">
           <summary>Show crash details</summary>
-          <pre>{formatError(error, componentStack, crashedAt)}</pre>
+          <pre>{formatted}</pre>
         </details>
       </div>
     </main>
