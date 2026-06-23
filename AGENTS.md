@@ -12,7 +12,7 @@ Charon babysits PRs (auto-triage + fix CI failures), reviews incoming diffs with
 
 **`src/lib/defaults.ts`** — `EVENT_CATALOG` + default configs/migrations. The catalog is the extension point for new triggers: each entry maps an event shape to handler behavior. Configs are forward-compatible; migrations bridge old persisted state.
 
-**`src/lib/store.ts`** — Zustand stores. `useGlobalConfig`/`useRepoStore`: persisted config, writes flow through native blob storage. `useAgentStore`: run lifecycle and streaming output. `useSkillStore`: reads `.charon/skills/` per repo.
+**`src/lib/store.ts`** — Zustand stores. `useGlobalConfig`/`useRepoStore`: persisted config, writes flow through native blob storage (`loadBlob`/`saveBlob`). `useAgentStore`: run lifecycle and streaming output. Skill store is just a container; skills load via native scan of cursor skill dirs plus shipped fallbacks appended when no local skill claims the same name.
 
 **`src/lib/events.ts`** — Poller loop: fetches PRs/checks/comments from GitHub, detects transitions (new review requested, CI red/green, comment posted), fires events against the catalog + handler configs to trigger flows.
 
@@ -26,14 +26,17 @@ Charon babysits PRs (auto-triage + fix CI failures), reviews incoming diffs with
 
 **`src-tauri/src/lib.rs`** — Native commands: `spawn_agent` (piped stdin/stdout), `agent_send`, HTTP proxy (reqwest/rustls), blob storage for config/run persistence. The only I/O boundary to the outside world.
 
+**`src/lib/template.ts`** — Prompt interpolation: `{kebab-case}` variables, unknown vars left intact so prompts degrade visibly. `prVars()` derives standard variables from a PR shape.
+
 **`src/components/RepoApp.tsx` + views** — Per-repo shell with Drafts/Open/Review/Activity/Settings tabs, command palette, keyboard shortcuts, flow context provider. Launcher window lists recent repos and opens them into RepoApp instances.
 
 ## WORKING CONVENTIONS
 
-- **Commands**: `npm run tauri dev` (full app), `cargo check --manifest-path=src-tauri/Cargo.toml` (native layer). No secrets in commits; tokens live in persisted config only.
-- **Stores**: Config writes always route through native blob storage — never write persisted state directly from the webview. Agent store owns run streaming; skill store reads `.charon/skills/`.
-- **Prompt templating**: Flows assemble context into prompts before spawning agents; new triggers extend `EVENT_CATALOG` in defaults, not flow logic. Keep flows fixed to review/fix/analysis — add behavior via handlers and templates, not new flow types.
-- **Network rule**: Webview code never makes GitHub requests. All HTTP (including GHE with custom CAs) goes through native commands; the proxy command is the only path out.
+- **Commands**: `npm run tauri dev` (full app), `cargo check --manifest-path=src-tauri/Cargo.toml` (native layer). No lint or formatter — typecheck is the only verification: `npm run typecheck`. Build chain: `npm run build` runs `tsc && vite build`; `prebuild` generates icons from `app-icon.png`, so icon files in `src-tauri/icons/` are not committed.
+- **Stores**: Config writes always route through native blob storage — never write persisted state directly from the webview. Agent store owns run streaming; skill store is just a container for skills loaded via native scan plus shipped fallbacks.
+- **Prompt templating**: Flows assemble context into prompts before spawning agents; new triggers extend `EVENT_CATALOG` in defaults, not flow logic. Keep flows fixed to review/fix/analysis — add behavior via handlers and templates, not new flow types. Template syntax is `{kebab-case}` (see template.ts).
+- **Network rule**: Webview code never makes GitHub requests. All HTTP (including GHE with custom CAs) goes through native commands; the proxy command is the only path out. Git operations also go through native `runGit`.
+- **Regression guard in agents.ts:295ff** — pr-copilot deliberately avoids calling ACP `set_config_option` for model on harnesses that expose it as a config option (opencode, codex). On opencode 1.15.x this call corrupts the session and fails every subsequent prompt with `-32603 / {service:"session"}`. The integration test (`npm run integ`) verifies both the fix path works and the bug path still exists. Do not refactor agents.ts model selection without understanding this guard.
 
 ## MAINTENANCE NOTE FOR AGENTS
 
