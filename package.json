@@ -4,7 +4,7 @@
   "version": "1.6.36",
   "type": "module",
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "vite",
     "icons": "tauri icon app-icon.png",
     "prebuild": "npm run icons",
     "build": "tsc && vite build",
