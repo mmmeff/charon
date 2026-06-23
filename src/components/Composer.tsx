@@ -89,36 +89,23 @@ export function Composer({
     setModeState(next);
   };
   const [error, setError] = useState("");
-  // one-shot model pick: local to this composer instance, no cross-form memory
-  const [model, setModel] = useState("");
-  // Swarm opt-in (Q4: default off — single-run path is byte-identical when off).
-  // Only for edit/ask modes (v1-wired flow kinds). Contenders differ by model;
-  // reasoning is shared via the footer ReasoningPicker (v1: no per-contender
-  // reasoning — the spec field exists for forward-compat).
-  const swarmSupported = mode === "edit" || mode === "ask" || mode === "review";
-  const [swarm, setSwarm] = useState(false);
-  const [contenders, setContenders] = useState<SwarmContenderSpec[]>([]);
-  const toggleSwarm = () => {
-    if (!swarm) {
-      // carry the current single-pick into the first contender row
-      setContenders([{ id: uid("c-"), model }]);
-    } else {
-      // collapsing back: carry contender[0]'s model back to the single picker
-      if (contenders[0]) setModel(contenders[0].model);
-      setContenders([]);
-    }
-    setSwarm(!swarm);
+  // Agent rows — always at least 1. 1 row = single-run path (byte-identical
+  // to before); 2+ rows = swarm. The "+" in the footer adds rows; "−" removes
+  // (min 1). No explicit swarm toggle — the count IS the toggle.
+  const canSwarm = mode === "edit" || mode === "ask" || mode === "review";
+  const [agents, setAgents] = useState<SwarmContenderSpec[]>([{ id: uid("c-"), model: "" }]);
+  const model = agents[0]?.model ?? "";
+  const setModel = (m: string) => setAgents((prev) => [{ ...prev[0], model: m }, ...prev.slice(1)]);
+  const addAgent = () => {
+    if (agents.length >= 3) return;
+    setAgents((prev) => [...prev, { id: uid("c-"), model: "" }]);
   };
-  const addContender = () => {
-    if (contenders.length >= 3) return;
-    setContenders([...contenders, { id: uid("c-"), model: "" }]);
+  const removeAgent = (id: string) => {
+    if (agents.length <= 1) return;
+    setAgents((prev) => prev.filter((a) => a.id !== id));
   };
-  const removeContender = (id: string) => {
-    if (contenders.length <= 1) return;
-    setContenders(contenders.filter((c) => c.id !== id));
-  };
-  const setContenderModel = (id: string, m: string) => {
-    setContenders(contenders.map((c) => (c.id === id ? { ...c, model: m } : c)));
+  const setAgentModel = (id: string, m: string) => {
+    setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, model: m } : a)));
   };
   // Slice to just the run we care about (a review on this PR still
   // starting/running). Returns a single AgentRun ref; default `Object.is`
@@ -156,7 +143,7 @@ export function Composer({
     setError("");
     try {
       const flowKind = mode === "ask" ? "draft_question" : mode === "edit" ? "draft_edit" : mode === "review" ? "review" : null;
-      if (swarm && swarmSupported && flowKind) {
+      if (agents.length > 1 && canSwarm && flowKind) {
         await startSwarm({
           ctx,
           flowKind,
@@ -168,7 +155,7 @@ export function Composer({
             selection: selection ?? null,
             reviewKind: mode === "review" ? reviewKind : undefined,
           },
-          contenders,
+          contenders: agents,
         });
       } else {
         const m = model || undefined;
@@ -253,54 +240,35 @@ export function Composer({
           />
           <div className="composer-footer">
             <div className="composer-controls">
-              {mode !== "comment" && !swarm && (
-                <>
-                  <ModelPicker
-                    value={model}
-                    onChange={setModel}
-                    flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
-                  />
-                  <ReasoningPicker
-                    flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
-                  />
-                </>
-              )}
-              {mode !== "comment" && swarm && swarmSupported && (
+              {mode !== "comment" && (
                 <>
                   <ReasoningPicker
-                    flowKind={mode === "edit" ? "draft_edit" : mode === "review" ? "review" : "draft_question"}
+                    flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
                   />
                   <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 4 }}>
-                    {contenders.map((c, i) => (
-                      <div key={c.id} className="row" style={{ alignItems: "center", gap: 4 }}>
-                        <span className="subtle" style={{ fontSize: 11, minWidth: 18 }}>#{i + 1}</span>
+                    {agents.map((a, i) => (
+                      <div key={a.id} className="row" style={{ alignItems: "center", gap: 4 }}>
+                        {agents.length > 1 && (
+                          <span className="subtle" style={{ fontSize: 11, minWidth: 18 }}>#{i + 1}</span>
+                        )}
                         <ModelPicker
-                          value={c.model}
-                          onChange={(m) => setContenderModel(c.id, m)}
-                          flowKind={mode === "edit" ? "draft_edit" : mode === "review" ? "review" : "draft_question"}
+                          value={a.model}
+                          onChange={(m) => setAgentModel(a.id, m)}
+                          flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
                         />
-                        {contenders.length > 1 && (
-                          <button className="small" onClick={() => removeContender(c.id)}>−</button>
+                        {agents.length > 1 && (
+                          <button className="small" onClick={() => removeAgent(a.id)} title="remove">−</button>
                         )}
                       </div>
                     ))}
-                    {contenders.length < 3 && (
-                      <button className="small" onClick={addContender}>+ contender</button>
+                    {canSwarm && agents.length < 3 && (
+                      <button className="small" onClick={addAgent} title="add a parallel agent">+ agent</button>
                     )}
                   </div>
                 </>
               )}
             </div>
             <div className="composer-actions">
-              {swarmSupported && (
-                <button
-                  className={`small ${swarm ? "primary" : ""}`}
-                  onClick={toggleSwarm}
-                  title={swarm ? "back to single run" : "fan out to N parallel contenders"}
-                >
-                  Swarm
-                </button>
-              )}
               {onClose && <button onClick={onClose}>Cancel</button>}
               <button className="primary composer-submit" disabled={busy || !canSubmit} onClick={() => void submit()}>
                 {busy ? <Spinner /> : null}
