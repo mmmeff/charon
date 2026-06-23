@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   AgentPlanEntry,
   AgentRun,
+  AgentStatus,
   AgentToolCall,
   FiredEvent,
   GlobalConfig,
@@ -12,8 +13,10 @@ import type {
   RepoConfig,
   ReviewFinding,
   Skill,
+  Swarm,
 } from "../types";
 import { defaultGlobalConfig, defaultRepoConfig, syncActiveModelPrefs } from "./defaults";
+import { reLeaseWorktree, removeWorktree } from "./worktree";
 import { native } from "./tauri";
 
 const repoKey = (repo: string) => repo.replace(/[^a-zA-Z0-9_.-]/g, "__");
@@ -630,3 +633,125 @@ export const useSkillStore = create<SkillState>((set) => ({
     set({ skills, loaded: true });
   },
 }));
+
+// ---------------------------------------------------------------------------
+// Swarms — in-memory; persisted per-repo in parallel to agent history
+// (ADR-0003). On restart, in-flight contender runs are restored as `killed`
+// by initAgentPersistence; swarms re-attach with surviving `done` contenders'
+// held worktrees re-leased, so an unpromoted-but-finished swarm keeps its
+// comparison + single-promote affordance post-restart.
+// ---------------------------------------------------------------------------
+
+interface SwarmState {
+  swarms: Record<string, Swarm>;
+  order: string[]; // newest first
+  register(s: Swarm): void;
+  update(id: string, patch: Partial<Swarm>): void;
+  remove(id: string): void;
+  /** restore persisted history (app start, after initAgentPersistence). */
+  hydrate(history: Swarm[]): void;
+}
+
+export const useSwarmStore = create<SwarmState>((set) => ({
+  swarms: {},
+  order: [],
+  register(s) {
+    set((st) => ({
+      swarms: { ...st.swarms, [s.id]: s },
+      order: [s.id, ...st.order],
+    }));
+  },
+  update(id, patch) {
+    set((st) => {
+      const cur = st.swarms[id];
+      if (!cur) return st;
+      return { swarms: { ...st.swarms, [id]: { ...cur, ...patch } } };
+    });
+  },
+  remove(id) {
+    set((st) => {
+      if (!st.swarms[id]) return st;
+      const swarms = { ...st.swarms };
+      delete swarms[id];
+      return { swarms, order: st.order.filter((x) => x !== id) };
+    });
+  },
+  hydrate(history) {
+    set((st) => {
+      const restored = history.filter((s) => !st.swarms[s.id]);
+      if (restored.length === 0) return st;
+      return {
+        swarms: { ...st.swarms, ...Object.fromEntries(restored.map((s) => [s.id, s])) },
+        order: [...restored.map((s) => s.id), ...st.order],
+      };
+    });
+  },
+}));
+
+/**
+ * Per-contender AgentRun status from the (already-hydrated) agent store.
+ * Returns null for runs the agent store doesn't have (e.g. MAX_PERSISTED_RUNS
+ * truncation dropped one) so the boot step treats it as "release its worktree".
+ */
+function contenderRunStatus(contender: Swarm["contenders"][number]): AgentStatus | null {
+  return useAgentStore.getState().runs[contender.runId]?.status ?? null;
+}
+
+const swarmHistoryPath = (repo: string) =>
+  `repos/${repo.replace(/[^a-zA-Z0-9_.-]/g, "__")}/swarms.json`;
+
+/**
+ * Load persisted swarms for this repo, re-lease held worktrees for surviving
+ * `done` contenders, release worktrees of contenders that died on restart, and
+ * keep persisting changes (debounced). MUST run after initAgentPersistence so
+ * the agent store contains the (killed-on-restart) contender statuses.
+ *
+ * Tolerates an unknown future `mode` (e.g. Consensus) by skipping those swarms
+ * on hydrate rather than crashing — the same forward-compat discipline as
+ * migrateGlobalConfig (ADR-0003).
+ */
+export async function initSwarmPersistence(repo: string): Promise<() => void> {
+  try {
+    const raw = await native.loadBlob(swarmHistoryPath(repo));
+    if (raw) {
+      const history: Swarm[] = JSON.parse(raw);
+      const compatible = history.filter((s) => s.mode === "race" && Array.isArray(s.contenders));
+      for (const s of compatible) {
+        for (const c of s.contenders) {
+          if (!c.worktree) continue;
+          // re-lease the parked trial of a finished contender; clean up the
+          // worktree of any contender that died on restart (killed) or errored
+          // (Q5: errored mutable contender releases its worktree immediately —
+          // on restart the in-memory lease is gone but the temp tree may persist).
+          if (contenderRunStatus(c) === "done") {
+            reLeaseWorktree(c.worktree.path);
+          } else {
+            void removeWorktree(c.worktree).catch(() => undefined);
+          }
+        }
+      }
+      useSwarmStore.getState().hydrate(compatible);
+    }
+  } catch (e) {
+    console.error("swarm history load failed", e);
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const save = () => {
+    const st = useSwarmStore.getState();
+    const swarms = st.order
+      .map((id) => st.swarms[id])
+      .filter((s) => s && s.trigger.repo === repo);
+    void native
+      .saveBlob(swarmHistoryPath(repo), JSON.stringify(swarms))
+      .catch((e) => console.error("swarm history save failed", e));
+  };
+  const unsubscribe = useSwarmStore.subscribe(() => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(save, 800);
+  });
+  return () => {
+    if (timer) clearTimeout(timer);
+    unsubscribe();
+  };
+}

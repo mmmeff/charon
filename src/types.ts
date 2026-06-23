@@ -521,6 +521,79 @@ export interface AgentLine {
 }
 
 // ---------------------------------------------------------------------------
+// Swarms — a single composer submission fanned out to N parallel Contenders
+// sharing one prompt/selection/harness/mode, differing only by model
+// (+optional reasoning). The user compares Trials and promotes a single
+// Winner (Race mode, v1). See CONTEXT.md + docs/adr/000[123].
+// ---------------------------------------------------------------------------
+
+/** v1 supports only Race. Consensus (union-merge) is an additive future mode
+ *  and is tolerated on hydrate (skipped, not crashed) per ADR-0003. */
+export type SwarmMode = "race";
+
+export type SwarmStatus = "running" | "resolved" | "abandoned";
+
+/** Kick-off flows where the swarm toggle is offered (CONTEXT.md v1 scope). */
+export type SwarmFlowKind = "draft_edit" | "draft_create" | "draft_question" | "review";
+
+/** Shared trigger context for every contender in a swarm. */
+export interface SwarmTrigger {
+  repo: string;
+  /** null for draft_create (no PR yet exists). */
+  prNumber: number | null;
+  prTitle: string;
+  prompt: string;
+  selection?: LineSelection | null;
+  /** review flow subvariant; only meaningful when flowKind === "review". */
+  reviewKind?: "self" | "teammate";
+}
+
+/** A contender's one-shot model (and optional reasoning) pick. Reasoning here
+ *  is LOCAL to the contender — it must never mutate GlobalConfig (Q5/CONTEXT). */
+export interface SwarmContenderSpec {
+  id: string;
+  model: string;
+  /** "" / undefined = inherit the harness/per-flow default (ReasoningPicker semantics). */
+  reasoning?: string;
+}
+
+/** One slot in a swarm. The spawned AgentRun lives in the agent store keyed by
+ *  `runId`; this record carries the per-contender worktree reference for
+ *  mutable flows so on restart the held trial's worktree can be re-leased and
+ *  the winner's local commit pushed once (ADRs 0002/0003). */
+export interface SwarmContender extends SwarmContenderSpec {
+  /** the spawned AgentRun id (registered in useAgentStore). */
+  runId: string;
+  /** present only for mutable flow kinds (draft_edit/draft_create): the
+   *  held worktree that survives past run completion until the swarm resolves. */
+  worktree?: {
+    path: string;
+    localBranch: string;
+    prBranch: string;
+    clonePath: string;
+    persistent: boolean;
+    baseSha: string;
+  };
+}
+
+/** A persisted Swarm record. Hydrates across restart (ADR-0003): in-flight
+ *  contender runs become `killed` (existing initAgentPersistence behavior),
+ *  the swarm re-attaches in a "still promotable if all-terminal" state, and
+ *  held worktrees for surviving `done` contenders are re-leased on boot. */
+export interface Swarm {
+  id: string;
+  mode: SwarmMode;
+  flowKind: SwarmFlowKind;
+  trigger: SwarmTrigger;
+  contenders: SwarmContender[];
+  status: SwarmStatus;
+  /** set when a contender is promoted (Race) — Resolved. */
+  winnerContenderId?: string;
+  startedAt: number;
+  resolvedAt?: number;
+}
+
+// ---------------------------------------------------------------------------
 // Proposals — every GitHub-facing write is one of these, gated on approval.
 // ---------------------------------------------------------------------------
 

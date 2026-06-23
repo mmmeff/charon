@@ -6,7 +6,15 @@ import { RepoPoller, usePrData } from "../lib/events";
 import type { FlowContext } from "../lib/flows";
 import { loadSkills } from "../lib/skills";
 import { initAgentPersistence } from "../lib/agents";
-import { useAgentStore, useGlobalConfig, useRepoStore, useSkillStore, useUiStore } from "../lib/store";
+import {
+  initSwarmPersistence,
+  useAgentStore,
+  useGlobalConfig,
+  useRepoStore,
+  useSkillStore,
+  useSwarmStore,
+  useUiStore,
+} from "../lib/store";
 import {
   actionForShortcutEvent,
   formatShortcut,
@@ -143,9 +151,13 @@ export function RepoApp({ repo }: { repo: string }) {
     // remember this repo so the next app boot reopens it directly
     void useGlobalConfig.getState().setLastRepo(repo);
     // restore agent history and keep persisting it across restarts
-    let cleanup: (() => void) | undefined;
-    void initAgentPersistence(repo).then((c) => (cleanup = c));
-    return () => cleanup?.();
+    let cleanups: Array<() => void> = [];
+    // initAgentPersistence first — it marks in-flight runs as killed on restart.
+    // initSwarmPersistence runs after so it sees the post-restart contender
+    // statuses and re-leases held worktrees accordingly (ADR-0003 hydrate order).
+    void initAgentPersistence(repo).then((c) => cleanups.push(c));
+    void initSwarmPersistence(repo).then((c) => cleanups.push(c));
+    return () => cleanups.forEach((c) => c());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo]);
 

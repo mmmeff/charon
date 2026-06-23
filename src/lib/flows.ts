@@ -70,6 +70,10 @@ const MAX_DIFF_CHARS = 90_000;
  * explicit pick at launch > per-flow override > global default.
  * Configured ids the CLI doesn't list are skipped (install defaults may
  * reference models a given Cursor setup doesn't have).
+ *
+ * For Swarms the contender's per-slot `{model, reasoning?}` pick is the most
+ * specific tier (ADR-0001: one harness per swarm, contenders vary by model).
+ * It is threaded through the same `explicit` arg so callers do not branch.
  */
 export function resolveModel(ctx: FlowContext, explicit?: string, kind?: string): string {
   const known = (m?: string) =>
@@ -171,8 +175,12 @@ of what you did for the activity log.`
  * its diff. The worktree HEAD advances only when the agent actually committed;
  * if it didn't (no change needed) HEAD still equals the tip it started from and
  * we record nothing. Best-effort — a failure here must never sink the run.
+ *
+ * Exported for the Swarm layer: a mutable contender's "commit but do NOT push"
+ * onDone is just this call (ADR-0002). The Winner's single-push happens later,
+ * in the swarm module's promote-step, once the user picks.
  */
-async function recordPushedCommit(runId: string, wt: Worktree): Promise<void> {
+export async function recordPushedCommit(runId: string, wt: Worktree): Promise<void> {
   try {
     const head = await worktreeHead(wt);
     if (head && head !== wt.baseSha) {
@@ -190,7 +198,7 @@ interface DraftPrMetadata {
   summary?: string;
 }
 
-function extractDraftPrJson(text: string): DraftPrMetadata | null {
+export function extractDraftPrJson(text: string): DraftPrMetadata | null {
   const m = /<draft-pr>\s*([\s\S]*?)\s*<\/draft-pr>/i.exec(text);
   if (!m) return null;
   try {
@@ -270,7 +278,10 @@ function ghRepoArg(ctx: FlowContext): string {
   }
 }
 
-async function createDraftPrWithGh(
+/** Exported for the Swarm layer: a draft_create Swarm's Winner is the one
+ *  contender the user promoted, and `gh pr create` runs exactly once on its
+ *  local commit (ADR-0002). */
+export async function createDraftPrWithGh(
   ctx: FlowContext,
   wt: Worktree,
   baseBranch: string,

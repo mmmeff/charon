@@ -2,15 +2,17 @@ import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { cleanResultText } from "../lib/agents";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/defaults";
-import { runDraftEdit, runDraftQuestion, runReviewFlow, runSelfReviewFlow } from "../lib/flows";import { interpolate, prVars } from "../lib/template";
-import { useAgentStore, useRepoStore } from "../lib/store";
-import type { AgentRun, LineSelection, PrSummary } from "../types";
+import { runDraftEdit, runDraftQuestion, runReviewFlow, runSelfReviewFlow } from "../lib/flows";import { interpolate, prVars, uid } from "../lib/template";
+import { startSwarm } from "../lib/swarm";
+import { useAgentStore, useRepoStore, useSwarmStore } from "../lib/store";
+import type { AgentRun, LineSelection, PrSummary, SwarmContenderSpec } from "../types";
 import { timeAgo } from "../lib/ui";
 import { AgentCard } from "./AgentCard";
 import { Badge, Spinner } from "./common";
 import { Markdown } from "./Markdown";
 import { ModelPicker, ReasoningPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
+import { SwarmHost } from "./SwarmHost";
 import { useFlow } from "./flow";
 
 export type ComposerMode = "ask" | "edit" | "comment" | "review";
@@ -89,6 +91,35 @@ export function Composer({
   const [error, setError] = useState("");
   // one-shot model pick: local to this composer instance, no cross-form memory
   const [model, setModel] = useState("");
+  // Swarm opt-in (Q4: default off — single-run path is byte-identical when off).
+  // Only for edit/ask modes (v1-wired flow kinds). Contenders differ by model;
+  // reasoning is shared via the footer ReasoningPicker (v1: no per-contender
+  // reasoning — the spec field exists for forward-compat).
+  const swarmSupported = mode === "edit" || mode === "ask";
+  const [swarm, setSwarm] = useState(false);
+  const [contenders, setContenders] = useState<SwarmContenderSpec[]>([]);
+  const toggleSwarm = () => {
+    if (!swarm) {
+      // carry the current single-pick into the first contender row
+      setContenders([{ id: uid("c-"), model }]);
+    } else {
+      // collapsing back: carry contender[0]'s model back to the single picker
+      if (contenders[0]) setModel(contenders[0].model);
+      setContenders([]);
+    }
+    setSwarm(!swarm);
+  };
+  const addContender = () => {
+    if (contenders.length >= 3) return;
+    setContenders([...contenders, { id: uid("c-"), model: "" }]);
+  };
+  const removeContender = (id: string) => {
+    if (contenders.length <= 1) return;
+    setContenders(contenders.filter((c) => c.id !== id));
+  };
+  const setContenderModel = (id: string, m: string) => {
+    setContenders(contenders.map((c) => (c.id === id ? { ...c, model: m } : c)));
+  };
   // Slice to just the run we care about (a review on this PR still
   // starting/running). Returns a single AgentRun ref; default `Object.is`
   // equality means we re-render only when the matching review run updates —
@@ -116,8 +147,23 @@ export function Composer({
     setBusy(true);
     setError("");
     try {
-      const m = model || undefined;
-      if (mode === "ask") {
+      const flowKind = mode === "ask" ? "draft_question" : mode === "edit" ? "draft_edit" : null;
+      if (swarm && swarmSupported && flowKind) {
+        await startSwarm({
+          ctx,
+          flowKind,
+          trigger: {
+            repo: ctx.repo,
+            prNumber: pr.number,
+            prTitle: pr.title,
+            prompt: text,
+            selection: selection ?? null,
+          },
+          contenders,
+        });
+      } else {
+        const m = model || undefined;
+        if (mode === "ask") {
         await runDraftQuestion(ctx, pr, text, selection, m);
       } else if (mode === "edit") {
         await runDraftEdit(ctx, pr, selection, text, m);
@@ -139,6 +185,7 @@ export function Composer({
         const task = interpolate(text.trim() || reviewPrompt, { ...prVars(pr), repo: ctx.repo });
         if (reviewKind === "self") await runSelfReviewFlow(ctx, pr, m, task, selection);
         else await runReviewFlow(ctx, pr, task, m, selection);
+      }
       }
       setText("");
       onClose?.();
@@ -193,7 +240,7 @@ export function Composer({
           />
           <div className="composer-footer">
             <div className="composer-controls">
-              {mode !== "comment" && (
+              {mode !== "comment" && !swarm && (
                 <>
                   <ModelPicker
                     value={model}
@@ -205,8 +252,42 @@ export function Composer({
                   />
                 </>
               )}
+              {mode !== "comment" && swarm && swarmSupported && (
+                <>
+                  <ReasoningPicker
+                    flowKind={mode === "edit" ? "draft_edit" : "draft_question"}
+                  />
+                  <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 4 }}>
+                    {contenders.map((c, i) => (
+                      <div key={c.id} className="row" style={{ alignItems: "center", gap: 4 }}>
+                        <span className="subtle" style={{ fontSize: 11, minWidth: 18 }}>#{i + 1}</span>
+                        <ModelPicker
+                          value={c.model}
+                          onChange={(m) => setContenderModel(c.id, m)}
+                          flowKind={mode === "edit" ? "draft_edit" : "draft_question"}
+                        />
+                        {contenders.length > 1 && (
+                          <button className="small" onClick={() => removeContender(c.id)}>−</button>
+                        )}
+                      </div>
+                    ))}
+                    {contenders.length < 3 && (
+                      <button className="small" onClick={addContender}>+ contender</button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
             <div className="composer-actions">
+              {swarmSupported && (
+                <button
+                  className={`small ${swarm ? "primary" : ""}`}
+                  onClick={toggleSwarm}
+                  title={swarm ? "back to single run" : "fan out to N parallel contenders"}
+                >
+                  Swarm
+                </button>
+              )}
               {onClose && <button onClick={onClose}>Cancel</button>}
               <button className="primary composer-submit" disabled={busy || !canSubmit} onClick={() => void submit()}>
                 {busy ? <Spinner /> : null}
@@ -221,8 +302,22 @@ export function Composer({
   );
 }
 
-/** Recent Ask/Change runs for a PR — answers and push confirmations. */
+/** Recent Ask/Change runs for a PR — answers and push confirmations.
+ *  When an active Swarm exists for this PR, mounts SwarmHost instead (Q4: the
+ *  no-swarm path below is byte-identical to before — the swarm check is the
+ *  only additive branch, and it short-circuits before the existing feed). */
 export function RunResults({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?: () => void }) {
+  // Active swarm? Mount the comparison host instead of the single-run feed.
+  const repo = useRepoStore((s) => s.repo);
+  const swarmActive = useSwarmStore((s) => {
+    for (const id of s.order) {
+      const sw = s.swarms[id];
+      if (sw && sw.trigger.repo === repo && sw.trigger.prNumber === pr.number && sw.status === "running") return true;
+    }
+    return false;
+  });
+  if (swarmActive) return <SwarmHost pr={pr} onReloadDiff={onReloadDiff} />;
+
   // All of this PR's draft_edit / draft_question runs (most recent first).
   // No cap: followup Ask runs are newer than their root, so a small slice risked
   // orphaning them — fetch everything and slice roots for display below.

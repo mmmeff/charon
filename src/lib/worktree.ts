@@ -279,6 +279,17 @@ export function preserveWorktree(wt: Worktree): void {
 }
 
 /**
+ * Re-take the in-memory lease for a worktree that survived a restart while a
+ * mutable Swarm was awaiting promotion (ADR-0003). Called from the swarm
+ * hydration boot step for every surviving `done` contender's recorded
+ * worktree — without it, the restarted app would hand the still-held slot to
+ * a new agent and clobber the parked trial.
+ */
+export function reLeaseWorktree(path: string): void {
+  leases.add(path);
+}
+
+/**
  * Reclaim the persistent worktree slots for a branch whose PR closed/merged.
  * Slots still in use by an agent are skipped.
  */
