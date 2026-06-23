@@ -170,8 +170,17 @@ jobs:
           TAG="v${APP_VER}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git tag -l "$TAG" | grep -qFx "$TAG"; then
-            # Tag the built commit only now that publish succeeded — failed builds never orphan a tag.
-            git tag "$TAG" HEAD
-            git push origin "$TAG"
+          # tauri-action publishes the release (and therefore the tag) via the
+          # GitHub API during the build, so the remote may already have this
+          # tag even though this checkout (taken before the build) doesn't.
+          # A local-only `git tag -l` check misses that and tries to push a
+          # fresh tag, which the remote rejects with "(already exists)".
+          # Probe the remote instead — if the tag is there, tauri-action already
+          # did the work; otherwise we tag the built commit now that publish
+          # succeeded (failed builds never leave an orphaned tag).
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q "${TAG}"; then
+            echo "Tag ${TAG} already exists on origin; nothing to do."
+            exit 0
           fi
+          git tag "$TAG" HEAD
+          git push origin "$TAG"
