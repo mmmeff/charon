@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { buildSplitRows, hideWhitespaceChanges, snippetFor } from "../lib/diff";
 import { highlightFileLines, langForPath } from "../lib/highlight";
-import { useUiStore } from "../lib/store";
+import { useGlobalConfig, useUiStore } from "../lib/store";
 import type { FileDiff, LineSelection } from "../types";
 import { Badge } from "./common";
 import { FileTree, type FileTreeMarkers } from "./FileTree";
@@ -61,6 +61,29 @@ export function DiffViewer({
   const [sel, setSel] = useState<LineSelection | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
+  const { config: global } = useGlobalConfig();
+
+  // Glob-style patterns (e.g. "package-lock.json", "vendor/**") compiled once
+  // per mount/config change into a matcher. `*` matches any characters in the
+  // full path, `?` matches a single char; everything else is escaped.
+  const autoCollapse = useMemo(() => {
+    const pats = global?.diffAutoCollapsePatterns;
+    if (!pats?.length) return null;
+    const re = pats.map(
+      (p) =>
+        new RegExp(
+          "^" +
+            p
+              .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+              .replace(/\*/g, ".*")
+              .replace(/\?/g, ".") +
+            "$",
+          "i"
+        )
+    );
+    return (path: string) => re.some((r) => r.test(path));
+  }, [global?.diffAutoCollapsePatterns]);
+
   // ---- per-file "viewed" state (path → content hash, persisted) ----
   // keyed by a hash of the file's diff so a file that changes after being
   // marked comes back as unviewed, GitHub-style
@@ -112,6 +135,25 @@ export function DiffViewer({
   );
 
   const keyOf = (f: FileDiff) => f.newPath || f.oldPath;
+
+  // Seed auto-collapse from patterns whenever a new diff loads, without
+  // overriding an explicit expand/collapse the user made on this diff.
+  // `files` stabilizes per diff load, so this fires once per PR/diff.
+  useEffect(() => {
+    if (!autoCollapse) return;
+    setCollapsed((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const f of files) {
+        const path = keyOf(f);
+        if (!(path in prev) && autoCollapse(path)) {
+          next[path] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [files, autoCollapse]);
 
   const fileMarkers = useMemo(() => {
     const next: FileTreeMarkers = {};

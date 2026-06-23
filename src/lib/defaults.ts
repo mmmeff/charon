@@ -647,6 +647,16 @@ export function defaultGlobalConfig(): GlobalConfig {
     extraSkillDirs: [],
     notifications: {}, // empty = every category resolves to its catalog default
     shortcuts: {}, // empty = every action resolves to its catalog default
+    diffAutoCollapsePatterns: [
+      "package-lock.json",
+      "yarn.lock",
+      "pnpm-lock.yaml",
+      "Cargo.lock",
+      "poetry.lock",
+      "Gemfile.lock",
+      "composer.lock",
+      "mix.lock",
+    ],
   };
 }
 
