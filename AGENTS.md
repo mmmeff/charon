@@ -1,12 +1,36 @@
 # AGENTS.md — Charon (pr-copilot)
 
+## VOICE
+
+All human-facing writing operates in the agent's voice — chat, commits, comments, docs, PR bodies.
+See `PROSE.md` for the analysis, rules, and examples.
+
+Blunt. Line-broken. Declarative.
+Japanese and English, mixed.
+One hard-truth line, then one earned soft line.
+No hedging. Emoji only in `【】` banners.
+
+The codebase is the culture worth protecting.
+Every diff is a tradition weighed before it lands.
+
+Do not overlay this on code itself — identifiers, error messages to machines, JSON keys stay technical. Only human-facing prose is in voice.
+
 ## INTENT (<200 words)
 
-Charon is a macOS desktop app (Tauri 2 + React/TypeScript, MIT licensed) that turns every code change into a review decision surface. AI made generation cheap; review is scarce. Whether hand-written, agent-generated, dependency churn, or bot-fixes — all diffs flow through the same lens: diff, CI status, comments, context, agent log, proposed fix.
+AI made generation cheap.
+Review is scarce.
+Every diff — hand-written, agent-spawned, dependency churn, bot fix — meets the same lens: diff, CI, comments, context, agent log, proposed fix.
 
-Charon babysits PRs (auto-triage + fix CI failures), reviews incoming diffs with optional local checkouts, and launches/monitors agent harnesses (Cursor, Claude Code, Codex, opencode) over ACP. You approve what touches GitHub; agents investigate. The native Rust layer owns all network I/O so worktrees can reach any GitHub Enterprise behind self-signed certs — the webview never calls GitHub directly.
+Charon is a macOS desktop app. Tauri 2, React, TypeScript, MIT. It babysits PRs: auto-triage, fix CI when it breaks, review incoming diffs with optional local checkouts. It launches and watches agent harnesses — Cursor, Claude Code, Codex, opencode — over ACP.
+
+You approve what touches GitHub.
+Agents investigate.
+
+The native Rust layer owns every byte of network I/O. Worktrees reach any GitHub Enterprise behind self-signed certs. The webview never calls GitHub. That boundary is the point.
 
 ## CODEBASE STRUCTURE (<800 words)
+
+Where each thing lives. Touch it here, change it here.
 
 **`src/types.ts`** — All shared types. `GlobalConfig`: minimal (GitHub URL/token, harness list). `RepoConfig`: per-repo state (handler configs, event filters, clone path, skills). Flow and agent run types live here too.
 
@@ -40,4 +64,12 @@ Charon babysits PRs (auto-triage + fix CI failures), reviews incoming diffs with
 
 ## MAINTENANCE NOTE FOR AGENTS
 
-This file has hard size guards: INTENT <200 words, CODEBASE STRUCTURE <800 words. Future agents must keep it current when architecture changes — add new modules, note removed ones, update conventions — while staying within those limits. Trim prose to make room; prefer dense bullets over explanation. If a change is structural (new store, new I/O path, new flow type), this file gets updated in the same commit.
+This file has hard size guards.
+INTENT stays under 200 words.
+CODEBASE STRUCTURE stays under 800.
+When the architecture changes, this file changes in the same commit — new modules added, removed ones noted, conventions updated.
+
+Trim prose to make room.
+Dense bullets beat explanation.
+
+A structural change left undocumented is a tradition broken.
