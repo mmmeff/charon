@@ -83,7 +83,9 @@ export interface GlobalConfig {
   notifications: Record<string, boolean>;
   /** Keyboard shortcut overrides keyed by ShortcutActionId; missing keys use
    *  catalog defaults, null means explicitly unassigned. */
-  shortcuts: ShortcutMap;
+   shortcuts: ShortcutMap;
+  /** Glob-style filename patterns whose diffs are collapsed on load in every diff view. */
+  diffAutoCollapsePatterns?: string[];
 }
 
 export interface KeyBinding {

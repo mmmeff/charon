@@ -69,6 +69,7 @@ const NAV_GROUPS: { group: string; items: { id: string; label: string }[] }[] = 
   { group: "Checks", items: [{ id: "s-ci", label: "Checks" }] },
   { group: "Notifications", items: [{ id: "s-notifications", label: "Notifications" }] },
   { group: "Automation", items: [{ id: "s-events", label: "Automation" }] },
+  { group: "Diffs", items: [{ id: "s-diffs", label: "Auto-collapse" }] },
 ];
 
 const groupId = (g: string) => "g-" + g.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -736,7 +737,60 @@ export function SettingsView() {
         </p>
         <EventCatalogEditor config={config} update={update} />
       </div>
+      <div className="settings-section" id="s-diffs">
+        <h3>Auto-collapse (global)</h3>
+        <p className="subtle" style={{ maxWidth: "76ch" }}>
+          Diffs whose file names match any pattern here start collapsed on load — "yarn.lock"
+          collapses it at any depth, "*.test.ts" catches test diffs anywhere. Patterns are
+          glob-style (<code>*</code> and <code>?</code> wildcards), one per line; empty lines are
+          ignored. Matches run against the file name only, not the directory path.
+        </p>
+        <label className="field">
+          <span>Collapse patterns</span>
+          <textarea
+            rows={6}
+            defaultValue={(global.diffAutoCollapsePatterns ?? []).join("\n")}
+            onBlur={(e) => {
+              const patterns = e.target.value
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean);
+              void saveGlobal({ ...global, diffAutoCollapsePatterns: patterns });
+              markSaved();
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const ta = e.currentTarget;
+              const patterns = ta.value
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean);
+              void saveGlobal({ ...global, diffAutoCollapsePatterns: patterns });
+              markSaved();
+            }}
+            placeholder={"*.lock\npackage-lock.json\n*.snap"}
+            spellCheck={false}
+          />
+          <small>
+            Write one pattern per line. Saved on blur or Enter. Empty lines are ignored.
+          </small>
+        </label>
+        <div className="field">
+          <span>Active patterns</span>
+          {(global.diffAutoCollapsePatterns ?? []).length === 0 ? (
+            <small className="subtle">None — all diffs start expanded.</small>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {(global.diffAutoCollapsePatterns ?? []).map((p) => (
+                <li key={p}>
+                  <code>{p}</code>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
+      </div>
+         </div>
         </div>
       ) : (
         <ShortcutSettings global={global} save={saveGlobal} onSaved={markSaved} />
