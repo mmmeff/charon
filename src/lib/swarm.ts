@@ -41,6 +41,7 @@ import {
 } from "./flows";
 import { applySkills } from "./skills";
 import { native } from "./tauri";
+import { parseUnifiedDiff } from "./diff";
 import { truncate, uid } from "./template";
 import { useAgentStore, useSwarmStore } from "./store";
 import {
@@ -53,6 +54,7 @@ import {
 } from "./worktree";
 import type {
   AgentRun,
+  FileDiff,
   LineSelection,
   PrSummary,
   Swarm,
@@ -83,6 +85,46 @@ export function activeSwarmFor(
   return undefined;
 }
 
+/** The most recent swarm for a (repo, prNumber, flow?) tuple, regardless of
+ *  status. Used to mount the tabbed SwarmHost consistently — running, resolved
+ *  or abandoned — so the N contenders of a swarm never appear as N separate
+ *  list items. Returns undefined when no swarm has ever existed for the key. */
+export function swarmFor(
+  repo: string,
+  prNumber: number | null,
+  flowKind?: SwarmFlowKind
+): Swarm | undefined {
+  const { swarms, order } = useSwarmStore.getState();
+  for (const id of order) {
+    const s = swarms[id];
+    if (!s || s.trigger.repo !== repo || s.trigger.prNumber !== prNumber) continue;
+    if (flowKind && s.flowKind !== flowKind) continue;
+    return s;
+  }
+  return undefined;
+}
+
+/** Resolve the parent swarm of a run. Uses the forward-set `swarmId` field
+ *  when present (fresh swarms); falls back to a reverse-index lookup over
+ *  swarm.contenders for runs hydrated from older persisted state that lack
+ *  the field. The (runId → swarm) link is the only thing the UI needs to
+ *  group a swarm's N contenders as tabs in one card. */
+export function swarmForRun(run: AgentRun): Swarm | undefined {
+  if (run.swarmId) return useSwarmStore.getState().swarms[run.swarmId];
+  const { swarms } = useSwarmStore.getState();
+  for (const s of Object.values(swarms)) {
+    if (s.contenders.some((c) => c.runId === run.id)) return s;
+  }
+  return undefined;
+}
+
+/** All contenders' AgentRuns for a swarm, in spec order. Missing runs (evicted
+ *  from persistence) read as undefined and render as a "run not found" pane. */
+export function contenderRunsOf(swarm: Swarm): (AgentRun | undefined)[] {
+  const runs = useAgentStore.getState().runs;
+  return swarm.contenders.map((c) => runs[c.runId]);
+}
+
 /** All contenders terminal? Promotion requires this (Q5 strict). */
 export function allContendersTerminal(s: Swarm): boolean {
   const runs = useAgentStore.getState().runs;
@@ -97,6 +139,27 @@ export function allContendersTerminal(s: Swarm): boolean {
  *  truncation on restart) reads undefined and reads as terminal-but-not-done. */
 export function contenderRun(contender: SwarmContender): AgentRun | undefined {
   return useAgentStore.getState().runs[contender.runId];
+}
+
+/** The contender's local `baseSha..HEAD` diff, parsed into FileDiff[] for the
+ *  compare host. Only meaningful for mutable flows (draft_edit/draft_create)
+ *  where the contender holds a worktree past run completion; returns [] for
+ *  read-only flows (review/question) and for any git/parse failure. Best-effort:
+ *  an empty result means the agent committed nothing (HEAD == baseSha) — the
+ *  UI surfaces that as "no file changes". */
+export async function contenderDiffFiles(contender: SwarmContender): Promise<FileDiff[]> {
+  const wt = contender.worktree;
+  if (!wt) return [];
+  try {
+    const res = await native.runGit(
+      ["diff", "--no-color", "--no-renames", `${wt.baseSha}..HEAD`],
+      wt.path
+    );
+    if (res.code !== 0) return [];
+    return parseUnifiedDiff(res.stdout);
+  } catch {
+    return [];
+  }
 }
 
 /** Resolve a contender's effective model via the existing most-specific-wins
@@ -160,7 +223,8 @@ async function spawnDraftEditContender(
   pr: PrSummary,
   selection: LineSelection | null,
   instruction: string,
-  spec: SwarmContenderSpec
+  spec: SwarmContenderSpec,
+  swarmId: string
 ): Promise<{ runId: string; worktree: Worktree }> {
   const wt = await createWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);
   const prompt = draftEditContenderPrompt(ctx, pr, wt, selection, instruction);
@@ -175,6 +239,8 @@ async function spawnDraftEditContender(
       model: contenderModel(ctx, "draft_edit", spec.model),
       binary: ctx.global.cursorBinary,
       cwd: wt.path,
+      swarmId,
+      contenderId: spec.id,
       onDone: async (run) => {
         try {
           await recordPushedCommit(run.id, wt);
@@ -229,7 +295,8 @@ async function spawnDraftQuestionContender(
   pr: PrSummary,
   question: string,
   selection: LineSelection | null,
-  spec: SwarmContenderSpec
+  spec: SwarmContenderSpec,
+  swarmId: string
 ): Promise<{ runId: string }> {
   // The shared prompt body lives in flows.runDraftQuestion — but that flow's
   // default behaviour is enough for the swarm too: it spawns one read-only
@@ -243,7 +310,9 @@ async function spawnDraftQuestionContender(
     question,
     selection,
     contenderModel(ctx, "draft_question", spec.model),
-    undefined
+    undefined,
+    swarmId,
+    spec.id
   );
   return { runId };
 }
@@ -317,7 +386,8 @@ End your final message with EXACTLY ONE draft metadata block:
 async function spawnDraftCreateContender(
   ctx: FlowContext,
   instruction: string,
-  spec: SwarmContenderSpec
+  spec: SwarmContenderSpec,
+  swarmId: string
 ): Promise<{ runId: string; worktree: Worktree; baseBranch: string }> {
   const task = instruction.trim();
   if (!task) throw new Error("describe the draft PR to create");
@@ -336,6 +406,8 @@ async function spawnDraftCreateContender(
       model: contenderModel(ctx, "draft_create", spec.model),
       binary: ctx.global.cursorBinary,
       cwd: wt.path,
+      swarmId,
+      contenderId: spec.id,
       draftCreate: {
         baseBranch,
         branch: prBranch,
@@ -486,7 +558,8 @@ async function spawnReviewContender(
   task: string,
   selection: LineSelection | null,
   reviewKind: "self" | "teammate",
-  spec: SwarmContenderSpec
+  spec: SwarmContenderSpec,
+  swarmId: string
 ): Promise<{ runId: string; reviewContext: { diffText: string; reviewKind: "self" | "teammate"; headSha: string } }> {
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   const diff = truncate(diffText, MAX_DIFF_CHARS, "\n…[diff truncated — review what is shown]");
@@ -504,6 +577,8 @@ async function spawnReviewContender(
       binary: ctx.global.cursorBinary,
       cwd: wt?.path,
       mode: "ask",
+      swarmId,
+      contenderId: spec.id,
       onDone: async () => {
         if (wt) await releaseWorktree(wt);
       },
@@ -621,20 +696,21 @@ export async function startSwarm(input: StartSwarmInput): Promise<Swarm> {
           pr,
           trigger.selection ?? null,
           trigger.prompt,
-          spec
+          spec,
+          id
         );
         spawned = { runId: r.runId, worktree: r.worktree };
       } else if (flowKind === "draft_create") {
-        const r = await spawnDraftCreateContender(ctx, trigger.prompt, spec);
+        const r = await spawnDraftCreateContender(ctx, trigger.prompt, spec, id);
         spawned = { runId: r.runId, worktree: r.worktree, baseBranch: r.baseBranch };
       } else if (flowKind === "draft_question") {
         if (!pr) throw new Error("draft_question swarm requires an existing PR");
-        const r = await spawnDraftQuestionContender(ctx, pr, trigger.prompt, trigger.selection ?? null, spec);
+        const r = await spawnDraftQuestionContender(ctx, pr, trigger.prompt, trigger.selection ?? null, spec, id);
         spawned = { runId: r.runId };
       } else if (flowKind === "review") {
         if (!pr) throw new Error("review swarm requires an existing PR");
         const reviewKind = trigger.reviewKind ?? "self";
-        const r = await spawnReviewContender(ctx, pr, trigger.prompt, trigger.selection ?? null, reviewKind, spec);
+        const r = await spawnReviewContender(ctx, pr, trigger.prompt, trigger.selection ?? null, reviewKind, spec, id);
         spawned = { runId: r.runId, reviewContext: r.reviewContext };
       } else {
         throw new Error(`swarm flowKind "${flowKind}" is not wired`);

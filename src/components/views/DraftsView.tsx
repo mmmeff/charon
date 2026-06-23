@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { deleteDraftCreateArtifacts } from "../../lib/flows";
 import { usePrData } from "../../lib/events";
 import { stackedPrList } from "../../lib/pr-stacks";
-import { useAgentStore, useUiStore } from "../../lib/store";
+import { useAgentStore, useSwarmStore, useUiStore } from "../../lib/store";
 import { formatShortcut, resolveShortcutMap } from "../../lib/shortcuts";
 import { age, type SortKey } from "../../lib/ui";
-import type { AgentRun } from "../../types";
+import type { AgentRun, Swarm } from "../../types";
 import { AgentCard } from "../AgentCard";
 import { ApprovalsBadge, Badge, CiBadge, EmptyState, RunningAgentsChip, SortPicker, Spinner } from "../common";
 import { useFlow } from "../flow";
@@ -14,6 +14,7 @@ import { Sidebar } from "../Panels";
 import { PrStackCard } from "../PrStackList";
 import { PrWorkspace } from "../PrWorkspace";
 import { NewDraftWorkspace } from "../NewDraftWorkspace";
+import { SwarmHost } from "../SwarmHost";
 
 /**
  * Drafts: the user's own draft PRs. Line-scoped feedback triggers an agent
@@ -48,6 +49,23 @@ export function DraftsView() {
         )
     )
   );
+  // Group pending runs that share a swarmId into ONE row (winner if present,
+  // else first one). The row opens a workspace that renders SwarmHost with N
+  // tabs — so the swarm's contenders never appear as N disconnected rows.
+  const swarmsById = useSwarmStore((s) => s.swarms);
+  const pendingItems = useMemo(() => {
+    const seen = new Set<string>();
+    const items: AgentRun[] = [];
+    for (const r of pendingDraftRuns) {
+      if (r.swarmId && swarmsById[r.swarmId]) {
+        if (swarmsById[r.swarmId].status === "abandoned") continue;
+        if (seen.has(r.swarmId)) continue;
+        seen.add(r.swarmId);
+      }
+      items.push(r);
+    }
+    return items;
+  }, [pendingDraftRuns, swarmsById]);
   const setSelected = (n: number) => {
     setCreating(false);
     setSelectedPendingId(null);
@@ -85,7 +103,7 @@ export function DraftsView() {
         <div className="row between" style={{ marginBottom: 8 }}>
           <span className="subtle">
             {drafts.length} draft{drafts.length === 1 ? "" : "s"}
-            {pendingDraftRuns.length > 0 ? ` · ${pendingDraftRuns.length} building` : ""}
+            {pendingItems.length > 0 ? ` · ${pendingItems.length} building` : ""}
           </span>
           <div className="row" style={{ gap: 6 }}>
             {drafts.length > 0 && <SortPicker value={sort} onChange={setSort} />}
@@ -102,11 +120,12 @@ export function DraftsView() {
           </span>
           <span className="draft-create-hint">{newDraftShortcut}</span>
         </button>
-        {drafts.length === 0 && pendingDraftRuns.length === 0 && <p className="subtle">No draft PRs.</p>}
-        {pendingDraftRuns.map((run) => (
+        {drafts.length === 0 && pendingItems.length === 0 && <p className="subtle">No draft PRs.</p>}
+        {pendingItems.map((run) => (
           <PendingDraftCard
-            key={run.id}
+            key={run.swarmId ? `swarm-group-${run.swarmId}:${run.id}` : run.id}
             run={run}
+            swarm={run.swarmId ? swarmsById[run.swarmId] : undefined}
             selected={!creating && visiblePending?.id === run.id}
             onClick={() => selectPending(run.id)}
           />
@@ -179,15 +198,41 @@ export function DraftsView() {
 
 function PendingDraftCard({
   run,
+  swarm,
   selected,
   onClick,
 }: {
   run: AgentRun;
+  swarm?: Swarm;
   selected: boolean;
   onClick: () => void;
 }) {
   const active = isActiveDraftRun(run);
   const status = pendingDraftStatus(run);
+  if (swarm) {
+    // One row per swarm — title from the swarm's trigger prompt, with an N-model
+    // badge. Click opens a workspace that mounts the tabbed SwarmHost.
+    const swarmStatus =
+      swarm.status === "running" ? { label: "under construction", color: "blue" as const }
+      : swarm.status === "resolved" ? { label: "resolved", color: "green" as const }
+      : { label: "abandoned", color: "gray" as const };
+    const title = swarmPromptTitle(swarm);
+    return (
+      <div
+        className={`card selectable pending-draft-card ${selected ? "selected" : ""} ${active ? "active" : ""}`}
+        onClick={onClick}
+      >
+        <h4>{title}</h4>
+        <div className="meta">
+          <Badge color={swarmStatus.color}>{swarmStatus.label}</Badge>
+          <Badge color="gray">swarm · {swarm.contenders.length} models</Badge>
+          <Badge color="gray" title={`started ${new Date(swarm.startedAt).toLocaleString()}`}>
+            {age(new Date(swarm.startedAt).toISOString())}
+          </Badge>
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       className={`card selectable pending-draft-card ${selected ? "selected" : ""} ${active ? "active" : ""}`}
@@ -207,6 +252,14 @@ function PendingDraftCard({
   );
 }
 
+/** Short title for a swarm: prefer the user's instruction prompt (matches
+ *  PendingDraftCard's standalone title derivation). */
+function swarmPromptTitle(swarm: Swarm): string {
+  const t = swarm.trigger.prompt.trim();
+  const firstLine = t.split("\n").find((l) => l.trim())?.trim() ?? "";
+  return compactTitle(firstLine || t.slice(0, 80)) || "New draft PR";
+}
+
 function PendingDraftWorkspace({ run, onCleared }: { run: AgentRun; onCleared: () => void }) {
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -214,6 +267,10 @@ function PendingDraftWorkspace({ run, onCleared }: { run: AgentRun; onCleared: (
   const active = isActiveDraftRun(run);
   const status = pendingDraftStatus(run);
   const canDeleteArtifacts = run.prNumber == null && run.status !== "done";
+  // If this run is a swarm contender, mount the tabbed SwarmHost — its N
+  // contender cards collapse into one comparison surface (Q4 unaffected: the
+  // standalone run path below is unchanged otherwise).
+  const swarm = useSwarmStore((s) => (run.swarmId ? s.swarms[run.swarmId] : undefined));
 
   const dismiss = () => {
     if (run.draftCreate) {
@@ -244,15 +301,30 @@ function PendingDraftWorkspace({ run, onCleared }: { run: AgentRun; onCleared: (
       <div className="ws-main pr-shell">
         <header className="pr-hero pending-draft-hero">
           <div className="pr-hero-id">
-            <h2>{pendingDraftTitle(run)}</h2>
+            <h2>{swarm ? swarmPromptTitle(swarm) : pendingDraftTitle(run)}</h2>
             <div className="row pr-hero-meta">
-              <Badge color={status.color}>{status.label}</Badge>
-              <Badge color="gray">new draft</Badge>
-              {run.draftCreate?.branch && <span className="subtle">{run.draftCreate.branch}</span>}
+              {swarm ? (
+                <>
+                  <Badge color={swarm.status === "running" ? "blue" : swarm.status === "resolved" ? "green" : "gray"}>
+                    {swarm.status === "running" ? "under construction" : swarm.status === "resolved" ? "resolved" : "abandoned"}
+                  </Badge>
+                  <Badge color="gray">swarm · {swarm.contenders.length} models</Badge>
+                </>
+              ) : (
+                <>
+                  <Badge color={status.color}>{status.label}</Badge>
+                  <Badge color="gray">new draft</Badge>
+                  {run.draftCreate?.branch && <span className="subtle">{run.draftCreate.branch}</span>}
+                </>
+              )}
             </div>
           </div>
           <div className={`pending-draft-agent ${active ? "active" : ""}`}>
-            <AgentCard run={run} defaultOpen />
+            {swarm ? (
+              <SwarmHost swarm={swarm} />
+            ) : (
+              <AgentCard run={run} defaultOpen />
+            )}
           </div>
           {!active && (
             <div className="row pending-draft-actions">

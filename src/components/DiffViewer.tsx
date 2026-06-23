@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { buildSplitRows, hideWhitespaceChanges, snippetFor } from "../lib/diff";
 import { highlightFileLines, langForPath } from "../lib/highlight";
 import { useUiStore } from "../lib/store";
@@ -284,62 +284,70 @@ export function DiffViewer({
     return () => document.removeEventListener("mouseup", up);
   }, [drag, files]);
 
-  const numCellHandlers = (path: string, side: "LEFT" | "RIGHT", num: number | null) => ({
-    onMouseDown: (e: React.MouseEvent) => {
-      if (!selectable || num === null) return;
-      e.preventDefault();
-      setSel(null);
-      setDrag({ path, side, anchor: num, current: num });
-    },
-    onMouseEnter: () => {
-      if (drag && drag.path === path && drag.side === side && num !== null) {
-        setDrag({ ...drag, current: num });
+  const numCellHandlers = useCallback(
+    (path: string, side: "LEFT" | "RIGHT", num: number | null) => ({
+      onMouseDown: (e: React.MouseEvent) => {
+        if (!selectable || num === null) return;
+        e.preventDefault();
+        setSel(null);
+        setDrag({ path, side, anchor: num, current: num });
+      },
+      onMouseEnter: () => {
+        if (drag && drag.path === path && drag.side === side && num !== null) {
+          setDrag({ ...drag, current: num });
+        }
+      },
+    }),
+    [selectable, drag]
+  );
+
+  const isHighlighted = useCallback(
+    (path: string, side: "LEFT" | "RIGHT", num: number | null): boolean => {
+      if (num === null) return false;
+      if (drag && drag.path === path && drag.side === side) {
+        return num >= Math.min(drag.anchor, drag.current) && num <= Math.max(drag.anchor, drag.current);
       }
+      if (sel && sel.path === path && sel.side === side) {
+        return num >= sel.startLine && num <= sel.endLine;
+      }
+      return false;
     },
-  });
+    [drag, sel]
+  );
 
-  const isHighlighted = (path: string, side: "LEFT" | "RIGHT", num: number | null): boolean => {
-    if (num === null) return false;
-    if (drag && drag.path === path && drag.side === side) {
-      return num >= Math.min(drag.anchor, drag.current) && num <= Math.max(drag.anchor, drag.current);
-    }
-    if (sel && sel.path === path && sel.side === side) {
-      return num >= sel.startLine && num <= sel.endLine;
-    }
-    return false;
-  };
-
-  /** Anchor rows + comment form rendered after a diff row, for the given (side, num) identities. */
-  const afterRow = (path: string, entries: { side: "LEFT" | "RIGHT"; num: number | null }[], colSpan: number) => {
-    const out: ReactNode[] = [];
-    for (const e of entries) {
-      if (e.num === null) continue;
-      anchors
-        .filter((a) => a.path === path && a.side === e.side && a.line === e.num)
-        .forEach((a, j) =>
+  const afterRow = useCallback(
+    (path: string, entries: { side: "LEFT" | "RIGHT"; num: number | null }[], colSpan: number) => {
+      const out: ReactNode[] = [];
+      for (const e of entries) {
+        if (e.num === null) continue;
+        anchors
+          .filter((a) => a.path === path && a.side === e.side && a.line === e.num)
+          .forEach((a, j) =>
+            out.push(
+              <tr
+                key={`a-${e.side}-${e.num}-${j}`}
+                className={`comment-anchor-row${a.resolved ? " resolved-anchor" : ""}`}
+              >
+                <td colSpan={colSpan}>
+                  <div className={`inline-comment-box ${a.tone ?? ""}`}>{a.node}</div>
+                </td>
+              </tr>
+            )
+          );
+        if (sel && renderCommentForm && sel.path === path && sel.side === e.side && e.num === sel.endLine) {
           out.push(
-            <tr
-              key={`a-${e.side}-${e.num}-${j}`}
-              className={`comment-anchor-row${a.resolved ? " resolved-anchor" : ""}`}
-            >
+            <tr key={`form-${e.side}-${e.num}`} className="comment-anchor-row">
               <td colSpan={colSpan}>
-                <div className={`inline-comment-box ${a.tone ?? ""}`}>{a.node}</div>
+                <div className="inline-comment-box">{renderCommentForm(sel, () => setSel(null))}</div>
               </td>
             </tr>
-          )
-        );
-      if (sel && renderCommentForm && sel.path === path && sel.side === e.side && e.num === sel.endLine) {
-        out.push(
-          <tr key={`form-${e.side}-${e.num}`} className="comment-anchor-row">
-            <td colSpan={colSpan}>
-              <div className="inline-comment-box">{renderCommentForm(sel, () => setSel(null))}</div>
-            </td>
-          </tr>
-        );
+          );
+        }
       }
-    }
-    return out;
-  };
+      return out;
+    },
+    [anchors, sel, renderCommentForm]
+  );
 
   return (
     <div onMouseLeave={() => drag && setDrag(null)} ref={rootRef}>
@@ -482,9 +490,10 @@ interface TableProps {
   ) => ReactNode[];
 }
 
-function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: TableProps) {
+const UnifiedTable = memo(function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: TableProps) {
   const lang = useMemo(() => langForPath(path), [path]);
   const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
+  const pathSlug = useMemo(() => slug(path), [path]);
   return (
     <div className="diff-scroll">
     <table className="diff-table">
@@ -505,7 +514,7 @@ function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: 
             <tr key={i} className={`${line.type} commentable ${hl ? "sel" : ""}`}>
               <td
                 className="diff-num"
-                id={line.oldNum !== null ? lineDomId(path, "LEFT", line.oldNum) : undefined}
+                id={line.oldNum !== null ? `dl-${pathSlug}-LEFT-${line.oldNum}` : undefined}
                 {...handlers}
                 title="Click or drag to select lines"
               >
@@ -513,7 +522,7 @@ function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: 
               </td>
               <td
                 className="diff-num"
-                id={line.newNum !== null ? lineDomId(path, "RIGHT", line.newNum) : undefined}
+                id={line.newNum !== null ? `dl-${pathSlug}-RIGHT-${line.newNum}` : undefined}
                 {...handlers}
               >
                 {line.newNum ?? ""}
@@ -530,12 +539,13 @@ function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: 
     </table>
     </div>
   );
-}
+});
 
-function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: TableProps) {
+const SplitTable = memo(function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: TableProps) {
   const rows = useMemo(() => buildSplitRows(file.lines), [file]);
   const lang = useMemo(() => langForPath(path), [path]);
   const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
+  const pathSlug = useMemo(() => slug(path), [path]);
   return (
     <div className="diff-scroll">
     <table className="diff-table split">
@@ -567,7 +577,7 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
             <tr key={i} className="commentable">
               <td
                 className={`diff-num num-${lKind} ${lHl ? "cell-sel" : ""}`}
-                id={lNum !== null ? lineDomId(path, "LEFT", lNum) : undefined}
+                id={lNum !== null ? `dl-${pathSlug}-LEFT-${lNum}` : undefined}
                 {...numCellHandlers(path, "LEFT", lNum)}
                 title="Click or drag to select lines"
               >
@@ -585,7 +595,7 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
               </td>
               <td
                 className={`diff-num num-${rKind} ${rHl ? "cell-sel" : ""}`}
-                id={rNum !== null ? lineDomId(path, "RIGHT", rNum) : undefined}
+                id={rNum !== null ? `dl-${pathSlug}-RIGHT-${rNum}` : undefined}
                 {...numCellHandlers(path, "RIGHT", rNum)}
                 title="Click or drag to select lines"
               >
@@ -616,4 +626,4 @@ function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: Ta
     </table>
     </div>
   );
-}
+});

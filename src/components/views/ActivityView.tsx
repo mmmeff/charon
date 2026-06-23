@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
-import type { AgentRun } from "../../types";
+import type { AgentRun, Swarm } from "../../types";
 import { isActiveAgentStatus as isActive, isVisibleAgentRun } from "../../lib/agent-runs";
-import { useAgentStore } from "../../lib/store";
+import { useAgentStore, useSwarmStore } from "../../lib/store";
 import { AgentCard } from "../AgentCard";
+import { SwarmHost } from "../SwarmHost";
 import { EmptyState } from "../common";
 
 type Filter = "all" | "active" | "done" | "failed";
@@ -44,17 +45,56 @@ const groupLabels: Record<GroupKey, string> = {
   later: "Later",
 };
 
-/** Activity Feed: every agent run — its PR, relation, prompt, and live stream. */
+/** A list item is either a standalone run (swarmId missing) or a swarm group
+ *  (any of N contender runs that share a swarmId). Standalone items keep their
+ *  existing AgentCard render; swarm groups render one SwarmHost with N tabs.
+ *  A run whose swarmId points at a missing/evicted Swarm falls back to its
+ *  AgentCard so nothing disappears. */
+type Item =
+  | { kind: "run"; run: AgentRun }
+  | { kind: "swarm"; swarm: Swarm };
+
+function groupItems(runs: AgentRun[], swarmsById: Record<string, Swarm>): Item[] {
+  const items: Item[] = [];
+  const seen = new Set<string>();
+  for (const r of runs) {
+    if (r.swarmId && swarmsById[r.swarmId]) {
+      const sid = r.swarmId;
+      if (seen.has(sid)) continue;
+      seen.add(sid);
+      items.push({ kind: "swarm", swarm: swarmsById[sid] });
+      continue;
+    }
+    items.push({ kind: "run", run: r });
+  }
+  return items;
+}
+
+/** Activity Feed: every agent run — its PR, relation, prompt, and live stream.
+ *  Runs that belong to a swarm are grouped into one tabbed SwarmHost per swarm
+ *  (running or historically resolved/abandoned) so the N contenders never
+ *  appear as N disconnected cards. */
 export function ActivityView() {
   const runs = useAgentStore((s) => s.runs);
   const order = useAgentStore((s) => s.order);
   const clearHistory = useAgentStore((s) => s.clearHistory);
+  const swarms = useSwarmStore((s) => s.swarms);
   const [filter, setFilter] = useState<Filter>("all");
   const [confirmClear, setConfirmClear] = useState(false);
 
   const all = order.map((id) => runs[id]).filter((r) => r && isVisibleAgentRun(r));
-  const activeAgents = all.filter((r) => isActive(r.status));
-  const finishedAgents = all.filter((r) => !isActive(r.status));
+  // Partition by swarm status, not per-run terminal status: a swarm with one
+  // done contender and one still running is STILL running and must appear only
+  // in the active section, never in completed. Resolved/abandoned swarms sink
+  // to completed as a whole (all their contender runs go with them).
+  const activeAgents = all.filter((r) => {
+    if (r.swarmId && swarms[r.swarmId]) return swarms[r.swarmId].status === "running";
+    return isActive(r.status);
+  });
+  const finishedAgents = all.filter((r) => {
+    if (r.swarmId && swarms[r.swarmId]) return swarms[r.swarmId].status !== "running";
+    return !isActive(r.status);
+  });
   const activeCount = activeAgents.length;
   const finishedCount = finishedAgents.length;
 
@@ -82,6 +122,9 @@ export function ActivityView() {
 
   const hasActive = activeCount > 0;
   const hasGroups = groups.length > 0;
+
+  // Active runs grouped into (standalone | swarm) items — one card per item.
+  const activeItems = useMemo(() => groupItems(activeAgents, swarms), [activeAgents, swarms]);
 
   return (
     <div className="main agent-feed">
@@ -124,9 +167,13 @@ export function ActivityView() {
       {/* ---- active agents grid ---- */}
       {hasActive && (
         <div className="agent-grid">
-          {activeAgents.map((r) => (
-            <AgentCard key={r.id} run={r} defaultOpen={true} />
-          ))}
+          {activeItems.map((item, i) =>
+            item.kind === "swarm" ? (
+              <SwarmHost key={`swarm-${item.swarm.id}`} swarm={item.swarm} showDiff={false} />
+            ) : (
+              <AgentCard key={item.run.id} run={item.run} defaultOpen={true} />
+            )
+          )}
         </div>
       )}
 
@@ -142,6 +189,7 @@ export function ActivityView() {
               key={key}
               label={groupLabels[key]}
               runs={runs}
+              swarms={swarms}
               defaultOpen={key === "today"}
               lazy={key === "later"}
             />
@@ -162,15 +210,19 @@ export function ActivityView() {
 
 /** A completed-runs date bucket. The header collapses/expands the contents.
  *  `lazy` (the "Later" bucket) renders only `LATER_PAGE` at a time with a
- *  "Load more" affordance; otherwise the whole bucket renders when open. */
+ *  "Load more" affordance; otherwise the whole bucket renders when open.
+ *  Runs sharing a swarmId render as a single tabbed SwarmHost — the rest
+ *  render as individual AgentCards. */
 function CollapsibleGroup({
   label,
   runs,
+  swarms,
   defaultOpen,
   lazy = false,
 }: {
   label: string;
   runs: AgentRun[];
+  swarms: Record<string, Swarm>;
   defaultOpen: boolean;
   lazy?: boolean;
 }) {
@@ -178,6 +230,9 @@ function CollapsibleGroup({
   const [page, setPage] = useState(0);
   const shown = lazy ? runs.slice(0, page) : runs;
   const hasMore = lazy && runs.length > page;
+  // group the bucket's runs into (run | swarm) items at render time so tabbed
+  // hosts replace the N contender cards inside the bucket.
+  const items = useMemo(() => groupItems(shown, swarms), [shown, swarms]);
 
   const onToggle = () => {
     setOpen((v) => {
@@ -200,9 +255,13 @@ function CollapsibleGroup({
       </button>
       {open && (
         <>
-          {shown.map((r) => (
-            <AgentCard key={r.id} run={r} defaultOpen={false} />
-          ))}
+          {items.map((item, i) =>
+            item.kind === "swarm" ? (
+              <SwarmHost key={`swarm-${item.swarm.id}`} swarm={item.swarm} showDiff={false} />
+            ) : (
+              <AgentCard key={item.run.id} run={item.run} defaultOpen={false} />
+            )
+          )}
           {hasMore && (
             <div className="agent-group-more">
               <button className="small" onClick={() => setPage((c) => c + LATER_PAGE)}>

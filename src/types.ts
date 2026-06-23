@@ -489,6 +489,13 @@ export interface AgentRun {
   hiddenFromActivity?: boolean;
   /** Persisted recovery metadata for new draft PR creation runs. */
   draftCreate?: DraftCreateRunState;
+  /** If this run is one of N contenders in a Swarm: the parent swarm id.
+   *  Forward-set at spawn. Historical/hydrated runs may carry it undefined;
+   *  consumers fall back to a swarmStore reverse-index lookup (see
+   *  `swarmForRun` in lib/swarm). */
+  swarmId?: string;
+  /** If this run is one of N contenders in a Swarm: this contender's id. */
+  contenderId?: string;
   /** For Ask followups: the root Ask run this is a followup to. */
   followUpToRunId?: string;
   /** Raw user-authored prompt text (Ask questions / followups) for display. */

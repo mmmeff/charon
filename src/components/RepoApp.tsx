@@ -182,19 +182,27 @@ export function RepoApp({ repo }: { repo: string }) {
   );
 
   // Poller reads the *latest* context through a ref so config edits apply
-  // without restarting it.
+  // without restarting it. The context object itself is memoized so its
+  // identity stays stable across RepoApp re-renders (the useNow() ticker, poll
+  // updates, active-agent badge changes) — without this, an inline object
+  // literal here would give FlowCtx a new ref every render and force every
+  // `useFlow()` consumer (CommitDiffModal's DiffViewer, swarm ContenderDiff,
+  // nav, etc.) to re-render on every RepoApp tick, which rebuilds thousands of
+  // diff rows per second and triggers full-GC pressure.
   const ctxRef = useRef<FlowContext | null>(null);
-  if (gh && global && repoStore.loaded) {
-    ctxRef.current = {
-      gh,
-      repo,
-      config: repoStore.config,
-      global,
-      skills,
-      prStacks: prData.prStacks,
-    };
-  }
+  const flowCtx = useMemo<FlowContext | null>(
+    () =>
+      gh && global && repoStore.loaded
+        ? { gh, repo, config: repoStore.config, global, skills, prStacks: prData.prStacks }
+        : null,
+    [gh, global, repoStore.loaded, repo, repoStore.config, skills, prData.prStacks]
+  );
+  ctxRef.current = flowCtx;
   const [poller] = useState(() => new RepoPoller(() => ctxRef.current!));
+  const flowCtxValue = useMemo(
+    () => ({ ctx: flowCtx!, poller, prStacks: prData.prStacks }),
+    [flowCtx, poller, prData.prStacks]
+  );
   const reviewFiltersKey = repoStore.loaded ? JSON.stringify(repoStore.config.reviewFilters) : "";
   const seenReviewFiltersKey = useRef<string | null>(null);
   const reviewFiltersChangedInSettings = useRef(false);
@@ -332,7 +340,7 @@ export function RepoApp({ repo }: { repo: string }) {
   };
 
   return (
-    <FlowCtx.Provider value={{ ctx: ctxRef.current, poller, prStacks: prData.prStacks }}>
+    <FlowCtx.Provider value={flowCtxValue}>
       <div className="app">
         <nav className="rail">
           <div className="rail-brand" title="Charon">

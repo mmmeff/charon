@@ -56,7 +56,11 @@ function ToolRow({ tool, roots }: { tool: AgentToolCall; roots: string[] }) {
   const [open, setOpen] = useState(false);
   const hasDetail = !!(tool.input || tool.output || tool.locations.length);
   const title = shortenRootPaths(tool.title, roots);
-  const input = shortenRootPaths(tool.input, roots);
+  const rawInput = shortenRootPaths(tool.input, roots);
+  // Drop the arg when it just repeats the title — common for `read`, where the
+  // harness title and the raw-arg summary are both the file path.
+  const input =
+    rawInput && title && rawInput.trim() === title.trim() ? undefined : rawInput;
   const locations = tool.locations.map((l) => shortenRootPaths(l, roots) ?? l);
   return (
     <div className={`agent-tool-row ${tool.status}`}>

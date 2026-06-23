@@ -292,26 +292,24 @@ h3, h4 {
   container-name: agent-feed;
 }
 
-/* agent grid: active/running agents as cards in rows.
-   Default is three across (each ~1/3 of the feed width); we step down to two
-   and then one as the container shrinks so cards never get crushed below their
-   readable min width. */
+/* agent grid: active/running agents as a single horizontally-scrollable row.
+   Each card is ~40% of the feed width; the row never wraps, so an overflow
+   crowd scrolls sideways instead of stacking into a tall column. */
 .agent-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 12px;
   margin-bottom: 20px;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
 }
-.agent-grid > .card { margin-bottom: 0; }
-.agent-grid > .agent-embedded { margin-bottom: 0; }
-
-/* narrower feed (sidebar pushes content in): two across */
-@container agent-feed (max-width: 900px) {
-  .agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-/* phone-class feed or very cramped split: one across — full width, no squeeze */
-@container agent-feed (max-width: 520px) {
-  .agent-grid { grid-template-columns: 1fr; }
+.agent-grid > .card,
+.agent-grid > .agent-embedded {
+  margin-bottom: 0;
+  flex: 0 0 40cqw;
+  max-width: 40cqw;
+  scroll-snap-align: start;
 }
 
 /* completed runs section heading */
@@ -703,6 +701,75 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .seg { display: inline-flex; gap: 0; }
 .seg button { border-radius: 0; }
 .seg button + button { border-left: none; }
+
+/* ---- SwarmHost: N contenders → one card with tabs ---- */
+.swarm-host { display: flex; flex-direction: column; gap: 0; }
+.swarm-host.agent-embedded { border: none; padding: 0; margin: 0; }
+.swarm-host-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 8px 0;
+}
+.swarm-host-label { font-size: 11.5px; }
+.swarm-host-tabs {
+  display: flex;
+  margin-top: 6px;
+  align-self: stretch;
+  width: 100%;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-inset);
+}
+.swarm-host-tabs button {
+  flex: 1 1 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 11px;
+  padding: 0 6px;
+}
+.swarm-host-tabs button:hover:not(:disabled):not(.primary) {
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom-color: var(--border);
+}
+.swarm-host-tabs button.primary {
+  border-bottom-color: var(--orange);
+  background: rgba(255, 79, 0, 0.18);
+  color: var(--fg);
+}
+.swarm-host-tab-dot {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-subtle);
+  display: inline-block;
+}
+.swarm-host-tab-dot[data-status="running"],
+.swarm-host-tab-dot[data-status="starting"] { background: var(--blue); }
+.swarm-host-tab-dot[data-status="done"] { background: var(--green); }
+.swarm-host-tab-dot[data-status="error"],
+.swarm-host-tab-dot[data-status="killed"] { background: var(--red); }
+.swarm-host-tab-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.swarm-host-tab-badge { color: var(--orange); font-size: 10px; }
+.swarm-host-pane { padding: 0; }
+.swarm-host-pane-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 8px;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+.swarm-host-diff {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 8px 4px;
+}
+.swarm-host-diff-head {
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.swarm-host .agent-embedded { border: none; padding-top: 0; margin-top: 0; }
 
 /* inline apply form on findings */
 /* width:100% lets the form wrap onto its own line when launched from inside a flex .row */
@@ -1200,6 +1267,57 @@ tr.flash > td { animation: line-flash 1.8s ease; }
   max-width: min(100%, 280px);
   min-width: 0;
 }
+.composer-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.composer-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.composer-agent-row > select {
+  flex: 1 1 0;
+  width: 100%;
+  max-width: none;
+}
+.composer-agent-rm {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--fg-subtle);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.4;
+  transition: opacity 80ms ease, color 80ms ease;
+}
+.composer-agent-row:hover .composer-agent-rm,
+.composer-agent-rm:focus-visible {
+  opacity: 1;
+  color: var(--red);
+}
+.composer-agent-add {
+  align-self: stretch;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 1px 0;
+  font-size: 11px;
+  color: var(--fg-subtle);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  transition: color 80ms ease;
+}
+.composer-agent-add:hover:not(:disabled) {
+  background: none;
+  color: var(--orange);
+}
 .composer-submit {
   display: inline-flex;
   align-items: center;
@@ -1564,8 +1682,8 @@ button.draft-create-row:focus-visible {
   /* solid black + lifted above the running card's animated hazard overlay,
      which otherwise paints across the stream and hurts readability */
   background: #000; border: 1px solid var(--border); border-radius: 0;
-  padding: 8px 12px; max-height: 380px; overflow-y: auto; margin-top: 8px;
-  position: relative; z-index: 1;
+  padding: 8px 12px; max-height: 380px; overflow-y: auto; overflow-x: hidden;
+  margin-top: 8px; position: relative; z-index: 1;
 }
 /* agent stream: assistant prose */
 .agent-msg { padding: 5px 0; font-size: 12.5px; }
@@ -1597,11 +1715,11 @@ button.draft-create-row:focus-visible {
 
 /* ACP tool-call rows: glyph · title · arg, expandable to output/locations */
 .agent-tool-row { font-family: var(--mono); font-size: 11px; padding: 2px 0; }
-.agent-tool-head { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.agent-tool-head { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; }
 .agent-tool-row .agent-tool-glyph { width: 12px; text-align: center; font-size: 11px; }
-.agent-tool-title { color: var(--fg); flex: none; }
+.agent-tool-title { color: var(--fg); flex: none; overflow-wrap: anywhere; }
 .agent-tool-arg {
-  color: var(--steel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--steel); white-space: normal; overflow-wrap: anywhere;
   min-width: 0; flex: 1;
 }
 .agent-tool-caret { flex: none; color: var(--fg-subtle); font-size: 9px; }

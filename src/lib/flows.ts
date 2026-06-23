@@ -1247,7 +1247,9 @@ export async function runDraftQuestion(
   question: string,
   selection: LineSelection | null,
   model?: string,
-  followUpToRunId?: string
+  followUpToRunId?: string,
+  swarmId?: string,
+  contenderId?: string
 ): Promise<string> {
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   const scope = selection
@@ -1295,6 +1297,8 @@ Answer directly and concretely; reference files and line numbers from the diff w
     binary: ctx.global.cursorBinary,
     mode: "ask",
     followUpToRunId,
+    swarmId,
+    contenderId,
     userQuestion: question,
   });
 }

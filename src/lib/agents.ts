@@ -67,6 +67,10 @@ export interface StartAgentOptions {
   /** Internal/background runs still collect output, but stay out of user-visible agent activity. */
   hiddenFromActivity?: boolean;
   draftCreate?: DraftCreateRunState;
+  /** If part of a Swarm: parent swarm id + this contender's id (forward-set by
+   *  startSwarm so list surfaces can group N contenders into one tabbed card). */
+  swarmId?: string;
+  contenderId?: string;
   /** Ask followup: root Ask run this one extends. */
   followUpToRunId?: string;
   /** Raw user-authored prompt text (Ask questions / followups). */
@@ -232,6 +236,8 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     notifyCategory: opts.notifyCategory,
     hiddenFromActivity: opts.hiddenFromActivity,
     draftCreate: opts.draftCreate,
+    swarmId: opts.swarmId,
+    contenderId: opts.contenderId,
     followUpToRunId: opts.followUpToRunId,
     userQuestion: opts.userQuestion,
   };

@@ -42,13 +42,14 @@ export function NewDraftWorkspace({
   };
   // Active draft_create swarm for this repo — mount SwarmHost instead of the
   // single-run activeRun card below when present.
-  const swarmActive = useSwarmStore((s) => {
+  const swarm = useSwarmStore((s) => {
     for (const id of s.order) {
       const sw = s.swarms[id];
-      if (sw && sw.trigger.repo === ctx.repo && sw.flowKind === "draft_create" && sw.status === "running") return true;
+      if (sw && sw.trigger.repo === ctx.repo && sw.flowKind === "draft_create" && sw.status === "running") return sw;
     }
-    return false;
+    return undefined;
   });
+  const swarmActive = !!swarm;
   // The active draft_create run for this repo (not dismissed, still running).
   // Slice to a single AgentRun ref — the default `Object.is` equality means
   // we re-render only when this run changes, ignoring chunks on other agents.
@@ -146,20 +147,24 @@ export function NewDraftWorkspace({
               <div className="composer-footer">
                 <div className="composer-controls">
                   <ReasoningPicker flowKind="draft_create" />
-                  <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 4 }}>
-                    {agents.map((a, i) => (
-                      <div key={a.id} className="row" style={{ alignItems: "center", gap: 4 }}>
-                        {agents.length > 1 && (
-                          <span className="subtle" style={{ fontSize: 11, minWidth: 18 }}>#{i + 1}</span>
-                        )}
+                  <div className="composer-agents">
+                    {agents.map((a) => (
+                      <div key={a.id} className="composer-agent-row">
                         <ModelPicker value={a.model} onChange={(m) => setAgentModel(a.id, m)} flowKind="draft_create" />
                         {agents.length > 1 && (
-                          <button className="small" onClick={() => removeAgent(a.id)} title="remove">−</button>
+                          <button
+                            className="composer-agent-rm"
+                            onClick={() => removeAgent(a.id)}
+                            title="remove this contender"
+                            aria-label="remove this contender"
+                          >×</button>
                         )}
                       </div>
                     ))}
                     {agents.length < 3 && (
-                      <button className="small" onClick={addAgent} title="add a parallel agent">+ agent</button>
+                      <button className="composer-agent-add" onClick={addAgent} title="run N models in parallel; keep the better output">
+                        + add contender
+                      </button>
                     )}
                   </div>
                 </div>
@@ -173,8 +178,8 @@ export function NewDraftWorkspace({
                   <div className="composer-error">{branchErr || error}</div>
                 )}
               </div>
-              {swarmActive && (
-                <SwarmHost prNumber={null} onReloadDiff={() => undefined} />
+              {swarmActive && swarm && (
+                <SwarmHost swarm={swarm} embedded />
               )}
             </div>
           </Section>

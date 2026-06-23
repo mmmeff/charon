@@ -127,13 +127,14 @@ export function Composer({
   });
   const reviewing = !!activeReview;
   // a review swarm active for this PR takes precedence over the single-run card
-  const reviewSwarmActive = useSwarmStore((s) => {
+  const reviewSwarm = useSwarmStore((s) => {
     for (const id of s.order) {
       const sw = s.swarms[id];
-      if (sw && sw.trigger.repo === ctx.repo && sw.trigger.prNumber === pr.number && sw.flowKind === "review" && sw.status === "running") return true;
+      if (sw && sw.trigger.repo === ctx.repo && sw.trigger.prNumber === pr.number && sw.flowKind === "review" && sw.status === "running") return sw;
     }
-    return false;
+    return undefined;
   });
+  const reviewSwarmActive = !!reviewSwarm;
 
   const meta = MODE_META[mode];
   const canSubmit = mode === "review" ? !reviewing && !reviewSwarmActive : text.trim().length > 0;
@@ -219,7 +220,7 @@ export function Composer({
       </div>
       {mode === "review" && (activeReview || reviewSwarmActive) ? (
         reviewSwarmActive ? (
-          <SwarmHost prNumber={pr.number} />
+          <SwarmHost swarm={reviewSwarm!} embedded />
         ) : (
           // a review is underway — the input collapses and the live run takes
           // its place; switching mode tabs still works above
@@ -245,24 +246,28 @@ export function Composer({
                   <ReasoningPicker
                     flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
                   />
-                  <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 4 }}>
-                    {agents.map((a, i) => (
-                      <div key={a.id} className="row" style={{ alignItems: "center", gap: 4 }}>
-                        {agents.length > 1 && (
-                          <span className="subtle" style={{ fontSize: 11, minWidth: 18 }}>#{i + 1}</span>
-                        )}
+                  <div className="composer-agents">
+                    {agents.map((a) => (
+                      <div key={a.id} className="composer-agent-row">
                         <ModelPicker
                           value={a.model}
                           onChange={(m) => setAgentModel(a.id, m)}
                           flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
                         />
                         {agents.length > 1 && (
-                          <button className="small" onClick={() => removeAgent(a.id)} title="remove">−</button>
+                          <button
+                            className="composer-agent-rm"
+                            onClick={() => removeAgent(a.id)}
+                            title="remove this contender"
+                            aria-label="remove this contender"
+                          >×</button>
                         )}
                       </div>
                     ))}
                     {canSwarm && agents.length < 3 && (
-                      <button className="small" onClick={addAgent} title="add a parallel agent">+ agent</button>
+                      <button className="composer-agent-add" onClick={addAgent} title="run N models in parallel; keep the better output">
+                        + add contender{agents.length > 1 ? "" : ""}
+                      </button>
                     )}
                   </div>
                 </>
@@ -288,16 +293,18 @@ export function Composer({
  *  no-swarm path below is byte-identical to before — the swarm check is the
  *  only additive branch, and it short-circuits before the existing feed). */
 export function RunResults({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?: () => void }) {
-  // Active swarm? Mount the comparison host instead of the single-run feed.
+  // Any swarm for this PR (running, resolved, or abandoned) — the N contenders
+  // are rendered as ONE tabbed SwarmHost above the single-run feed; their
+  // individual runs are filtered out of the regular roots below so they don't
+  // re-appear as N `AskOrChangeCard`s (Q4: the no-swarm path stays byte-identical).
   const repo = useRepoStore((s) => s.repo);
-  const swarmActive = useSwarmStore((s) => {
+  const swarm = useSwarmStore((s) => {
     for (const id of s.order) {
       const sw = s.swarms[id];
-      if (sw && sw.trigger.repo === repo && sw.trigger.prNumber === pr.number && sw.status === "running") return true;
+      if (sw && sw.trigger.repo === repo && sw.trigger.prNumber === pr.number) return sw;
     }
-    return false;
+    return undefined;
   });
-  if (swarmActive) return <SwarmHost prNumber={pr.number} onReloadDiff={onReloadDiff} />;
 
   // All of this PR's draft_edit / draft_question runs (most recent first).
   // No cap: followup Ask runs are newer than their root, so a small slice risked
@@ -316,13 +323,21 @@ export function RunResults({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?:
   const dismissAskRun = useRepoStore((s) => s.dismissAskRun);
   const dismissed = useRepoStore((s) => s.dismissedAskRuns);
   const dismissedSet = useMemo(() => new Set(dismissed), [dismissed]);
-
   // Roots = change runs and top-level Ask runs (Ask runs with a followUpToRunId
-  // are threaded under their root rather than shown standalone).
+  // are threaded under their root rather than shown standalone). Contender runs
+  // belonging to the visible swarm are dropped — they live in the tabbed host.
+  const swarmIds = useMemo(() => (swarm ? new Set([swarm.id]) : new Set<string>()), [swarm]);
   const roots = useMemo(
-    () => myRuns.filter((r) => r.kind === "draft_edit" || !r.followUpToRunId).slice(0, 6),
-    [myRuns]
+    () =>
+      myRuns
+        .filter((r) => !swarmIds.has(r.swarmId ?? ""))
+        .filter((r) => r.kind === "draft_edit" || !r.followUpToRunId)
+        .slice(0, 6),
+    [myRuns, swarmIds]
   );
+
+  if (swarm) return <SwarmHost swarm={swarm} onReloadDiff={onReloadDiff} />;
+
   const isRootVisible = (r: AgentRun) =>
     !(r.kind === "draft_question" && dismissedSet.has(r.id));
   const visibleRoots = roots.filter(isRootVisible);
