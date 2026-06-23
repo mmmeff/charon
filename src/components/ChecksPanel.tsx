@@ -316,7 +316,7 @@ ${log.slice(-AGENT_LOG_TAIL)}
                 : "other";
           return (
             <div
-              key={c.name}
+              key={c.id ?? c.name}
               className={`check-row check-${status} ${log?.open ? "expanded" : ""}`}
             >
               <div
