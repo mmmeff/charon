@@ -96,6 +96,11 @@ interface RepoState {
   mergeFindings(prNumber: number, list: ReviewFinding[]): Promise<void>;
   updateFinding(key: string, patch: Partial<ReviewFinding>): Promise<void>;
   clearFindings(prNumber: number): Promise<void>;
+
+  /** locally-dismissed Ask findings by agent run id — hidden from RunResults. */
+  dismissedAskRuns: string[];
+  dismissAskRun(runId: string): Promise<void>;
+  undismissAskRun(runId: string): Promise<void>;
 }
 
 function stringList(value: unknown): string[] {
@@ -190,17 +195,20 @@ export const useRepoStore = create<RepoState>((set, get) => ({
 
   findings: [],
   reviewSummaries: {},
+  dismissedAskRuns: [],
 
   async init(repo) {
     const k = repoKey(repo);
-    const [cfgRaw, snapRaw, propRaw, logRaw, findRaw] = await Promise.all([
+    const [cfgRaw, snapRaw, propRaw, logRaw, findRaw, dismissRaw] = await Promise.all([
       native.loadBlob(`repos/${k}/config.json`),
       native.loadBlob(`repos/${k}/snapshots.json`),
       native.loadBlob(`repos/${k}/proposals.json`),
       native.loadBlob(`repos/${k}/events.json`),
       native.loadBlob(`repos/${k}/findings.json`),
+      native.loadBlob(`repos/${k}/dismissed-ask.json`),
     ]);
     const findData = findRaw ? JSON.parse(findRaw) : { findings: [], summaries: {} };
+    const dismissed = dismissRaw ? (JSON.parse(dismissRaw) as string[]) : [];
     set({
       repo,
       config: migrateRepoConfig(cfgRaw),
@@ -212,6 +220,7 @@ export const useRepoStore = create<RepoState>((set, get) => ({
         f.status === "applying" ? { ...f, status: "open", agentRunId: undefined } : f
       ),
       reviewSummaries: findData.summaries ?? {},
+      dismissedAskRuns: dismissed,
       loaded: true,
     });
   },
@@ -281,7 +290,29 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     set({ findings: next, reviewSummaries: summaries });
     await persistFindings(repo, next, summaries);
   },
+
+  async dismissAskRun(runId) {
+    const { repo, dismissedAskRuns } = get();
+    if (dismissedAskRuns.includes(runId)) return;
+    const next = [...dismissedAskRuns, runId];
+    set({ dismissedAskRuns: next });
+    await persistDismissedAsk(repo, next);
+  },
+
+  async undismissAskRun(runId) {
+    const { repo, dismissedAskRuns } = get();
+    const next = dismissedAskRuns.filter((id) => id !== runId);
+    set({ dismissedAskRuns: next });
+    await persistDismissedAsk(repo, next);
+  },
 }));
+
+function persistDismissedAsk(repo: string, dismissed: string[]) {
+  return native.saveBlob(
+    `repos/${repoKey(repo)}/dismissed-ask.json`,
+    JSON.stringify(dismissed, null, 2)
+  );
+}
 
 function persistFindings(
   repo: string,

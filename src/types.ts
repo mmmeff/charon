@@ -489,6 +489,10 @@ export interface AgentRun {
   hiddenFromActivity?: boolean;
   /** Persisted recovery metadata for new draft PR creation runs. */
   draftCreate?: DraftCreateRunState;
+  /** For Ask followups: the root Ask run this is a followup to. */
+  followUpToRunId?: string;
+  /** Raw user-authored prompt text (Ask questions / followups) for display. */
+  userQuestion?: string;
   /** legacy raw lines — only on runs persisted before the ACP migration */
   lines?: AgentLine[];
   /** Accumulated assistant message text (drives proposal/finding extraction) */

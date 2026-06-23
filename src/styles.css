@@ -2049,6 +2049,23 @@ a.act-event-detail:hover { color: var(--orange); }
 .comment-body:hover .comment-controls { opacity: 1; }
 .danger-link { color: var(--red) !important; }
 
+/* Appended followup Ask answer, threaded beneath the root answer it builds on. */
+.ask-followup {
+  border-top: 1px dashed var(--border);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+.ask-followup-q {
+  font-style: italic;
+  font-size: 12.5px;
+  margin: 2px 0 6px;
+}
+.ask-followup-form {
+  margin-top: 10px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+
 .suggestion-block {
   background: var(--acid-bg);
   border: 1px solid rgba(207, 242, 77, 0.35);

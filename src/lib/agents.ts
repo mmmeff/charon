@@ -67,6 +67,10 @@ export interface StartAgentOptions {
   /** Internal/background runs still collect output, but stay out of user-visible agent activity. */
   hiddenFromActivity?: boolean;
   draftCreate?: DraftCreateRunState;
+  /** Ask followup: root Ask run this one extends. */
+  followUpToRunId?: string;
+  /** Raw user-authored prompt text (Ask questions / followups). */
+  userQuestion?: string;
   onDone?: (run: AgentRun) => void | Promise<void>;
   onSettled?: (run: AgentRun) => void | Promise<void>;
 }
@@ -228,6 +232,8 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     notifyCategory: opts.notifyCategory,
     hiddenFromActivity: opts.hiddenFromActivity,
     draftCreate: opts.draftCreate,
+    followUpToRunId: opts.followUpToRunId,
+    userQuestion: opts.userQuestion,
   };
   useAgentStore.getState().register(run);
   if (opts.onDone) doneCallbacks.set(id, opts.onDone);

@@ -1184,16 +1184,29 @@ export async function runDraftQuestion(
   pr: PrSummary,
   question: string,
   selection: LineSelection | null,
-  model?: string
+  model?: string,
+  followUpToRunId?: string
 ): Promise<string> {
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   const scope = selection
     ? `\nThe question is about ${selection.path} lines ${selection.startLine}–${selection.endLine}:\n\`\`\`\n${selection.snippet}\n\`\`\`\n`
     : "";
+
+  // Followups build on the prior Ask answer — thread it into context so the
+  // agent continues rather than re-answering from scratch.
+  let prior = "";
+  if (followUpToRunId) {
+    const parent = useAgentStore.getState().runs[followUpToRunId];
+    if (parent) {
+      const q = parent.userQuestion ? `PRIOR QUESTION:\n${parent.userQuestion}\n\n` : "";
+      prior = `${q}PRIOR ANSWER (your previous reply):\n${truncate(parent.resultText, MAX_DIFF_CHARS)}\n\n`;
+    }
+  }
+
   const base = `You are Charon's code's analysis agent. The user has a question / wants feedback on
 PR #${pr.number} ("${pr.title}") by ${pr.author} in ${ctx.repo}. Do NOT make any code changes — answer in text only.
 ${scope}
-QUESTION / FEEDBACK REQUEST:
+${prior}${followUpToRunId ? "FOLLOWUP QUESTION" : "QUESTION / FEEDBACK REQUEST"}:
 ${question}
 
 THE DIFF:
@@ -1201,13 +1214,17 @@ THE DIFF:
 ${truncate(diffText, MAX_DIFF_CHARS)}
 \`\`\`
 
-Answer directly and concretely; reference files and line numbers from the diff where useful.`;
+Answer directly and concretely; reference files and line numbers from the diff where useful.${
+    followUpToRunId
+      ? " You are continuing the prior exchange above — build on your earlier answer; don't repeat it."
+      : ""
+  }`;
   // expands any /skill references the user typed in the question
   const prompt = applySkills(base, ctx.skills, []);
 
   return startAgent({
     kind: "draft_question",
-    relation: "draft Q&A",
+    relation: followUpToRunId ? "followup Q&A" : "draft Q&A",
     repo: ctx.repo,
     prNumber: pr.number,
     prTitle: pr.title,
@@ -1215,6 +1232,8 @@ Answer directly and concretely; reference files and line numbers from the diff w
     model: resolveModel(ctx, model, "draft_question"),
     binary: ctx.global.cursorBinary,
     mode: "ask",
+    followUpToRunId,
+    userQuestion: question,
   });
 }
 

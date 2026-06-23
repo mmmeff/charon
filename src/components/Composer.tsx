@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { cleanResultText } from "../lib/agents";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/defaults";
-import { runDraftEdit, runDraftQuestion, runReviewFlow, runSelfReviewFlow } from "../lib/flows";
-import { interpolate, prVars } from "../lib/template";
-import { useAgentStore } from "../lib/store";
+import { runDraftEdit, runDraftQuestion, runReviewFlow, runSelfReviewFlow } from "../lib/flows";import { interpolate, prVars } from "../lib/template";
+import { useAgentStore, useRepoStore } from "../lib/store";
 import type { AgentRun, LineSelection, PrSummary } from "../types";
 import { timeAgo } from "../lib/ui";
 import { AgentCard } from "./AgentCard";
@@ -224,10 +223,9 @@ export function Composer({
 
 /** Recent Ask/Change runs for a PR — answers and push confirmations. */
 export function RunResults({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?: () => void }) {
-  // Slice to a shallow-compared array of this PR's draft_edit/draft_question
-  // runs (capped at 6). useShallow keeps the ref stable across chunks to
-  // unrelated runs: each such chunk produces a new `runs` ref but the array
-  // contents shallow-equal the previous one → no re-render.
+  // All of this PR's draft_edit / draft_question runs (most recent first).
+  // No cap: followup Ask runs are newer than their root, so a small slice risked
+  // orphaning them — fetch everything and slice roots for display below.
   const myRuns = useAgentStore(
     useShallow((s) =>
       s.order
@@ -236,45 +234,196 @@ export function RunResults({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?:
           (r): r is AgentRun =>
             !!r && r.prNumber === pr.number && (r.kind === "draft_edit" || r.kind === "draft_question")
         )
-        .slice(0, 6)
     )
   );
-  if (myRuns.length === 0) return null;
+  // Ask findings the user has cleared stay cleared (persisted per repo).
+  const dismissAskRun = useRepoStore((s) => s.dismissAskRun);
+  const dismissed = useRepoStore((s) => s.dismissedAskRuns);
+  const dismissedSet = useMemo(() => new Set(dismissed), [dismissed]);
+
+  // Roots = change runs and top-level Ask runs (Ask runs with a followUpToRunId
+  // are threaded under their root rather than shown standalone).
+  const roots = useMemo(
+    () => myRuns.filter((r) => r.kind === "draft_edit" || !r.followUpToRunId).slice(0, 6),
+    [myRuns]
+  );
+  const isRootVisible = (r: AgentRun) =>
+    !(r.kind === "draft_question" && dismissedSet.has(r.id));
+  const visibleRoots = roots.filter(isRootVisible);
+  if (visibleRoots.length === 0) return null;
   return (
     <div style={{ marginBottom: 14 }}>
-      {myRuns.map((r) => (
-        <div className="card" key={r.id}>
-          <div className="row between">
-            <div className="row">
-              {(r.status === "running" || r.status === "starting") && <Spinner />}
-              <Badge color={r.status === "done" ? "green" : r.status === "error" ? "red" : "blue"}>
-                {r.kind === "draft_edit" ? "change" : "ask"} · {r.status}
-              </Badge>
-              <span className="subtle">{r.relation}</span>
-            </div>
-            <span className="subtle">{timeAgo(r.startedAt)}</span>
-          </div>
-          {r.kind === "draft_question" && r.resultText && (
-            <div style={{ marginTop: 8 }}>
-              <Markdown text={cleanResultText(r.resultText)} />
-            </div>
-          )}
-          {r.kind === "draft_edit" && r.status === "done" && (
-            <div className="subtle" style={{ marginTop: 6 }}>
-              Pushed to <code>{pr.headRef}</code>.
-              {onReloadDiff && (
-                <>
-                  {" "}
-                  <button className="link small" onClick={onReloadDiff}>
-                    reload diff
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          {r.error && <div style={{ color: "var(--red)", fontSize: 12.5, marginTop: 6 }}>{r.error}</div>}
-        </div>
+      {visibleRoots.map((r) => (
+        <AskOrChangeCard
+          key={r.id}
+          pr={pr}
+          root={r}
+          allRuns={myRuns}
+          dismissedSet={dismissedSet}
+          dismissAskRun={dismissAskRun}
+          onReloadDiff={onReloadDiff}
+        />
       ))}
+    </div>
+  );
+}
+
+function AskOrChangeCard({
+  pr,
+  root,
+  allRuns,
+  dismissedSet,
+  dismissAskRun,
+  onReloadDiff,
+}: {
+  pr: PrSummary;
+  root: AgentRun;
+  allRuns: AgentRun[];
+  dismissedSet: Set<string>;
+  dismissAskRun: (id: string) => void;
+  onReloadDiff?: () => void;
+}) {
+  // Followups (incl. in-flight) append under their root, delineated.
+  const followups = useMemo(
+    () =>
+      allRuns
+        .filter((r) => r.kind === "draft_question" && r.followUpToRunId === root.id)
+        .sort((a, b) => a.startedAt - b.startedAt),
+    [allRuns, root.id]
+  );
+  return (
+    <div className="card">
+      <div className="row between">
+        <div className="row">
+          {(root.status === "running" || root.status === "starting") && <Spinner />}
+          <Badge color={root.status === "done" ? "green" : root.status === "error" ? "red" : "blue"}>
+            {root.kind === "draft_edit" ? "change" : "ask"} · {root.status}
+          </Badge>
+          <span className="subtle">{root.relation}</span>
+        </div>
+        <span className="subtle">{timeAgo(root.startedAt)}</span>
+      </div>
+      {root.kind === "draft_question" && root.resultText && (
+        <div style={{ marginTop: 8 }}>
+          <Markdown text={cleanResultText(root.resultText)} />
+          <div className="row" style={{ marginTop: 6 }}>
+            <button
+              className="link small"
+              title="Clear this answer from the feed"
+              onClick={() => void dismissAskRun(root.id)}
+            >
+              dismiss
+            </button>
+          </div>
+        </div>
+      )}
+      {root.kind === "draft_edit" && root.status === "done" && (
+        <div className="subtle" style={{ marginTop: 6 }}>
+          Pushed to <code>{pr.headRef}</code>.
+          {onReloadDiff && (
+            <>
+              {" "}
+              <button className="link small" onClick={onReloadDiff}>
+                reload diff
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {root.error && <div style={{ color: "var(--red)", fontSize: 12.5, marginTop: 6 }}>{root.error}</div>}
+
+      {followups.map((f) => (
+        <FollowupAnswer key={f.id} run={f} onDismiss={() => void dismissAskRun(f.id)} dismissed={dismissedSet.has(f.id)} />
+      ))}
+
+      {root.kind === "draft_question" && root.status === "done" && (
+        <FollowUpForm pr={pr} rootRunId={root.id} />
+      )}
+    </div>
+  );
+}
+
+/** An appended followup answer, delineated from the one above it. */
+function FollowupAnswer({ run, onDismiss, dismissed }: { run: AgentRun; onDismiss: () => void; dismissed: boolean }) {
+  if (dismissed) return null;
+  const running = run.status === "running" || run.status === "starting";
+  return (
+    <div className="ask-followup">
+      <div className="row between">
+        <span className="subtle">↳ followup</span>
+        <span className="subtle">{timeAgo(run.startedAt)}</span>
+      </div>
+      {run.userQuestion && <div className="ask-followup-q subtle">{run.userQuestion}</div>}
+      {run.error ? (
+        <div style={{ color: "var(--red)", fontSize: 12.5 }}>{run.error}</div>
+      ) : run.resultText ? (
+        <Markdown text={cleanResultText(run.resultText)} />
+      ) : running ? (
+        <div className="row">
+          <Spinner /> <span className="subtle">thinking…</span>
+        </div>
+      ) : null}
+      {run.resultText && run.status === "done" && (
+        <div className="row" style={{ marginTop: 4 }}>
+          <button className="link small" onClick={onDismiss}>
+            dismiss
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Inline followup Ask prompt beneath an existing Ask answer. */
+function FollowUpForm({ pr, rootRunId }: { pr: PrSummary; rootRunId: string }) {
+  const { ctx } = useFlow();
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  // one-shot model pick, same as the main Composer above
+  const [model, setModel] = useState("");
+  const canSubmit = text.trim().length > 0 && !busy;
+  const submit = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      // The followup appends as a new threaded entry beneath the root answer —
+      // the root stays as the thread anchor (only a manual dismiss hides it).
+      await runDraftQuestion(ctx, pr, text.trim(), null, model || undefined, rootRunId);
+      setText("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="ask-followup-form">
+      <PromptInput
+        as="textarea"
+        rows={2}
+        value={text}
+        onChange={setText}
+        placeholder="Follow up on this answer…"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+      />
+      <div className="composer-footer">
+        <div className="composer-controls">
+          <ModelPicker value={model} onChange={setModel} flowKind="draft_question" />
+          <ReasoningPicker flowKind="draft_question" />
+        </div>
+        <div className="composer-actions">
+          <button className="small primary" disabled={!canSubmit} onClick={() => void submit()}>
+            {busy ? <Spinner /> : null} Follow up
+          </button>
+        </div>
+        {error && <div className="composer-error">{error}</div>}
+      </div>
     </div>
   );
 }
