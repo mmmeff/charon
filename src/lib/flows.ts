@@ -34,7 +34,7 @@ import {
  * Best-effort full-project checkout for review agents. Reviews must not fail
  * just because no clone can be provisioned — they degrade to diff-only.
  */
-async function tryReviewWorktree(ctx: FlowContext, pr: PrSummary): Promise<Worktree | null> {
+export async function tryReviewWorktree(ctx: FlowContext, pr: PrSummary): Promise<Worktree | null> {
   try {
     return await createReviewWorktree(ctx.gh, ctx.repo, ctx.config.localClonePath, pr);
   } catch (e) {
@@ -43,7 +43,7 @@ async function tryReviewWorktree(ctx: FlowContext, pr: PrSummary): Promise<Workt
   }
 }
 
-const reviewWorkspaceBlock = (wt: Worktree | null, pr: PrSummary) =>
+export const reviewWorkspaceBlock = (wt: Worktree | null, pr: PrSummary) =>
   wt
     ? `
 Your working directory is a checkout of the FULL repository at this PR's head commit (${pr.headSha}).
@@ -63,7 +63,7 @@ export interface FlowContext {
   prStacks: PrStackIndex;
 }
 
-const MAX_DIFF_CHARS = 90_000;
+export const MAX_DIFF_CHARS = 90_000;
 
 /**
  * Model resolution, most specific wins:
@@ -90,7 +90,7 @@ export function resolveModel(ctx: FlowContext, explicit?: string, kind?: string)
 // Shared prompt contracts
 // ---------------------------------------------------------------------------
 
-const HITL_CONTRACT = `
+export const HITL_CONTRACT = `
 HARD CONSTRAINTS (non-negotiable):
 - You must NEVER post comments, replies, or reviews to GitHub, and never use \`gh\`, the GitHub API, or any
   other channel to write to GitHub. The ONLY permitted remote effect is \`git push\` to the PR's own branch
@@ -106,7 +106,7 @@ When you are completely done, end your final message with EXACTLY ONE proposal b
 - Use "none" when no PR response is warranted.
 The block must be valid JSON on its own.`;
 
-const REVIEW_CONTRACT = `
+export const REVIEW_CONTRACT = `
 Output your review as EXACTLY ONE proposal block at the very end:
 <proposal>{
   "type": "review",
@@ -252,7 +252,7 @@ function draftSlug(prompt: string): string {
   return branchSegment(words?.join("-") || "draft-pr") || "draft-pr";
 }
 
-async function uniqueDraftBranch(ctx: FlowContext, prompt: string): Promise<string> {
+export async function uniqueDraftBranch(ctx: FlowContext, prompt: string): Promise<string> {
   const user = branchSegment(ctx.gh.login || ctx.global.login || "user") || "user";
   const base = `${user}/${draftSlug(prompt)}`;
   let existing = new Set<string>();
@@ -490,7 +490,7 @@ const toProposedComments = (parsed: ParsedReviewComment[]): ProposedInlineCommen
 
 async function createReviewProposal(
   ctx: FlowContext,
-  pr: PrSummary,
+  pr: Pick<PrSummary, "number" | "title">,
   runId: string,
   resultText: string,
   diffText: string,
@@ -598,7 +598,7 @@ export async function runFixFlow(
  */
 async function mergeIntoReviewProposal(
   ctx: FlowContext,
-  pr: PrSummary,
+  pr: Pick<PrSummary, "number" | "title">,
   runId: string,
   resultText: string,
   diffText: string
@@ -627,6 +627,57 @@ async function mergeIntoReviewProposal(
     status: "pending",
     agentRunId: runId,
   });
+}
+
+/**
+ * Apply a review agent's output as either local findings (self-review) or a
+ * pending review proposal (teammate review). Extracted from the onDone paths
+ * of runSelfReviewFlow / runReviewFlow so the Swarm winner-promotion path can
+ * reuse the exact same apply logic without duplicating it.
+ */
+export async function applyReviewOutput(
+  ctx: FlowContext,
+  pr: Pick<PrSummary, "number" | "title" | "headSha">,
+  runId: string,
+  resultText: string,
+  diffText: string,
+  selection: LineSelection | null,
+  reviewKind: "self" | "teammate"
+): Promise<void> {
+  if (reviewKind === "self") {
+    const parsed = parseReviewOutput(resultText, diffText);
+    const diffFiles = parseUnifiedDiff(diffText);
+    const findings: ReviewFinding[] = parsed.comments.map((c) => ({
+      key: uid("find-"),
+      prNumber: pr.number,
+      headSha: pr.headSha,
+      path: c.path,
+      line: c.line,
+      startLine: c.startLine,
+      side: c.side,
+      severity: c.severity,
+      confidence: c.confidence,
+      body: c.body,
+      suggestion: c.suggestion,
+      anchorText: lineTextAt(diffFiles, c.path, c.side, c.line) ?? undefined,
+      status: "open",
+      createdAt: Date.now(),
+    }));
+    const note = parsed.dropped.length
+      ? ` (${parsed.dropped.length} unanchorable finding(s) dropped: ${parsed.dropped.join(", ")})`
+      : "";
+    if (selection) {
+      await useRepoStore.getState().mergeFindings(pr.number, findings);
+    } else {
+      await useRepoStore.getState().setFindings(pr.number, findings, parsed.summary + note);
+    }
+  } else {
+    if (selection) {
+      await mergeIntoReviewProposal(ctx, pr, runId, resultText, diffText);
+    } else {
+      await createReviewProposal(ctx, pr, runId, resultText, diffText, "automated self-review");
+    }
+  }
 }
 
 /** Review flow: diff + skills → agent → review proposal with inline comments. */

@@ -95,7 +95,7 @@ export function Composer({
   // Only for edit/ask modes (v1-wired flow kinds). Contenders differ by model;
   // reasoning is shared via the footer ReasoningPicker (v1: no per-contender
   // reasoning — the spec field exists for forward-compat).
-  const swarmSupported = mode === "edit" || mode === "ask";
+  const swarmSupported = mode === "edit" || mode === "ask" || mode === "review";
   const [swarm, setSwarm] = useState(false);
   const [contenders, setContenders] = useState<SwarmContenderSpec[]>([]);
   const toggleSwarm = () => {
@@ -139,15 +139,23 @@ export function Composer({
     return undefined;
   });
   const reviewing = !!activeReview;
+  // a review swarm active for this PR takes precedence over the single-run card
+  const reviewSwarmActive = useSwarmStore((s) => {
+    for (const id of s.order) {
+      const sw = s.swarms[id];
+      if (sw && sw.trigger.repo === ctx.repo && sw.trigger.prNumber === pr.number && sw.flowKind === "review" && sw.status === "running") return true;
+    }
+    return false;
+  });
 
   const meta = MODE_META[mode];
-  const canSubmit = mode === "review" ? !reviewing : text.trim().length > 0;
+  const canSubmit = mode === "review" ? !reviewing && !reviewSwarmActive : text.trim().length > 0;
 
   const submit = async () => {
     setBusy(true);
     setError("");
     try {
-      const flowKind = mode === "ask" ? "draft_question" : mode === "edit" ? "draft_edit" : null;
+      const flowKind = mode === "ask" ? "draft_question" : mode === "edit" ? "draft_edit" : mode === "review" ? "review" : null;
       if (swarm && swarmSupported && flowKind) {
         await startSwarm({
           ctx,
@@ -158,6 +166,7 @@ export function Composer({
             prTitle: pr.title,
             prompt: text,
             selection: selection ?? null,
+            reviewKind: mode === "review" ? reviewKind : undefined,
           },
           contenders,
         });
@@ -221,10 +230,14 @@ export function Composer({
           {meta.hint(reviewKind === "self", !!selection)}
         </span>
       </div>
-      {mode === "review" && activeReview ? (
-        // a review is underway — the input collapses and the live run takes
-        // its place; switching mode tabs still works above
-        <AgentCard run={activeReview} defaultOpen embedded />
+      {mode === "review" && (activeReview || reviewSwarmActive) ? (
+        reviewSwarmActive ? (
+          <SwarmHost prNumber={pr.number} />
+        ) : (
+          // a review is underway — the input collapses and the live run takes
+          // its place; switching mode tabs still works above
+          <AgentCard run={activeReview!} defaultOpen embedded />
+        )
       ) : (
         <>
           <PromptInput
@@ -255,7 +268,7 @@ export function Composer({
               {mode !== "comment" && swarm && swarmSupported && (
                 <>
                   <ReasoningPicker
-                    flowKind={mode === "edit" ? "draft_edit" : "draft_question"}
+                    flowKind={mode === "edit" ? "draft_edit" : mode === "review" ? "review" : "draft_question"}
                   />
                   <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 4 }}>
                     {contenders.map((c, i) => (
@@ -264,7 +277,7 @@ export function Composer({
                         <ModelPicker
                           value={c.model}
                           onChange={(m) => setContenderModel(c.id, m)}
-                          flowKind={mode === "edit" ? "draft_edit" : "draft_question"}
+                          flowKind={mode === "edit" ? "draft_edit" : mode === "review" ? "review" : "draft_question"}
                         />
                         {contenders.length > 1 && (
                           <button className="small" onClick={() => removeContender(c.id)}>−</button>
@@ -316,7 +329,7 @@ export function RunResults({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?:
     }
     return false;
   });
-  if (swarmActive) return <SwarmHost pr={pr} onReloadDiff={onReloadDiff} />;
+  if (swarmActive) return <SwarmHost prNumber={pr.number} onReloadDiff={onReloadDiff} />;
 
   // All of this PR's draft_edit / draft_question runs (most recent first).
   // No cap: followup Ask runs are newer than their root, so a small slice risked

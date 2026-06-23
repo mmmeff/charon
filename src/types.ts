@@ -573,7 +573,18 @@ export interface SwarmContender extends SwarmContenderSpec {
     clonePath: string;
     persistent: boolean;
     baseSha: string;
+    /** draft_create only: the base branch the worktree was created from
+     *  (needed by createDraftPrWithGh at winner-promotion time). */
+    baseBranch?: string;
   };
+  /** draft_create only: the <draft-pr> metadata extracted from the contender's
+   *  final output (title/body). Extracted in onDone, consumed at winner
+   *  promotion to create the PR. */
+  draftMeta?: { changed: boolean; title: string; body: string; summary?: string };
+  /** review only: the diff text the contender reviewed + its reviewKind, stashed
+   *  in onDone so the winner's promote can call applyReviewOutput without
+   *  re-fetching the diff. resultText is read from the AgentRun at promote time. */
+  reviewContext?: { diffText: string; reviewKind: "self" | "teammate"; headSha: string };
 }
 
 /** A persisted Swarm record. Hydrates across restart (ADR-0003): in-flight

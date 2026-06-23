@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { runDraftCreate } from "../lib/flows";
-import { useAgentStore, useUiStore } from "../lib/store";
+import { startSwarm } from "../lib/swarm";
+import { useAgentStore, useSwarmStore, useUiStore } from "../lib/store";
+import { uid } from "../lib/template";
 import { Section, Spinner } from "./common";
 import { AsciiMoon } from "./AsciiMoon";
 import { ModelPicker, ReasoningPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
+import { SwarmHost } from "./SwarmHost";
 import { useFlow } from "./flow";
-import type { AgentRun } from "../types";
+import type { AgentRun, SwarmContenderSpec } from "../types";
 
 /** Prompt-first surface for creating a brand-new draft PR. */
 export function NewDraftWorkspace({
@@ -23,6 +26,38 @@ export function NewDraftWorkspace({
   const [error, setError] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("");
   const [branchErr, setBranchErr] = useState("");
+  // Swarm opt-in (Q4: default off — single-run path byte-identical when off).
+  const [swarm, setSwarm] = useState(false);
+  const [contenders, setContenders] = useState<SwarmContenderSpec[]>([]);
+  const toggleSwarm = () => {
+    if (!swarm) {
+      setContenders([{ id: uid("c-"), model }]);
+    } else {
+      if (contenders[0]) setModel(contenders[0].model);
+      setContenders([]);
+    }
+    setSwarm(!swarm);
+  };
+  const addContender = () => {
+    if (contenders.length >= 3) return;
+    setContenders([...contenders, { id: uid("c-"), model: "" }]);
+  };
+  const removeContender = (id: string) => {
+    if (contenders.length <= 1) return;
+    setContenders(contenders.filter((c) => c.id !== id));
+  };
+  const setContenderModel = (id: string, m: string) => {
+    setContenders(contenders.map((c) => (c.id === id ? { ...c, model: m } : c)));
+  };
+  // Active draft_create swarm for this repo — mount SwarmHost instead of the
+  // single-run activeRun card below when present (Q4: no-swarm path untouched).
+  const swarmActive = useSwarmStore((s) => {
+    for (const id of s.order) {
+      const sw = s.swarms[id];
+      if (sw && sw.trigger.repo === ctx.repo && sw.flowKind === "draft_create" && sw.status === "running") return true;
+    }
+    return false;
+  });
   // The active draft_create run for this repo (not dismissed, still running).
   // Slice to a single AgentRun ref — the default `Object.is` equality means
   // we re-render only when this run changes, ignoring chunks on other agents.
@@ -63,12 +98,31 @@ export function NewDraftWorkspace({
     setBusy(true);
     setError("");
     try {
-      const runId = await runDraftCreate(ctx, prompt, model || undefined, async (pr) => {
-        useUiStore.getState().setFocusedPr("drafts", pr.number);
-        onCreated?.(pr.number);
-        poller.refresh();
-      });
-      onStarted?.(runId);
+      if (swarm) {
+        await startSwarm({
+          ctx,
+          flowKind: "draft_create",
+          trigger: {
+            repo: ctx.repo,
+            prNumber: null,
+            prTitle: "New draft PR",
+            prompt,
+          },
+          contenders,
+          onCreated: (pr) => {
+            useUiStore.getState().setFocusedPr("drafts", pr.number);
+            onCreated?.(pr.number);
+            poller.refresh();
+          },
+        });
+      } else {
+        const runId = await runDraftCreate(ctx, prompt, model || undefined, async (pr) => {
+          useUiStore.getState().setFocusedPr("drafts", pr.number);
+          onCreated?.(pr.number);
+          poller.refresh();
+        });
+        onStarted?.(runId);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -100,10 +154,39 @@ export function NewDraftWorkspace({
               />
               <div className="composer-footer">
                 <div className="composer-controls">
-                  <ModelPicker value={model} onChange={setModel} flowKind="draft_create" />
-                  <ReasoningPicker flowKind="draft_create" />
+                  {swarm ? (
+                    <>
+                      <ReasoningPicker flowKind="draft_create" />
+                      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 4 }}>
+                        {contenders.map((c, i) => (
+                          <div key={c.id} className="row" style={{ alignItems: "center", gap: 4 }}>
+                            <span className="subtle" style={{ fontSize: 11, minWidth: 18 }}>#{i + 1}</span>
+                            <ModelPicker value={c.model} onChange={(m) => setContenderModel(c.id, m)} flowKind="draft_create" />
+                            {contenders.length > 1 && (
+                              <button className="small" onClick={() => removeContender(c.id)}>−</button>
+                            )}
+                          </div>
+                        ))}
+                        {contenders.length < 3 && (
+                          <button className="small" onClick={addContender}>+ contender</button>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <ModelPicker value={model} onChange={setModel} flowKind="draft_create" />
+                      <ReasoningPicker flowKind="draft_create" />
+                    </>
+                  )}
                 </div>
                 <div className="composer-actions">
+                  <button
+                    className={`small ${swarm ? "primary" : ""}`}
+                    onClick={toggleSwarm}
+                    title={swarm ? "back to single run" : "fan out to N parallel contenders"}
+                  >
+                    Swarm
+                  </button>
                   <button className="primary composer-submit" disabled={!canSubmit} onClick={() => void submit()}>
                     {busy ? <Spinner /> : null}
                     <span>Create draft</span>
@@ -113,6 +196,9 @@ export function NewDraftWorkspace({
                   <div className="composer-error">{branchErr || error}</div>
                 )}
               </div>
+              {swarmActive && (
+                <SwarmHost prNumber={null} onReloadDiff={() => undefined} />
+              )}
             </div>
           </Section>
         </header>

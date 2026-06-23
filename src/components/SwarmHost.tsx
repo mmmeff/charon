@@ -17,13 +17,14 @@
 import { useState } from "react";
 import { activeSwarmFor, allContendersTerminal, abandonSwarm, contenderRun, killContender, promoteWinner } from "../lib/swarm";
 import { useRepoStore } from "../lib/store";
-import type { PrSummary } from "../types";
 import { AgentCard } from "./AgentCard";
 import { Spinner } from "./common";
+import { useFlow } from "./flow";
 
-export function SwarmHost({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?: () => void }) {
+export function SwarmHost({ prNumber, onReloadDiff }: { prNumber: number | null; onReloadDiff?: () => void }) {
+  const { ctx } = useFlow();
   const repo = useRepoStore((s) => s.repo);
-  const swarm = activeSwarmFor(repo, pr.number);
+  const swarm = activeSwarmFor(repo, prNumber);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -35,7 +36,7 @@ export function SwarmHost({ pr, onReloadDiff }: { pr: PrSummary; onReloadDiff?: 
     setBusy(true);
     setError("");
     try {
-      await promoteWinner(swarm.id, contenderId);
+      await promoteWinner(ctx, swarm.id, contenderId);
       onReloadDiff?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
