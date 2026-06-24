@@ -49,7 +49,10 @@ export type AcpSessionUpdate =
   | ({ sessionUpdate: "tool_call_update" } & AcpToolCall)
   | { sessionUpdate: "plan"; entries: AcpPlanEntry[] }
   | { sessionUpdate: "current_mode_update"; modeId: string }
-  | { sessionUpdate: "available_commands_update"; availableCommands: { name: string; description?: string }[] }
+  | {
+      sessionUpdate: "available_commands_update";
+      availableCommands: { name: string; description?: string }[];
+    }
   | { sessionUpdate: "session_info_update"; title?: string }
   | { sessionUpdate: string; [k: string]: unknown };
 
@@ -79,9 +82,14 @@ export interface NewSessionResult {
 }
 
 /** The `model` config option, if the harness exposes models that way (codex). */
-export function modelConfigOption(ns: NewSessionResult): AcpConfigOption | undefined {
+export function modelConfigOption(
+  ns: NewSessionResult,
+): AcpConfigOption | undefined {
   return ns.configOptions?.find(
-    (o) => (o.id === "model" || o.category === "model") && o.type === "select" && o.options?.length
+    (o) =>
+      (o.id === "model" || o.category === "model") &&
+      o.type === "select" &&
+      o.options?.length,
   );
 }
 
@@ -101,7 +109,10 @@ export function modelLabel(m: AcpModel): string {
   for (const kv of inner.split(",")) {
     if (!kv.trim()) continue;
     const eq = kv.indexOf("=");
-    params.set(eq < 0 ? kv.trim() : kv.slice(0, eq).trim(), eq < 0 ? "" : kv.slice(eq + 1).trim());
+    params.set(
+      eq < 0 ? kv.trim() : kv.slice(0, eq).trim(),
+      eq < 0 ? "" : kv.slice(eq + 1).trim(),
+    );
   }
   const detail = [
     params.get("effort") || params.get("reasoning"),
@@ -115,19 +126,26 @@ export function modelLabel(m: AcpModel): string {
 }
 
 /** Models paired with display labels, sorted alphabetically by label. */
-export function labeledModels(models: AcpModel[]): { modelId: string; label: string }[] {
+export function labeledModels(
+  models: AcpModel[],
+): { modelId: string; label: string }[] {
   return models
     .map((m) => ({ modelId: m.modelId, label: modelLabel(m) }))
-    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+    .sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+    );
 }
 
 /** The reasoning-effort config option, if the harness exposes one (codex). */
-export function reasoningConfigOption(ns: NewSessionResult): AcpConfigOption | undefined {
+export function reasoningConfigOption(
+  ns: NewSessionResult,
+): AcpConfigOption | undefined {
   return ns.configOptions?.find(
     (o) =>
-      (o.category === "thought_level" || /reason|effort|thinking/i.test(o.id)) &&
+      (o.category === "thought_level" ||
+        /reason|effort|thinking/i.test(o.id)) &&
       o.type === "select" &&
-      o.options?.length
+      o.options?.length,
   );
 }
 
@@ -136,14 +154,23 @@ export function reasoningConfigOption(ns: NewSessionResult): AcpConfigOption | u
  * the harness uses: native ACP models (cursor) or a `model` config option
  * (codex). Empty when the harness manages its own model (opencode).
  */
-export function sessionModels(ns: NewSessionResult): { models: AcpModel[]; currentId?: string } {
+export function sessionModels(ns: NewSessionResult): {
+  models: AcpModel[];
+  currentId?: string;
+} {
   if (ns.models?.availableModels?.length) {
-    return { models: ns.models.availableModels, currentId: ns.models.currentModelId };
+    return {
+      models: ns.models.availableModels,
+      currentId: ns.models.currentModelId,
+    };
   }
   const opt = modelConfigOption(ns);
   if (opt) {
     return {
-      models: opt.options!.map((o) => ({ modelId: o.value, name: o.name ?? o.value })),
+      models: opt.options!.map((o) => ({
+        modelId: o.value,
+        name: o.name ?? o.value,
+      })),
       currentId: opt.currentValue,
     };
   }
@@ -187,8 +214,22 @@ export class AcpRpcError extends Error {
    *  failure" actionable — you see *which* call the harness choked on. */
   method?: string;
 
-  constructor(message: string, opts: { rpcCode?: number; rpcData?: unknown; stderr?: string; exitCode?: number; agentId?: string; method?: string; cause?: unknown }) {
-    super(message, opts.cause !== undefined ? { cause: opts.cause } : undefined);
+  constructor(
+    message: string,
+    opts: {
+      rpcCode?: number;
+      rpcData?: unknown;
+      stderr?: string;
+      exitCode?: number;
+      agentId?: string;
+      method?: string;
+      cause?: unknown;
+    },
+  ) {
+    super(
+      message,
+      opts.cause !== undefined ? { cause: opts.cause } : undefined,
+    );
     this.name = "AcpRpcError";
     this.rpcCode = opts.rpcCode;
     this.rpcData = opts.rpcData;
@@ -261,14 +302,6 @@ function stampMethod(err: Error, method: string): AcpRpcError {
 const connections = new Map<string, AcpConnection>();
 let listenerInstalled = false;
 
-/**
- * How long (ms) `session/prompt` may run with zero stdout/stderr before the
- * watchdog rejects. Generous: real agents stream continuously, but a model's
- * first token can take 30-60s on a cold provider. 90s of *total silence*
- * (no chunks, no notifications, nothing) means the harness swallowed a failure.
- */
-const PROMPT_TIMEOUT_MS = 90_000;
-
 async function ensureListener() {
   if (listenerInstalled) return;
   listenerInstalled = true;
@@ -278,18 +311,21 @@ async function ensureListener() {
 export interface AcpHandlers {
   onUpdate: (update: AcpSessionUpdate) => void;
   /** Policy for session/request_permission. Return the chosen optionId, or null to reject. */
-  choosePermission: (options: { optionId: string; name: string; kind: string }[]) => string | null;
+  choosePermission: (
+    options: { optionId: string; name: string; kind: string }[],
+  ) => string | null;
 }
 
 export class AcpConnection {
   readonly id: string;
   private nextId = 1;
-  private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void; method: string }>();
+  private pending = new Map<
+    number,
+    { resolve: (v: any) => void; reject: (e: Error) => void; method: string }
+  >();
   private buf = "";
   private stderr = "";
   private dead = false;
-  /** last time we received any stdout/stderr from the agent (watchdog fuel). */
-  private lastActivityAt = Date.now();
   private handlers: AcpHandlers;
   private exitResolve!: (code: number) => void;
   readonly exited: Promise<number>;
@@ -301,7 +337,12 @@ export class AcpConnection {
   }
 
   /** Spawn the agent process and start the JSON-RPC loop. */
-  async spawn(binary: string, args: string[], cwd?: string, env?: Record<string, string>): Promise<void> {
+  async spawn(
+    binary: string,
+    args: string[],
+    cwd?: string,
+    env?: Record<string, string>,
+  ): Promise<void> {
     await ensureListener();
     connections.set(this.id, this);
     await native.spawnAgent({ id: this.id, binary, args, cwd, env });
@@ -323,17 +364,20 @@ export class AcpConnection {
         new AcpRpcError(ev.line ?? "spawn failed", {
           agentId: this.id,
           stderr: this.stderr,
-        })
+        }),
       );
     } else if (ev.kind === "exit") {
       // Surface the exit code on the error so callers/logs can tell a crash
       // apart from a harness that exited cleanly with stderr noise.
       this.fail(
-        new AcpRpcError(this.stderr.trim() || `agent exited (code ${ev.code ?? "?"})`, {
-          exitCode: ev.code ?? undefined,
-          stderr: this.stderr,
-          agentId: this.id,
-        })
+        new AcpRpcError(
+          this.stderr.trim() || `agent exited (code ${ev.code ?? "?"})`,
+          {
+            exitCode: ev.code ?? undefined,
+            stderr: this.stderr,
+            agentId: this.id,
+          },
+        ),
       );
       this.exitResolve(ev.code ?? 0);
       connections.delete(this.id);
@@ -346,7 +390,8 @@ export class AcpConnection {
     // Stamp each in-flight request's method onto the rejection so logs say
     // "session/prompt: agent killed" rather than a context-less "agent killed"
     // when the whole connection dies mid-turn.
-    for (const { reject, method } of this.pending.values()) reject(stampMethod(err, method));
+    for (const { reject, method } of this.pending.values())
+      reject(stampMethod(err, method));
     this.pending.clear();
   }
 
@@ -358,7 +403,10 @@ export class AcpConnection {
       return; // non-JSON (banner/log) — ignore
     }
     // response to one of our requests
-    if (msg.id != null && (msg.result !== undefined || msg.error !== undefined)) {
+    if (
+      msg.id != null &&
+      (msg.result !== undefined || msg.error !== undefined)
+    ) {
       const p = this.pending.get(msg.id as number);
       if (!p) return;
       this.pending.delete(msg.id as number);
@@ -376,7 +424,7 @@ export class AcpConnection {
             stderr: this.stderr,
             agentId: this.id,
             method: p.method,
-          })
+          }),
         );
       } else p.resolve(msg.result);
       return;
@@ -394,26 +442,52 @@ export class AcpConnection {
 
   private async serve(msg: JsonRpcMsg) {
     const respond = (result: unknown) =>
-      native.agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", id: msg.id, result })).catch((e) => {
-        console.error(`acp send response failed on ${this.id} id=${msg.id}`, e);
-        this.fail(new Error("lost agent connection sending response", { cause: e }));
-      });
+      native
+        .agentSend(
+          this.id,
+          JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }),
+        )
+        .catch((e) => {
+          console.error(
+            `acp send response failed on ${this.id} id=${msg.id}`,
+            e,
+          );
+          this.fail(
+            new Error("lost agent connection sending response", { cause: e }),
+          );
+        });
     const respondError = (code: number, message: string) =>
       native
-        .agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code, message } }))
+        .agentSend(
+          this.id,
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: msg.id,
+            error: { code, message },
+          }),
+        )
         .catch((e) => {
-          console.error(`acp send response failed on ${this.id} id=${msg.id}`, e);
-          this.fail(new Error("lost agent connection sending response", { cause: e }));
+          console.error(
+            `acp send response failed on ${this.id} id=${msg.id}`,
+            e,
+          );
+          this.fail(
+            new Error("lost agent connection sending response", { cause: e }),
+          );
         });
 
     switch (msg.method) {
       case "session/request_permission": {
-        const opts = (msg.params?.options ?? []) as { optionId: string; name: string; kind: string }[];
+        const opts = (msg.params?.options ?? []) as {
+          optionId: string;
+          name: string;
+          kind: string;
+        }[];
         const chosen = this.handlers.choosePermission(opts);
         await respond(
           chosen
             ? { outcome: { outcome: "selected", optionId: chosen } }
-            : { outcome: { outcome: "cancelled" } }
+            : { outcome: { outcome: "cancelled" } },
         );
         return;
       }
@@ -425,25 +499,40 @@ export class AcpConnection {
   }
 
   private request<T = any>(method: string, params: unknown): Promise<T> {
-    if (this.dead) return Promise.reject(stampMethod(new Error("agent connection closed"), method));
+    if (this.dead)
+      return Promise.reject(
+        stampMethod(new Error("agent connection closed"), method),
+      );
     const id = this.nextId++;
-    const p = new Promise<T>((resolve, reject) => this.pending.set(id, { resolve, reject, method }));
+    const p = new Promise<T>((resolve, reject) =>
+      this.pending.set(id, { resolve, reject, method }),
+    );
     void native
-      .agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", id, method, params }))
+      .agentSend(
+        this.id,
+        JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+      )
       .catch((e) => {
         const pend = this.pending.get(id);
         if (pend) {
           this.pending.delete(id);
-          pend.reject(stampMethod(e instanceof Error ? e : new Error(String(e)), method));
+          pend.reject(
+            stampMethod(e instanceof Error ? e : new Error(String(e)), method),
+          );
         }
       });
     return p;
   }
 
   private notify(method: string, params: unknown): void {
-    void native.agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", method, params })).catch((e) => {
-      console.error(`acp send notification failed on ${this.id} method=${method}`, e);
-    });
+    void native
+      .agentSend(this.id, JSON.stringify({ jsonrpc: "2.0", method, params }))
+      .catch((e) => {
+        console.error(
+          `acp send notification failed on ${this.id} method=${method}`,
+          e,
+        );
+      });
   }
 
   // -- ACP methods ----------------------------------------------------------
@@ -453,7 +542,10 @@ export class AcpConnection {
       protocolVersion: 1,
       clientInfo: { name: "charon", title: "Charon", version: "1" },
       // no fs/terminal: the agent uses its own disk/shell access, as the CLI does
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+      clientCapabilities: {
+        fs: { readTextFile: false, writeTextFile: false },
+        terminal: false,
+      },
     });
   }
 
@@ -471,43 +563,19 @@ export class AcpConnection {
 
   /** Set a session config option (codex's model/reasoning selectors). */
   setConfigOption(sessionId: string, configId: string, value: string) {
-    return this.request("session/set_config_option", { sessionId, configId, value });
+    return this.request("session/set_config_option", {
+      sessionId,
+      configId,
+      value,
+    });
   }
 
-  /**
-   * Run one prompt turn; resolves with the stop reason. Watches for harness
-   * stalls: if the agent produces no stdout/stderr for `PROMPT_TIMEOUT_MS`,
-   * rejects with a clear error instead of hanging forever. Some harnesses
-   * (opencode 1.17.x) swallow provider failures silently — they log the error
-   * internally but never respond to the `session/prompt` request, so without
-   * this the run would spin indefinitely.
-   */
+  /** Run one prompt turn; resolves with the stop reason. */
   async prompt(sessionId: string, blocks: AcpContentBlock[]): Promise<string> {
-    const reqPromise = this.request<{ stopReason?: string }>("session/prompt", {
+    const res = await this.request<{ stopReason?: string }>("session/prompt", {
       sessionId,
       prompt: blocks,
     });
-    const watchdog = new Promise<never>((_, reject) => {
-      const timer = setInterval(() => {
-        if (this.dead) { clearInterval(timer); return; }
-        if (Date.now() - this.lastActivityAt > PROMPT_TIMEOUT_MS) {
-          clearInterval(timer);
-          reject(stampMethod(
-            new Error(
-              `prompt stalled — no output from harness for ${Math.round(PROMPT_TIMEOUT_MS / 1000)}s. ` +
-              `The harness may have hit a provider error (rate limit, auth, billing) it didn't surface over ACP.`
-            ),
-            "session/prompt"
-          ));
-        }
-      }, 10000);
-      // cancel the watchdog once the real request settles
-      reqPromise.then(
-        () => clearInterval(timer),
-        () => clearInterval(timer)
-      );
-    });
-    const res = await Promise.race([reqPromise, watchdog]);
     return res?.stopReason ?? "end_turn";
   }
 
@@ -545,7 +613,8 @@ export interface HarnessProbe {
 /** Human-readable verify result. */
 export function summarizeProbe(p: HarnessProbe): string {
   if (!p.ok) return p.error ?? "could not connect";
-  if (p.models.length === 0) return "Connected — this agent manages its own model";
+  if (p.models.length === 0)
+    return "Connected — this agent manages its own model";
   const m = `${p.models.length} model${p.models.length === 1 ? "" : "s"}`;
   return `Connected — ${m}${p.modes.length ? `, ${p.modes.length} modes` : ""}`;
 }
@@ -559,9 +628,12 @@ export async function probeHarness(
   command: string,
   args: string[],
   cwd: string,
-  timeoutMs = 15000
+  timeoutMs = 15000,
 ): Promise<HarnessProbe> {
-  const conn = new AcpConnection(uid("probe-"), { onUpdate: () => {}, choosePermission: () => null });
+  const conn = new AcpConnection(uid("probe-"), {
+    onUpdate: () => {},
+    choosePermission: () => null,
+  });
   try {
     const result = await Promise.race([
       (async (): Promise<HarnessProbe> => {
@@ -572,14 +644,26 @@ export async function probeHarness(
         const rc = reasoningConfigOption(ns);
         const reasoning = rc
           ? {
-              options: rc.options!.map((o) => ({ modelId: o.value, name: o.name ?? o.value })),
+              options: rc.options!.map((o) => ({
+                modelId: o.value,
+                name: o.name ?? o.value,
+              })),
               currentId: rc.currentValue,
             }
           : undefined;
-        return { ok: true, models, currentId, reasoning, modes: ns.modes?.availableModes ?? [] };
+        return {
+          ok: true,
+          models,
+          currentId,
+          reasoning,
+          modes: ns.modes?.availableModes ?? [],
+        };
       })(),
       new Promise<HarnessProbe>((_, rej) =>
-        setTimeout(() => rej(new Error("timed out — is the command an ACP server?")), timeoutMs)
+        setTimeout(
+          () => rej(new Error("timed out — is the command an ACP server?")),
+          timeoutMs,
+        ),
       ),
     ]);
     return result;
