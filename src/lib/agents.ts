@@ -27,16 +27,19 @@ const agentNotif = (
   run: AgentRun,
   outcome: "started" | "finished" | "failed",
   category: NotificationCategory,
-  extra = ""
+  extra = "",
 ) => {
   if (isHiddenAgentRun(run)) return;
   const icon = outcome === "started" ? "▶" : outcome === "finished" ? "✓" : "✗";
-  const subject = run.prNumber == null ? run.prTitle : `PR #${run.prNumber} ${run.prTitle}`;
+  const subject =
+    run.prNumber == null ? run.prTitle : `PR #${run.prNumber} ${run.prTitle}`;
   void notify(
     category,
     `${icon} Agent ${outcome}: ${run.relation}`,
     `${subject} · ${run.repo}${extra}`,
-    run.prNumber == null ? undefined : { repo: run.repo, prNumber: run.prNumber }
+    run.prNumber == null
+      ? undefined
+      : { repo: run.repo, prNumber: run.prNumber },
   );
 };
 
@@ -45,10 +48,14 @@ const agentNotif = (
 // gates independently in Settings → Notifications
 const lifecycleCategory = (
   run: AgentRun,
-  outcome: "started" | "finished" | "failed"
+  outcome: "started" | "finished" | "failed",
 ): NotificationCategory =>
   run.notifyCategory ??
-  (outcome === "started" ? "agent_started" : outcome === "finished" ? "agent_finished" : "agent_failed");
+  (outcome === "started"
+    ? "agent_started"
+    : outcome === "finished"
+      ? "agent_finished"
+      : "agent_failed");
 
 export interface StartAgentOptions {
   kind: AgentKind;
@@ -81,7 +88,11 @@ export interface StartAgentOptions {
 }
 
 // app mode → ACP session mode (cursor exposes agent/plan/ask)
-const ACP_MODE: Record<string, string> = { write: "agent", plan: "plan", ask: "ask" };
+const ACP_MODE: Record<string, string> = {
+  write: "agent",
+  plan: "plan",
+  ask: "ask",
+};
 
 interface ActiveRun {
   conn: AcpConnection;
@@ -90,8 +101,14 @@ interface ActiveRun {
   cancelRequested: boolean;
 }
 const active = new Map<string, ActiveRun>();
-const doneCallbacks = new Map<string, (run: AgentRun) => void | Promise<void>>();
-const settledCallbacks = new Map<string, (run: AgentRun) => void | Promise<void>>();
+const doneCallbacks = new Map<
+  string,
+  (run: AgentRun) => void | Promise<void>
+>();
+const settledCallbacks = new Map<
+  string,
+  (run: AgentRun) => void | Promise<void>
+>();
 // runs whose turn produced a harness "can't reach the model provider" error —
 // the turn still ends end_turn, so finalize() converts these to a failure
 const providerFailures = new Map<string, string>();
@@ -143,7 +160,9 @@ function toolOutput(content: any): string | undefined {
       const t = textOf(b.content);
       if (t) parts.push(t);
     } else if (b?.type === "diff") {
-      parts.push(`${b.path ? `${b.path}\n` : ""}${b.newText ?? b.oldText ?? ""}`);
+      parts.push(
+        `${b.path ? `${b.path}\n` : ""}${b.newText ?? b.oldText ?? ""}`,
+      );
     } else if (typeof b?.text === "string") {
       parts.push(b.text);
     }
@@ -183,7 +202,9 @@ function applyUpdate(id: string, u: AcpSessionUpdate): void {
         kind: tc.kind as ToolKind | undefined,
         status: tc.status as ToolStatus | undefined,
         locations: Array.isArray(tc.locations)
-          ? tc.locations.map((l: any) => (l.line ? `${l.path}:${l.line}` : l.path))
+          ? tc.locations.map((l: any) =>
+              l.line ? `${l.path}:${l.line}` : l.path,
+            )
           : undefined,
         input: toolSummary(tc.rawInput),
         output: toolOutput(tc.content),
@@ -194,7 +215,11 @@ function applyUpdate(id: string, u: AcpSessionUpdate): void {
       const entries = (u as any).entries ?? [];
       store.setPlan(
         id,
-        entries.map((e: any) => ({ content: e.content, status: e.status, priority: e.priority }))
+        entries.map((e: any) => ({
+          content: e.content,
+          status: e.status,
+          priority: e.priority,
+        })),
       );
       break;
     }
@@ -202,7 +227,8 @@ function applyUpdate(id: string, u: AcpSessionUpdate): void {
       store.update(id, { mode: (u as any).modeId });
       break;
     case "session_info_update":
-      if ((u as any).title) store.update(id, { sessionTitle: (u as any).title });
+      if ((u as any).title)
+        store.update(id, { sessionTitle: (u as any).title });
       break;
     // available_commands_update / user_message_chunk: not surfaced
   }
@@ -264,7 +290,12 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     doneCallbacks.delete(id);
     providerFailures.delete(id);
     active.delete(id);
-    agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — " + msg.slice(0, 80));
+    agentNotif(
+      run,
+      "failed",
+      lifecycleCategory(run, "failed"),
+      " — " + msg.slice(0, 80),
+    );
     runSettledCallback(id);
   };
 
@@ -294,7 +325,12 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
       await conn.initialize();
       const ns = await conn.newSession(sessionCwd);
       const sessionId = ns.sessionId;
-      active.set(id, { conn, sessionId, pendingSteer: null, cancelRequested: false });
+      active.set(id, {
+        conn,
+        sessionId,
+        pendingSteer: null,
+        cancelRequested: false,
+      });
       useAgentStore.getState().update(id, {
         status: "running",
         steerable: true,
@@ -310,8 +346,12 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
       // to the call that actually failed (the AcpRpcError carries
       // `method: "session/set_mode"` etc.).
       const targetMode = ACP_MODE[opts.mode ?? "write"];
-      if (targetMode && ns.modes && ns.modes.currentModeId !== targetMode &&
-          ns.modes.availableModes.some((m) => m.id === targetMode)) {
+      if (
+        targetMode &&
+        ns.modes &&
+        ns.modes.currentModeId !== targetMode &&
+        ns.modes.availableModes.some((m) => m.id === targetMode)
+      ) {
         await conn.setMode(sessionId, targetMode);
       }
       // set model — via the harness's native `session/set_model` method,
@@ -338,7 +378,8 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
       // reasoning effort — a separate config-option axis where the harness
       // exposes it (codex). Per-flow override > global default.
       const cfg = useGlobalConfig.getState().config;
-      const reasoning = cfg?.reasoningOverrides?.[opts.kind] || cfg?.reasoningEffort;
+      const reasoning =
+        cfg?.reasoningOverrides?.[opts.kind] || cfg?.reasoningEffort;
       const rc = reasoningConfigOption(ns);
       if (reasoning && rc && rc.options!.some((o) => o.value === reasoning)) {
         await conn.setConfigOption(sessionId, rc.id, reasoning);
@@ -368,7 +409,10 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
       // structured RPC code/data + stderr tail — these are what's missing
       // from "Internal error: OpenCode service failure" and they're discarded
       // if we only read `e.message`.
-      console.error(`[agent] run ${id} failed (${run.relation} · ${run.repo})`, e);
+      console.error(
+        `[agent] run ${id} failed (${run.relation} · ${run.repo})`,
+        e,
+      );
       let msg: string;
       let detail: string | undefined;
       if (e instanceof AcpRpcError) {
@@ -397,8 +441,19 @@ function finalize(id: string, status: "done" | "killed") {
   const provErr = providerFailures.get(id);
   providerFailures.delete(id);
   if (status === "done" && provErr) {
-    store.update(id, { status: "error", error: provErr, endedAt: Date.now(), exitCode: 1, steerable: false });
-    agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — " + provErr.slice(0, 80));
+    store.update(id, {
+      status: "error",
+      error: provErr,
+      endedAt: Date.now(),
+      exitCode: 1,
+      steerable: false,
+    });
+    agentNotif(
+      run,
+      "failed",
+      lifecycleCategory(run, "failed"),
+      " — " + provErr.slice(0, 80),
+    );
     doneCallbacks.delete(id); // don't run post-processing on a failed turn
     runSettledCallback(id);
     return;
@@ -410,18 +465,30 @@ function finalize(id: string, status: "done" | "killed") {
     steerable: false,
   });
   if (status === "done") {
-    agentNotif(run, "finished", lifecycleCategory(run, "finished"), ` — ${Math.round((Date.now() - run.startedAt) / 1000)}s`);
+    agentNotif(
+      run,
+      "finished",
+      lifecycleCategory(run, "finished"),
+      ` — ${Math.round((Date.now() - run.startedAt) / 1000)}s`,
+    );
     // onDone runs only on clean completion (matches pre-ACP semantics)
     const cb = doneCallbacks.get(id);
     doneCallbacks.delete(id);
     if (cb) {
-      Promise.resolve(cb(useAgentStore.getState().runs[id])).catch((e) => {
-        useAgentStore.getState().update(id, {
-          status: "error",
-          error: `post-processing failed: ${e instanceof Error ? e.message : String(e)}`,
-        });
-        agentNotif(run, "failed", lifecycleCategory(run, "failed"), " — post-processing failed");
-      }).finally(() => runSettledCallback(id));
+      Promise.resolve(cb(useAgentStore.getState().runs[id]))
+        .catch((e) => {
+          useAgentStore.getState().update(id, {
+            status: "error",
+            error: `post-processing failed: ${e instanceof Error ? e.message : String(e)}`,
+          });
+          agentNotif(
+            run,
+            "failed",
+            lifecycleCategory(run, "failed"),
+            " — post-processing failed",
+          );
+        })
+        .finally(() => runSettledCallback(id));
     } else runSettledCallback(id);
   } else {
     doneCallbacks.delete(id); // killed-by-user stays silent
@@ -445,7 +512,9 @@ export function steerAgent(id: string, text: string): void {
   const a = active.get(id);
   if (!a || !text.trim()) return;
   useAgentStore.getState().appendChunk(id, "steer", text.trim());
-  a.pendingSteer = a.pendingSteer ? `${a.pendingSteer}\n\n${text.trim()}` : text.trim();
+  a.pendingSteer = a.pendingSteer
+    ? `${a.pendingSteer}\n\n${text.trim()}`
+    : text.trim();
   a.conn.cancel(a.sessionId); // end the current turn so the loop applies the steer
 }
 
@@ -466,7 +535,9 @@ export async function killAgent(id: string): Promise<void> {
     }, 5000);
   } else {
     await native.killAgent(id).catch(() => {});
-    useAgentStore.getState().update(id, { status: "killed", endedAt: Date.now() });
+    useAgentStore
+      .getState()
+      .update(id, { status: "killed", endedAt: Date.now() });
     doneCallbacks.delete(id);
   }
 }
@@ -551,7 +622,9 @@ export function extractProposalJson(text: string): any | null {
   const blocks = [...text.matchAll(/<proposal>([\s\S]*?)<\/proposal>/g)];
   const candidates: string[] = blocks.map((m) => m[1]);
   if (candidates.length === 0) {
-    const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1]);
+    const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(
+      (m) => m[1],
+    );
     candidates.push(...fenced);
   }
   for (const raw of candidates.reverse()) {
@@ -581,7 +654,7 @@ export function cleanResultText(text: string): string {
  */
 export async function refreshModels(
   global: import("../types").GlobalConfig,
-  save: (cfg: import("../types").GlobalConfig) => Promise<void>
+  save: (cfg: import("../types").GlobalConfig) => Promise<void>,
 ): Promise<void> {
   const harness = activeHarness(global);
   if (!harness) return;
@@ -598,9 +671,12 @@ export async function refreshModels(
   for (const x of labeled) modelLabels[x.modelId] = x.label;
 
   // reasoning effort — a separate picker where the harness exposes it
-  const reasoningOptions = (probe.reasoning?.options ?? []).map((o) => o.modelId);
+  const reasoningOptions = (probe.reasoning?.options ?? []).map(
+    (o) => o.modelId,
+  );
   const reasoningLabels: Record<string, string> = {};
-  for (const o of probe.reasoning?.options ?? []) reasoningLabels[o.modelId] = o.name;
+  for (const o of probe.reasoning?.options ?? [])
+    reasoningLabels[o.modelId] = o.name;
 
   // Reconcile every selection against what's actually available now: keep the
   // configured pick if still offered, else the harness's own current/default,
@@ -613,10 +689,11 @@ export async function refreshModels(
     ? global.defaultModel
     : probe.currentId && models.includes(probe.currentId)
       ? probe.currentId
-      : models[0] ?? "auto";
+      : (models[0] ?? "auto");
   const reasoningEffort = reasoningOptions.includes(global.reasoningEffort)
     ? global.reasoningEffort
-    : probe.reasoning?.currentId && reasoningOptions.includes(probe.reasoning.currentId)
+    : probe.reasoning?.currentId &&
+        reasoningOptions.includes(probe.reasoning.currentId)
       ? probe.reasoning.currentId
       : "";
   const modelOverrides: Record<string, string> = {};
@@ -639,9 +716,14 @@ export async function refreshModels(
   };
   const sig = (c: import("../types").GlobalConfig) =>
     JSON.stringify([
-      c.models, c.modelLabels, c.defaultModel,
-      c.reasoningOptions, c.reasoningLabels, c.reasoningEffort,
-      c.modelOverrides, c.reasoningOverrides,
+      c.models,
+      c.modelLabels,
+      c.defaultModel,
+      c.reasoningOptions,
+      c.reasoningLabels,
+      c.reasoningEffort,
+      c.modelOverrides,
+      c.reasoningOverrides,
     ]);
   if (sig(next) !== sig(global)) await save(next);
 }
