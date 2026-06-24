@@ -6,6 +6,7 @@ import {
   reasoningConfigOption,
   sessionModels,
   summarizeAcpError,
+  type AcpContentBlock,
   type AcpSessionUpdate,
 } from "./acp";
 import { isHiddenAgentRun, isVisibleAgentRun } from "./agent-runs";
@@ -112,6 +113,75 @@ const settledCallbacks = new Map<
 // runs whose turn produced a harness "can't reach the model provider" error —
 // the turn still ends end_turn, so finalize() converts these to a failure
 const providerFailures = new Map<string, string>();
+
+/**
+ * Quiet window (ms) before the opencode stall diagnostic first checks the
+ * harness log. The provider error appears in opencode's log within ~1s of the
+ * failed call, so 30s is conservative — it just avoids checking on turns that
+ * start streaming promptly. If no error is found, the diagnostic re-checks at
+ * this interval until the prompt resolves or an error lands.
+ */
+const OPENCODE_STALL_CHECK_MS = 30_000;
+
+/**
+ * Run one prompt turn, with an opencode-specific stall diagnostic layered on
+ * top. opencode 1.17.x swallows provider errors (rate limit, billing, auth)
+ * internally — it logs them to `~/.local/share/opencode/log/opencode.log` but
+ * never surfaces them over ACP, so `session/prompt` hangs forever. This races
+ * the real prompt against a recurring log check: if the log shows a `stream
+ * error` for our session, the run fails with the harness's own message instead
+ * of spinning. If no error is found, keeps waiting — no false positives,
+ * because we only act on a confirmed log error, not on silence alone.
+ *
+ * `diagnostic` is false for non-opencode harnesses (the check is a no-op and
+ * this is just `conn.prompt()`).
+ */
+async function promptWithStallDiagnostic(
+  conn: AcpConnection,
+  sessionId: string,
+  blocks: AcpContentBlock[],
+  diagnostic: boolean,
+): Promise<string> {
+  const promptPromise = conn.prompt(sessionId, blocks);
+  if (!diagnostic) return promptPromise;
+
+  const sentAt = Date.now();
+  const diag = new Promise<never>((_, reject) => {
+    let timer: ReturnType<typeof setTimeout>;
+    const check = () => {
+      void native.opencodeSessionErrors(sessionId, sentAt).then(
+        (errors) => {
+          if (errors.length > 0) {
+            // Surface the harness's own message — it's the actionable bit
+            // ("Rate limit exceeded", "No payment method", etc.)
+            reject(
+              new AcpRpcError(
+                `The model provider rejected the request: ${errors[0]}`,
+                { method: "session/prompt", agentId: conn.id },
+              ),
+            );
+          } else {
+            // No error logged — the turn is legitimately slow, not failed.
+            // Schedule another check; the prompt may still resolve normally.
+            timer = setTimeout(check, OPENCODE_STALL_CHECK_MS);
+          }
+        },
+        () => {
+          // Log unreadable (path moved, not opencode, etc.) — stop
+          // diagnosing and let the prompt run its course. The user still has
+          // the manual kill path.
+        },
+      );
+    };
+    timer = setTimeout(check, OPENCODE_STALL_CHECK_MS);
+    // Cancel the diagnostic loop once the real prompt settles either way.
+    promptPromise.then(
+      () => clearTimeout(timer),
+      () => clearTimeout(timer),
+    );
+  });
+  return Promise.race([promptPromise, diag]);
+}
 
 /**
  * Detect a harness "can't reach the model provider" error in agent output
@@ -321,6 +391,9 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
       const harness = activeHarness(useGlobalConfig.getState().config!);
       const command = harness?.command || opts.binary;
       const args = harness?.args ?? ["acp"];
+      // opencode swallows provider errors silently over ACP — enable the stall
+      // diagnostic that tails its own log for a matching `stream error`.
+      const stallDiagnostic = harness?.id === "opencode" || command === "opencode";
       await conn.spawn(command, args, opts.cwd);
       await conn.initialize();
       const ns = await conn.newSession(sessionCwd);
@@ -389,7 +462,12 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
       let text = opts.prompt;
       let stop = "end_turn";
       for (;;) {
-        stop = await conn.prompt(sessionId, [{ type: "text", text }]);
+        stop = await promptWithStallDiagnostic(
+          conn,
+          sessionId,
+          [{ type: "text", text }],
+          stallDiagnostic,
+        );
         const a = active.get(id);
         if (a && a.pendingSteer != null && !a.cancelRequested) {
           text = a.pendingSteer;

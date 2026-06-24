@@ -185,6 +185,154 @@ fn agent_send(registry: State<'_, AgentRegistry>, id: String, line: String) -> R
     tx.send(line).map_err(|_| "agent stdin closed".to_string())
 }
 
+/// Resolve opencode's data dir: `$XDG_DATA_HOME/opencode` or
+/// `$HOME/.local/share/opencode` (opencode uses the XDG path even on macOS,
+/// not `~/Library/Application Support`). Returns None if HOME is unset.
+fn opencode_data_dir() -> Option<PathBuf> {
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        if !xdg.is_empty() {
+            return Some(PathBuf::from(xdg).join("opencode"));
+        }
+    }
+    std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".local/share/opencode"))
+}
+
+/// Tail opencode's own log for a `stream error` line matching `session_id`
+/// (the `ses_...` id from `session/new`) and `small=false` (the main build
+/// agent, not the background title-generation call). opencode 1.17.x swallows
+/// provider errors (rate limit, billing, auth) internally — it logs them here
+/// but never surfaces them over ACP, so `session/prompt` hangs forever. This
+/// lets the caller confirm a stall is a real provider failure and surface the
+/// harness's own message instead of spinning indefinitely.
+///
+/// `since_ms` is a Unix-epoch-ms cutoff (typically the moment we sent
+/// `session/prompt`): only log lines timestamped after it are considered, so a
+/// stale error from a prior run on the same session can't fire.
+#[tauri::command]
+fn opencode_session_errors(session_id: String, since_ms: u64) -> Result<Vec<String>, String> {
+    let log_path = opencode_data_dir()
+        .ok_or_else(|| "HOME unset; can't locate opencode log".to_string())?
+        .join("log/opencode.log");
+
+    let file = std::fs::File::open(&log_path)
+        .map_err(|e| format!("can't open opencode log at {}: {e}", log_path.display()))?;
+
+    // Seek near the tail — the log grows unbounded (7MB+ in production) and
+    // we only care about recent lines. Read the last 512KB.
+    let len = file
+        .metadata()
+        .map_err(|e| e.to_string())?
+        .len();
+    let tail_start = len.saturating_sub(512 * 1024);
+    let mut file = file;
+    use std::io::{Read, Seek, SeekFrom};
+    file.seek(SeekFrom::Start(tail_start))
+        .map_err(|e| e.to_string())?;
+
+    let mut buf = String::new();
+    file.read_to_string(&mut buf)
+        .map_err(|e| e.to_string())?;
+
+    // Drop the partial first line (we sought mid-line). The first newline
+    // boundary lands us on a full line.
+    let body = buf.split_once('\n').map(|(_, rest)| rest).unwrap_or(&buf);
+
+    let mut errors: Vec<String> = Vec::new();
+    for line in body.lines() {
+        // Fast reject: must be a stream-error line for this session's main turn.
+        if !line.contains("stream error") || !line.contains(&session_id) {
+            continue;
+        }
+        // Skip the title-generation sub-call (small=true) — it fires its own
+        // stream error on the same session, but it's noise for us; the build
+        // agent's failure is what stalled the prompt.
+        if line.contains("small=true") {
+            continue;
+        }
+        // Timestamp gate: opencode logs in ISO-8601 UTC
+        // (`timestamp=2026-06-23T23:46:23.425Z`). Parse and compare to
+        // since_ms so stale errors from a prior run on a reused session id
+        // can't fire. If the timestamp is unparseable, fall through (treat as
+        // a candidate — a false positive is better than a missed diagnosis).
+        if let Some(ts) = line.strip_prefix("timestamp=").and_then(|rest| rest.split_whitespace().next()) {
+            if let Some(parsed) = parse_iso_ms(ts) {
+                if parsed < since_ms {
+                    continue;
+                }
+            }
+        }
+        // Extract `error.error="..."` — the real provider message
+        // (e.g. "AI_APICallError: Rate limit exceeded. Please try again later.").
+        if let Some(msg) = extract_field(line, "error.error=") {
+            errors.push(msg);
+        } else if let Some(msg) = extract_field(line, "error=") {
+            // Some lines use `error=` instead of `error.error=`
+            errors.push(msg);
+        }
+    }
+    Ok(errors)
+}
+
+/// Parse an ISO-8601 UTC timestamp (`2026-06-23T23:46:23.425Z`) to Unix epoch
+/// milliseconds. Returns None on any parse failure (caller treats None as
+/// "don't gate on timestamp").
+fn parse_iso_ms(ts: &str) -> Option<u64> {
+    // Cheapest correct path: the Tauri build already pulls chrono via
+    // tauri/tokio transitively, but we avoid a direct chrono dep by hand-rolling
+    // the common case. Format: YYYY-MM-DDTHH:MM:SS.mmmZ
+    let b = ts.as_bytes();
+    if b.len() < 24 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[13] != b':' || b[16] != b':' || b[19] != b'.' || b[23] != b'Z' {
+        return None;
+    }
+    let y: u64 = std::str::from_utf8(&b[0..4]).ok()?.parse().ok()?;
+    let mo: u64 = std::str::from_utf8(&b[5..7]).ok()?.parse().ok()?;
+    let d: u64 = std::str::from_utf8(&b[8..10]).ok()?.parse().ok()?;
+    let h: u64 = std::str::from_utf8(&b[11..13]).ok()?.parse().ok()?;
+    let mi: u64 = std::str::from_utf8(&b[14..16]).ok()?.parse().ok()?;
+    let s: u64 = std::str::from_utf8(&b[17..19]).ok()?.parse().ok()?;
+    let ms: u64 = std::str::from_utf8(&b[20..23]).ok()?.parse().ok()?;
+    // Days from civil epoch (1970-01-01) using the well-known days-from-civil
+    // formula (Howard Hinnant). Avoids month-length tables.
+    let y2 = if mo <= 2 { y - 1 } else { y };
+    let era = y2 / 400;
+    let yoe = y2 - era * 400;
+    let m = if mo > 2 { mo - 3 } else { mo + 9 };
+    let doy = (153 * m + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days_since_epoch = era * 146097 + doe - 719468;
+    let secs = days_since_epoch * 86400 + h * 3600 + mi * 60 + s;
+    Some(secs * 1000 + ms)
+}
+
+/// Extract the value of a `key="..."` field from a structured-log line. Handles
+/// quoted values with escaped quotes. Returns the inner string (unescaped).
+fn extract_field(line: &str, key: &str) -> Option<String> {
+    let idx = line.find(key)?;
+    let rest = &line[idx + key.len()..];
+    let quote = rest.chars().next()?;
+    if quote != '"' {
+        // Unquoted value — take up to the next space.
+        let val: String = rest.chars().take_while(|c| !c.is_whitespace()).collect();
+        return if val.is_empty() { None } else { Some(val) };
+    }
+    // Quoted: scan to the matching close quote, respecting `\"`.
+    let mut out = String::new();
+    let mut chars = rest[1..].chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+            continue;
+        }
+        if c == '"' {
+            return Some(out);
+        }
+        out.push(c);
+    }
+    None
+}
+
 #[tauri::command]
 fn kill_agent(registry: State<'_, AgentRegistry>, id: String) -> Result<(), String> {
     // drop the writer sender → writer thread ends, stdin pipe closes
@@ -719,6 +867,7 @@ pub fn run() {
             spawn_agent,
             agent_send,
             kill_agent,
+            opencode_session_errors,
             run_git,
             run_exec,
             http_request,

@@ -48,7 +48,7 @@ Where each thing lives. Touch it here, change it here.
 
 **`src/lib/worktree.ts`** — Isolated per-PR Git worktrees: read-only trees for reviews (fall back to diff-only if checkout fails), mutable fix/draft trees that mutate and push. Preserve/prune policy keeps disk use bounded.
 
-**`src-tauri/src/lib.rs`** — Native commands: `spawn_agent` (piped stdin/stdout), `agent_send`, HTTP proxy (reqwest/rustls), blob storage for config/run persistence. The only I/O boundary to the outside world.
+**`src-tauri/src/lib.rs`** — Native commands: `spawn_agent` (piped stdin/stdout), `agent_send`, `opencode_session_errors` (tails opencode's own log for session-matched provider errors the harness swallows), HTTP proxy (reqwest/rustls), blob storage for config/run persistence. The only I/O boundary to the outside world.
 
 **`src/lib/template.ts`** — Prompt interpolation: `{kebab-case}` variables, unknown vars left intact so prompts degrade visibly. `prVars()` derives standard variables from a PR shape.
 
@@ -60,7 +60,7 @@ Where each thing lives. Touch it here, change it here.
 - **Stores**: Config writes always route through native blob storage — never write persisted state directly from the webview. Agent store owns run streaming; skill store is just a container for skills loaded via native scan plus shipped fallbacks.
 - **Prompt templating**: Flows assemble context into prompts before spawning agents; new triggers extend `EVENT_CATALOG` in defaults, not flow logic. Keep flows fixed to review/fix/analysis — add behavior via handlers and templates, not new flow types. Template syntax is `{kebab-case}` (see template.ts).
 - **Network rule**: Webview code never makes GitHub requests. All HTTP (including GHE with custom CAs) goes through native commands; the proxy command is the only path out. Git operations also go through native `runGit`.
-- **Regression guard in agents.ts:295ff** — pr-copilot deliberately avoids calling ACP `set_config_option` for model on harnesses that expose it as a config option (opencode, codex). On opencode 1.15.x this call corrupts the session and fails every subsequent prompt with `-32603 / {service:"session"}`. The integration test (`npm run integ`) verifies both the fix path works and the bug path still exists. Do not refactor agents.ts model selection without understanding this guard.
+- **Regression guard in agents.ts:316ff** — pr-copilot calls ACP `session/set_model` (the native method) on any harness that exposes a model list, including opencode (verified on 1.17.9; the 1.15.13 SQLite corruption bug is fixed). It deliberately still avoids `session/set_config_option` for model — that was the actual corrupting call on 1.15.x. opencode also swallows provider errors (rate limit, billing) silently over ACP — the `promptWithStallDiagnostic` helper + `opencode_session_errors` native command tail opencode's own log and fail the run with the real message instead of hanging. Do not refactor agents.ts model selection or the stall diagnostic without understanding this guard.
 
 ## MAINTENANCE NOTE FOR AGENTS
 

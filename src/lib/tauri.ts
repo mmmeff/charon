@@ -71,6 +71,19 @@ export const native = {
     return invoke("kill_agent", { id });
   },
 
+  /**
+   * Tail opencode's own log for `stream error` lines matching a session id
+   * (the `ses_...` from `session/new`) and timestamped after `sinceMs` (the
+   * moment we sent `session/prompt`). opencode swallows provider errors
+   * (rate limit, billing, auth) internally — this surfaces them so a stalled
+   * run can fail with the real message instead of hanging forever. Harness-
+   * specific to opencode; returns an empty list for other harnesses or if no
+   * matching error is found.
+   */
+  opencodeSessionErrors(sessionId: string, sinceMs: number): Promise<string[]> {
+    return invoke("opencode_session_errors", { sessionId, sinceMs });
+  },
+
   loadBlob(rel: string): Promise<string | null> {
     return invoke("load_blob", { rel });
   },
