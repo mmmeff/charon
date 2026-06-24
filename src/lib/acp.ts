@@ -261,6 +261,14 @@ function stampMethod(err: Error, method: string): AcpRpcError {
 const connections = new Map<string, AcpConnection>();
 let listenerInstalled = false;
 
+/**
+ * How long (ms) `session/prompt` may run with zero stdout/stderr before the
+ * watchdog rejects. Generous: real agents stream continuously, but a model's
+ * first token can take 30-60s on a cold provider. 90s of *total silence*
+ * (no chunks, no notifications, nothing) means the harness swallowed a failure.
+ */
+const PROMPT_TIMEOUT_MS = 90_000;
+
 async function ensureListener() {
   if (listenerInstalled) return;
   listenerInstalled = true;
@@ -280,6 +288,8 @@ export class AcpConnection {
   private buf = "";
   private stderr = "";
   private dead = false;
+  /** last time we received any stdout/stderr from the agent (watchdog fuel). */
+  private lastActivityAt = Date.now();
   private handlers: AcpHandlers;
   private exitResolve!: (code: number) => void;
   readonly exited: Promise<number>;
@@ -464,12 +474,40 @@ export class AcpConnection {
     return this.request("session/set_config_option", { sessionId, configId, value });
   }
 
-  /** Run one prompt turn; resolves with the stop reason. */
+  /**
+   * Run one prompt turn; resolves with the stop reason. Watches for harness
+   * stalls: if the agent produces no stdout/stderr for `PROMPT_TIMEOUT_MS`,
+   * rejects with a clear error instead of hanging forever. Some harnesses
+   * (opencode 1.17.x) swallow provider failures silently — they log the error
+   * internally but never respond to the `session/prompt` request, so without
+   * this the run would spin indefinitely.
+   */
   async prompt(sessionId: string, blocks: AcpContentBlock[]): Promise<string> {
-    const res = await this.request<{ stopReason?: string }>("session/prompt", {
+    const reqPromise = this.request<{ stopReason?: string }>("session/prompt", {
       sessionId,
       prompt: blocks,
     });
+    const watchdog = new Promise<never>((_, reject) => {
+      const timer = setInterval(() => {
+        if (this.dead) { clearInterval(timer); return; }
+        if (Date.now() - this.lastActivityAt > PROMPT_TIMEOUT_MS) {
+          clearInterval(timer);
+          reject(stampMethod(
+            new Error(
+              `prompt stalled — no output from harness for ${Math.round(PROMPT_TIMEOUT_MS / 1000)}s. ` +
+              `The harness may have hit a provider error (rate limit, auth, billing) it didn't surface over ACP.`
+            ),
+            "session/prompt"
+          ));
+        }
+      }, 10000);
+      // cancel the watchdog once the real request settles
+      reqPromise.then(
+        () => clearInterval(timer),
+        () => clearInterval(timer)
+      );
+    });
+    const res = await Promise.race([reqPromise, watchdog]);
     return res?.stopReason ?? "end_turn";
   }
 

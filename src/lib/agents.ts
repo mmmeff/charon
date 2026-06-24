@@ -4,6 +4,7 @@ import {
   labeledModels,
   probeHarness,
   reasoningConfigOption,
+  sessionModels,
   summarizeAcpError,
   type AcpSessionUpdate,
 } from "./acp";
@@ -313,28 +314,25 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
           ns.modes.availableModes.some((m) => m.id === targetMode)) {
         await conn.setMode(sessionId, targetMode);
       }
-      // set model — only via the harness's NATIVE set_model mechanism
-      // (cursor and anything that exposes `models.availableModels` over
-      // ACP). Harnesses that instead expose model as a `model` config
-      // option (opencode, codex) deliberately keep pr-copilot's hands off:
+      // set model — via the harness's native `session/set_model` method,
+      // available on any harness that exposes a model list, whether as ACP
+      // `models.availableModels` (cursor) or a `model` config option
+      // (opencode, codex). `sessionModels()` unifies both.
       //
-      //   opencode 1.15.13's `session/set_config_option("model", …)` succeeds
-      //   but emits `session.next.model.switched`, whose handler calls
-      //   `appendMessage` with `seq = NULL` over an empty `session_message`
-      //   table (`MAX(seq)` returns NULL, no COALESCE) → SQLite NOT NULL
-      //   constraint failure, propagated synchronously inside every subsequent
-      //   `session/prompt`'s `createUserMessage` and surfaced as
-      //   `-32603 / {service:"session"}`. Switching the model at all
-      //   corrupts the session — pr-copilot's per-run override would fail
-      //   every agent, every time, on opencode 1.15.13. The user's harness-
-      //   level config (`opencode.json`, codex's `~/.codex/config.toml`)
-      //   is the source of truth for these harnesses' default model; pr-copilot
-      //   shouldn't override what the user already configured there. The
-      //   model picker for such harnesses stays informational (the probe list
-      //   populates `cfg.models` for display only). Native `set_model` is a
-      //   real ACP method with its own handler, exercised and reliable on
-      //   cursor; keep that path.
-      if (opts.model && opts.model !== "auto" && ns.models?.availableModels?.length) {
+      //   opencode 1.15.13's `session/set_config_option("model", …)` corrupted
+      //   the session (SQLite NOT NULL on session_message.seq), so pr-copilot
+      //   historically skipped model selection for opencode entirely and ran
+      //   the harness default. But the native `session/set_model` method is a
+      //   separate handler with its own code path, and the 1.15.13 SQLite bug
+      //   is fixed in 1.17.9 — verified firsthand: `set_model` on 1.17.9
+      //   streams and resolves cleanly, while omitting it runs the harness
+      //   default, which on a rate-limited / unpaid OpenCode Zen account
+      //   fails *silently* (opencode logs the provider error internally but
+      //   never surfaces it over ACP, so `session/prompt` hangs forever).
+      //   Keep `set_config_option` skipped — that was the actual corrupting
+      //   call — but `set_model` is safe and now required for opencode.
+      const sm = sessionModels(ns);
+      if (opts.model && opts.model !== "auto" && sm.models.length) {
         await conn.setModel(sessionId, opts.model);
       }
       // reasoning effort — a separate config-option axis where the harness
