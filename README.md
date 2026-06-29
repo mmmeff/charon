@@ -163,3 +163,5 @@ own window.
 ## License
 
 [MIT](LICENSE) © Matt Frey
+
+.
