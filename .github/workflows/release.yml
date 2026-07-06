@@ -166,6 +166,9 @@ jobs:
 
           lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines()
           msg = "\n".join(lines[-80:])
+          # GitHub truncates annotation messages to 4096 chars from the front,
+          # which can drop the actual error at the end of the log — keep the tail.
+          msg = msg[-3800:]
           msg = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Tauri build failed::{msg}")
           PY
