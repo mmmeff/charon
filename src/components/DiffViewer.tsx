@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { buildSplitRows, hideWhitespaceChanges, snippetFor } from "../lib/diff";
+import { hideWhitespaceChanges, snippetFor } from "../lib/diff";
+import type { SplitRow } from "../lib/diff";
 import { highlightFileLines, langForPath } from "../lib/highlight";
 import { useGlobalConfig, useUiStore } from "../lib/store";
-import type { FileDiff, LineSelection } from "../types";
+import type { DiffLine, FileDiff, LineSelection } from "../types";
 import { Badge } from "./common";
 import { FileTree, type FileTreeMarkers } from "./FileTree";
 
@@ -31,6 +32,35 @@ interface DragState {
 }
 
 type ViewMode = "unified" | "split";
+type SourceSide = "LEFT" | "RIGHT";
+type ExpandedEdge = "head" | "tail" | "both";
+
+const CONTEXT_BATCH_LINES = 10;
+
+interface ContextGapExpansion {
+  head: number;
+  tail: number;
+}
+
+interface ContextControl {
+  kind: "context-control";
+  key: string;
+  gapKey: string;
+  hidden: number;
+  canHead: boolean;
+  canTail: boolean;
+  loading: boolean;
+}
+
+type DisplayItem = DiffLine | ContextControl;
+
+const isContextControl = (item: DisplayItem): item is ContextControl => "kind" in item;
+const lineCount = (text: string) => {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines;
+};
 
 /**
  * Native diff renderer with GitHub-style line selection: click a line number
@@ -45,6 +75,7 @@ export function DiffViewer({
   titleBar,
   viewedKey,
   remoteViewed,
+  loadFileText,
   renderCommentForm,
 }: {
   files: FileDiff[];
@@ -55,11 +86,15 @@ export function DiffViewer({
   viewedKey?: string;
   /** GitHub-backed viewed state (teammate reviews) — syncs with github.com */
   remoteViewed?: { map: Record<string, string>; toggle: (path: string, viewed: boolean) => void };
+  loadFileText?: (path: string, side: SourceSide) => Promise<string | null>;
   renderCommentForm?: (sel: LineSelection, close: () => void) => ReactNode;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [sel, setSel] = useState<LineSelection | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [expandedContext, setExpandedContext] = useState<Record<string, ContextGapExpansion>>({});
+  const [sourceLines, setSourceLines] = useState<Record<string, string[] | null>>({});
+  const [loadingGaps, setLoadingGaps] = useState<Record<string, boolean>>({});
 
   const { config: global } = useGlobalConfig();
 
@@ -136,6 +171,12 @@ export function DiffViewer({
   );
 
   const keyOf = (f: FileDiff) => f.newPath || f.oldPath;
+
+  useEffect(() => {
+    setExpandedContext({});
+    setSourceLines({});
+    setLoadingGaps({});
+  }, [rawFiles, hideWs]);
 
   // Seed auto-collapse from patterns whenever a new diff loads, without
   // overriding an explicit expand/collapse the user made on this diff.
@@ -358,6 +399,50 @@ export function DiffViewer({
     [drag, sel]
   );
 
+  const sourceKey = (path: string, side: SourceSide) => `${path}\0${side}`;
+  const sourcePath = (file: FileDiff, side: SourceSide) => (side === "LEFT" ? file.oldPath : file.newPath);
+  const ensureSourceLines = useCallback(
+    async (file: FileDiff, path: string) => {
+      if (!loadFileText) return;
+      const sides: SourceSide[] = [];
+      if (!file.isNew && sourceLines[sourceKey(path, "LEFT")] === undefined) sides.push("LEFT");
+      if (!file.isDeleted && sourceLines[sourceKey(path, "RIGHT")] === undefined) sides.push("RIGHT");
+      await Promise.all(
+        sides.map(async (side) => {
+          const p = sourcePath(file, side);
+          if (!p) return;
+          const text = await loadFileText(p, side).catch(() => null);
+          setSourceLines((s) => ({ ...s, [sourceKey(path, side)]: text === null ? null : lineCount(text) }));
+        })
+      );
+    },
+    [loadFileText, sourceLines]
+  );
+
+  const expandGap = useCallback(
+    async (file: FileDiff, path: string, gapKey: string, edge: ExpandedEdge) => {
+      if (!loadFileText) return;
+      setLoadingGaps((g) => ({ ...g, [gapKey]: true }));
+      try {
+        await ensureSourceLines(file, path);
+        setExpandedContext((ctx) => {
+          const prev = ctx[gapKey] ?? { head: 0, tail: 0 };
+          const next = { ...prev };
+          if (edge === "head") next.head += CONTEXT_BATCH_LINES;
+          else if (edge === "tail") next.tail += CONTEXT_BATCH_LINES;
+          else {
+            next.head += Math.ceil(CONTEXT_BATCH_LINES / 2);
+            next.tail += Math.floor(CONTEXT_BATCH_LINES / 2);
+          }
+          return { ...ctx, [gapKey]: next };
+        });
+      } finally {
+        setLoadingGaps((g) => ({ ...g, [gapKey]: false }));
+      }
+    },
+    [ensureSourceLines, loadFileText]
+  );
+
   const afterRow = useCallback(
     (path: string, entries: { side: "LEFT" | "RIGHT"; num: number | null }[], colSpan: number) => {
       const out: ReactNode[] = [];
@@ -491,6 +576,11 @@ export function DiffViewer({
                   file={file}
                   path={path}
                   selectable={selectable}
+                  expandedContext={expandedContext}
+                  sourceLines={sourceLines}
+                  loadingGaps={loadingGaps}
+                  canLoadContext={!!loadFileText}
+                  onExpandContext={expandGap}
                   numCellHandlers={numCellHandlers}
                   isHighlighted={isHighlighted}
                   afterRow={afterRow}
@@ -500,6 +590,11 @@ export function DiffViewer({
                   file={file}
                   path={path}
                   selectable={selectable}
+                  expandedContext={expandedContext}
+                  sourceLines={sourceLines}
+                  loadingGaps={loadingGaps}
+                  canLoadContext={!!loadFileText}
+                  onExpandContext={expandGap}
                   numCellHandlers={numCellHandlers}
                   isHighlighted={isHighlighted}
                   afterRow={afterRow}
@@ -516,10 +611,190 @@ export function DiffViewer({
 
 // ---------------------------------------------------------------------------
 
+interface DisplayBuildOptions {
+  file: FileDiff;
+  path: string;
+  canLoadContext: boolean;
+  expandedContext: Record<string, ContextGapExpansion>;
+  sourceLines: Record<string, string[] | null>;
+  loadingGaps: Record<string, boolean>;
+}
+
+const sideSourceKey = (path: string, side: SourceSide) => `${path}\0${side}`;
+const positiveRange = (start: number, end: number) => Math.max(0, end - start + 1);
+
+function buildDisplayItems({
+  file,
+  path,
+  canLoadContext,
+  expandedContext,
+  sourceLines,
+  loadingGaps,
+}: DisplayBuildOptions): DisplayItem[] {
+  const items: DisplayItem[] = [];
+  const leftSource = sourceLines[sideSourceKey(path, "LEFT")] ?? undefined;
+  const rightSource = sourceLines[sideSourceKey(path, "RIGHT")] ?? undefined;
+  const hunks: { header: DiffLine; body: DiffLine[] }[] = [];
+
+  for (const line of file.lines) {
+    if (line.type === "hunk") hunks.push({ header: line, body: [] });
+    else hunks[hunks.length - 1]?.body.push(line);
+  }
+
+  const contextLine = (oldNum: number | null, newNum: number | null): DiffLine => ({
+    type: "context",
+    oldNum,
+    newNum,
+    text: (newNum !== null ? rightSource?.[newNum - 1] : undefined) ?? (oldNum !== null ? leftSource?.[oldNum - 1] : undefined) ?? "",
+  });
+
+  const addGap = (
+    key: string,
+    oldStart: number,
+    oldEnd: number,
+    newStart: number,
+    newEnd: number,
+    hasHeadAnchor: boolean,
+    hasTailAnchor: boolean,
+    forceControl = false
+  ) => {
+    const oldCount = positiveRange(oldStart, oldEnd);
+    const newCount = positiveRange(newStart, newEnd);
+    const total = Math.max(oldCount, newCount);
+    const exp = expandedContext[key] ?? { head: 0, tail: 0 };
+    const head = Math.min(exp.head, total);
+    const tail = Math.min(exp.tail, Math.max(0, total - head));
+    for (let i = 0; i < head; i++) {
+      items.push(contextLine(oldCount ? oldStart + i : null, newCount ? newStart + i : null));
+    }
+    const hidden = Math.max(forceControl ? CONTEXT_BATCH_LINES : 0, total - head - tail);
+    if (canLoadContext && hidden > 0) {
+      items.push({
+        kind: "context-control",
+        key: `ctx-${key}`,
+        gapKey: key,
+        hidden,
+        canHead: hasHeadAnchor,
+        canTail: hasTailAnchor,
+        loading: !!loadingGaps[key],
+      });
+    }
+    for (let i = tail; i > 0; i--) {
+      items.push(contextLine(oldCount ? oldEnd - i + 1 : null, newCount ? newEnd - i + 1 : null));
+    }
+  };
+
+  hunks.forEach((hunk, i) => {
+    const oldStart = hunk.header.oldStart ?? 0;
+    const newStart = hunk.header.newStart ?? 0;
+    if (i === 0) {
+      addGap(`${path}:${i}:before`, 1, oldStart - 1, 1, newStart - 1, false, true);
+    } else {
+      const prev = hunks[i - 1].header;
+      const prevOldEnd = (prev.oldStart ?? 0) + (prev.oldLines ?? 0) - 1;
+      const prevNewEnd = (prev.newStart ?? 0) + (prev.newLines ?? 0) - 1;
+      addGap(`${path}:${i}:before`, prevOldEnd + 1, oldStart - 1, prevNewEnd + 1, newStart - 1, true, true);
+    }
+    items.push(hunk.header, ...hunk.body);
+  });
+
+  const last = hunks[hunks.length - 1]?.header;
+  if (last) {
+    const oldEnd = (last.oldStart ?? 0) + (last.oldLines ?? 0) - 1;
+    const newEnd = (last.newStart ?? 0) + (last.newLines ?? 0) - 1;
+    const oldFileEnd = leftSource?.length ?? oldEnd;
+    const newFileEnd = rightSource?.length ?? newEnd;
+    addGap(`${path}:after`, oldEnd + 1, oldFileEnd, newEnd + 1, newFileEnd, true, false, canLoadContext && !leftSource && !rightSource);
+  }
+
+  return hunks.length ? items : file.lines;
+}
+
+type SplitDisplayRow = SplitRow | { kind: "control"; control: ContextControl };
+
+function buildSplitDisplayRows(items: DisplayItem[]): SplitDisplayRow[] {
+  const rows: SplitDisplayRow[] = [];
+  let i = 0;
+  while (i < items.length) {
+    const item = items[i];
+    if (isContextControl(item)) {
+      rows.push({ kind: "control", control: item });
+      i++;
+      continue;
+    }
+    if (item.type === "hunk") {
+      rows.push({ kind: "hunk", text: item.text, left: null, right: null });
+      i++;
+      continue;
+    }
+    if (item.type === "context") {
+      rows.push({ kind: "pair", left: item, right: item });
+      i++;
+      continue;
+    }
+    const dels: DiffLine[] = [];
+    while (i < items.length && !isContextControl(items[i]) && (items[i] as DiffLine).type === "del") {
+      dels.push(items[i++] as DiffLine);
+    }
+    const adds: DiffLine[] = [];
+    while (i < items.length && !isContextControl(items[i]) && (items[i] as DiffLine).type === "add") {
+      adds.push(items[i++] as DiffLine);
+    }
+    for (let x = 0; x < Math.max(dels.length, adds.length); x++) {
+      rows.push({ kind: "pair", left: dels[x] ?? null, right: adds[x] ?? null });
+    }
+  }
+  return rows;
+}
+
+function ContextControlRow({
+  control,
+  colSpan,
+  numCols,
+  onExpand,
+}: {
+  control: ContextControl;
+  colSpan: number;
+  numCols: number;
+  onExpand: (edge: ExpandedEdge) => void;
+}) {
+  return (
+    <tr className="context-control-row">
+      <td className="context-control-cell" colSpan={numCols}>
+        <span className="context-control-buttons">
+          {control.canHead && (
+            <button disabled={control.loading} title="Expand context downward" onClick={() => onExpand("head")}>
+              ↓
+            </button>
+          )}
+          {control.canHead && control.canTail && (
+            <button disabled={control.loading} title="Expand context between hunks" onClick={() => onExpand("both")}>
+              ↕
+            </button>
+          )}
+          {control.canTail && (
+            <button disabled={control.loading} title="Expand context upward" onClick={() => onExpand("tail")}>
+              ↑
+            </button>
+          )}
+        </span>
+      </td>
+      <td className="context-control-label" colSpan={colSpan - numCols}>
+        {control.loading ? "loading context…" : `${control.hidden} hidden line${control.hidden === 1 ? "" : "s"}`}
+      </td>
+    </tr>
+  );
+}
+
 interface TableProps {
   file: FileDiff;
   path: string;
   selectable: boolean;
+  expandedContext: Record<string, ContextGapExpansion>;
+  sourceLines: Record<string, string[] | null>;
+  loadingGaps: Record<string, boolean>;
+  canLoadContext: boolean;
+  onExpandContext: (file: FileDiff, path: string, gapKey: string, edge: ExpandedEdge) => void;
   numCellHandlers: (
     path: string,
     side: "LEFT" | "RIGHT",
@@ -533,15 +808,43 @@ interface TableProps {
   ) => ReactNode[];
 }
 
-const UnifiedTable = memo(function UnifiedTable({ file, path, numCellHandlers, isHighlighted, afterRow }: TableProps) {
+const UnifiedTable = memo(function UnifiedTable({
+  file,
+  path,
+  expandedContext,
+  sourceLines,
+  loadingGaps,
+  canLoadContext,
+  onExpandContext,
+  numCellHandlers,
+  isHighlighted,
+  afterRow,
+}: TableProps) {
   const lang = useMemo(() => langForPath(path), [path]);
-  const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
+  const displayItems = useMemo(
+    () => buildDisplayItems({ file, path, canLoadContext, expandedContext, sourceLines, loadingGaps }),
+    [file, path, canLoadContext, expandedContext, sourceLines, loadingGaps]
+  );
+  const displayLines = useMemo(() => displayItems.filter((item): item is DiffLine => !isContextControl(item)), [displayItems]);
+  const html = useMemo(() => highlightFileLines(displayLines, lang), [displayLines, lang]);
   const pathSlug = useMemo(() => slug(path), [path]);
   return (
     <div className="diff-scroll">
     <table className="diff-table">
       <tbody>
-        {file.lines.map((line, i) => {
+        {displayItems.map((item, i) => {
+          if (isContextControl(item)) {
+            return (
+              <ContextControlRow
+                key={item.key}
+                control={item}
+                colSpan={3}
+                numCols={2}
+                onExpand={(edge) => onExpandContext(file, path, item.gapKey, edge)}
+              />
+            );
+          }
+          const line = item;
           if (line.type === "hunk") {
             return (
               <tr key={i} className="hunk">
@@ -584,10 +887,26 @@ const UnifiedTable = memo(function UnifiedTable({ file, path, numCellHandlers, i
   );
 });
 
-const SplitTable = memo(function SplitTable({ file, path, numCellHandlers, isHighlighted, afterRow }: TableProps) {
-  const rows = useMemo(() => buildSplitRows(file.lines), [file]);
+const SplitTable = memo(function SplitTable({
+  file,
+  path,
+  expandedContext,
+  sourceLines,
+  loadingGaps,
+  canLoadContext,
+  onExpandContext,
+  numCellHandlers,
+  isHighlighted,
+  afterRow,
+}: TableProps) {
+  const displayItems = useMemo(
+    () => buildDisplayItems({ file, path, canLoadContext, expandedContext, sourceLines, loadingGaps }),
+    [file, path, canLoadContext, expandedContext, sourceLines, loadingGaps]
+  );
+  const displayLines = useMemo(() => displayItems.filter((item): item is DiffLine => !isContextControl(item)), [displayItems]);
+  const rows = useMemo(() => buildSplitDisplayRows(displayItems), [displayItems]);
   const lang = useMemo(() => langForPath(path), [path]);
-  const html = useMemo(() => highlightFileLines(file.lines, lang), [file, lang]);
+  const html = useMemo(() => highlightFileLines(displayLines, lang), [displayLines, lang]);
   const pathSlug = useMemo(() => slug(path), [path]);
   return (
     <div className="diff-scroll">
@@ -601,6 +920,17 @@ const SplitTable = memo(function SplitTable({ file, path, numCellHandlers, isHig
       </colgroup>
       <tbody>
         {rows.map((row, i) => {
+          if (row.kind === "control") {
+            return (
+              <ContextControlRow
+                key={row.control.key}
+                control={row.control}
+                colSpan={4}
+                numCols={1}
+                onExpand={(edge) => onExpandContext(file, path, row.control.gapKey, edge)}
+              />
+            );
+          }
           if (row.kind === "hunk") {
             return (
               <tr key={i} className="hunk">

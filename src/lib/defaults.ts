@@ -584,10 +584,11 @@ export function notificationEnabled(
 }
 
 /**
- * Built-in harness templates (ACP servers). `cursor` and `opencode` are
- * verified firsthand (`cursor-agent acp`, `opencode acp`); claude-code uses
- * Zed's documented adapter; codex has no native ACP server and needs a bridge
- * — onboarding's live verify is the source of truth for the unverified ones.
+ * Built-in harness templates (ACP servers). `cursor`, `opencode`, and `omp`
+ * are verified firsthand (`cursor-agent acp`, `opencode acp`, `omp acp`);
+ * claude-code uses Zed's documented adapter; codex has no native ACP server
+ * and needs a bridge — onboarding's live verify is the source of truth for
+ * the unverified ones.
  */
 export function harnessTemplates(cursorBinary = "cursor-agent"): Harness[] {
   return [
@@ -597,6 +598,9 @@ export function harnessTemplates(cursorBinary = "cursor-agent"): Harness[] {
     { id: "opencode", name: "opencode", command: "opencode", args: ["acp"], verified: true,
       reasoningCollapsed: true,
       note: "Configure a provider/API key in opencode first." },
+    { id: "omp", name: "oh-my-pi", command: "omp", args: ["acp"], verified: true,
+      reasoningCollapsed: true,
+      note: "Configure a provider/model in omp first." },
     { id: "claude-code", name: "Claude Code", command: "npx", args: ["-y", "@zed-industries/claude-code-acp"],
       reasoningCollapsed: true,
       note: "Adapter via npx; needs ANTHROPIC_API_KEY in the environment." },

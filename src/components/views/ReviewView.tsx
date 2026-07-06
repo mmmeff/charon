@@ -322,6 +322,13 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
               remoteViewed={
                 viewedState ? { map: viewedState.states, toggle: toggleFileViewed } : undefined
               }
+              loadFileText={(path, side) =>
+                ctx.gh.getFileText(
+                  side === "RIGHT" ? pr.headRepoFullName || ctx.repo : ctx.repo,
+                  path,
+                  side === "RIGHT" ? pr.headSha : pr.baseSha
+                )
+              }
               renderCommentForm={(sel, close) => (
                 <Composer
                   pr={pr}

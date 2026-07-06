@@ -662,6 +662,19 @@ tr.del { background: var(--diff-del-bg); }
 tr.del .diff-num { background: var(--diff-del-num-bg); }
 tr.hunk { background: #16150f; color: var(--fg-subtle); }
 tr.hunk td { padding: 2px 10px !important; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+tr.context-control-row { background: #16150f; color: var(--fg-subtle); }
+tr.context-control-row td {
+  border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);
+}
+.context-control-cell { padding: 1px 4px !important; text-align: right; white-space: nowrap; }
+.context-control-buttons { display: inline-flex; gap: 3px; }
+.context-control-buttons button {
+  min-width: 22px; height: 18px; padding: 0 5px;
+  border-radius: 999px; border-color: rgba(207, 242, 77, 0.35);
+  background: var(--bg); color: var(--acid); font-size: 11px; line-height: 16px;
+}
+.context-control-buttons button:hover:not(:disabled) { border-color: var(--acid); color: var(--fg); }
+.context-control-label { padding: 1px 10px !important; font-size: 11px; }
 tr.sel { background: var(--diff-select-bg) !important; }
 .comment-anchor-row td {
   background: var(--bg-raised);

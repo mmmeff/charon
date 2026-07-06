@@ -948,9 +948,9 @@ function HarnessSettings({
   return (
     <>
       <p className="subtle" style={{ maxWidth: "76ch" }}>
-        Charon drives a coding agent over Agent Client Protocol. cursor and opencode are verified;
-        Claude Code uses Zed's adapter; Codex needs an ACP bridge. Switch agents without touching
-        the rest of the app.
+        Charon drives a coding agent over Agent Client Protocol. cursor, opencode, and omp are
+        verified; Claude Code uses Zed's adapter; Codex needs an ACP bridge. Switch agents without
+        touching the rest of the app.
       </p>
       <div className="seg" style={{ marginBottom: 8, flexWrap: "wrap" }}>
         {templates.map((t) => (

@@ -347,6 +347,14 @@ export class GitHubClient {
     return resp.body;
   }
 
+  async getFileText(repo: string, path: string, ref: string): Promise<string> {
+    const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+    const resp = await this.raw("GET", `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`, {
+      accept: "application/vnd.github.raw",
+    });
+    return resp.body;
+  }
+
   // -- Commits ---------------------------------------------------------------
 
   /** Unified diff for a single commit (its patch against its first parent). */

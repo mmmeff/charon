@@ -50,12 +50,21 @@ export function parseUnifiedDiff(text: string): FileDiff[] {
       continue;
     }
     if (line.startsWith("@@")) {
-      const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+      const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
       if (m) {
         oldNum = parseInt(m[1], 10);
-        newNum = parseInt(m[2], 10);
+        newNum = parseInt(m[3], 10);
       }
-      cur.lines.push({ type: "hunk", oldNum: null, newNum: null, text: line });
+      cur.lines.push({
+        type: "hunk",
+        oldNum: null,
+        newNum: null,
+        text: line,
+        oldStart: m ? parseInt(m[1], 10) : undefined,
+        oldLines: m ? parseInt(m[2] ?? "1", 10) : undefined,
+        newStart: m ? parseInt(m[3], 10) : undefined,
+        newLines: m ? parseInt(m[4] ?? "1", 10) : undefined,
+      });
       continue;
     }
     if (line.startsWith("+")) {

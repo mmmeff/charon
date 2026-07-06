@@ -226,6 +226,13 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
               selectable
               anchors={anchors}
               viewedKey={variant === "draft" ? `prc-viewed-${ctx.repo}-${pr.number}` : undefined}
+              loadFileText={(path, side) =>
+                ctx.gh.getFileText(
+                  side === "RIGHT" ? pr.headRepoFullName || ctx.repo : ctx.repo,
+                  path,
+                  side === "RIGHT" ? pr.headSha : pr.baseSha
+                )
+              }
               renderCommentForm={(sel, close) => (
                 <Composer
                   pr={pr}

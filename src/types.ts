@@ -711,6 +711,10 @@ export interface DiffLine {
   oldNum: number | null;
   newNum: number | null;
   text: string;
+  oldStart?: number;
+  oldLines?: number;
+  newStart?: number;
+  newLines?: number;
 }
 
 export interface FileDiff {
