@@ -150,6 +150,30 @@ jobs:
             echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
           } >> "$GITHUB_ENV"
 
+      - name: Wrap Tauri CLI for CI diagnostics
+        shell: bash
+        run: |
+          cat > tauri-ci <<'EOF'
+          #!/usr/bin/env bash
+          set -o pipefail
+          log="${RUNNER_TEMP:-.}/tauri-build.log"
+          npm run tauri -- "$@" 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            python3 - "$log" <<'PY'
+          import pathlib
+          import sys
+
+          lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          msg = "\n".join(lines[-80:])
+          msg = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Tauri build failed::{msg}")
+          PY
+          fi
+          exit "$status"
+          EOF
+          chmod +x tauri-ci
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -160,6 +184,7 @@ jobs:
           releaseName: "Charon v__VERSION__"
           releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
+          tauriScript: ./tauri-ci
           args: --target universal-apple-darwin
 
       - name: Tag commit on successful publish (tag-after-build)
