@@ -85,6 +85,14 @@ jobs:
           NEXT="${MA}.${MI}.${PA}"
           echo "Bump: ${BASE} -> ${NEXT} (${BUMP})"
 
+          CURRENT=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$CURRENT" = "$NEXT" ]; then
+            echo "Version files already at ${NEXT}; releasing current HEAD."
+            echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
+            echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           # package.json + package-lock.json
           npm version --no-git-tag-version "$NEXT" > /dev/null
           # tauri.conf.json
