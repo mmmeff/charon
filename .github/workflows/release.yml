@@ -135,6 +135,12 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Enable notarization (when Apple ID secrets are configured)
+        # Temporarily disabled: Apple's notary API rejects the current APPLE_ID /
+        # APPLE_PASSWORD ("failed to notarize app: Error: HTTP status code: …"),
+        # which hard-fails the whole bundle step. Releases ship codesigned but
+        # un-notarized until the app-specific password is rotated — delete this
+        # `if:` line to re-enable.
+        if: ${{ false }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
