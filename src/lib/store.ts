@@ -470,6 +470,9 @@ export interface DiffScrollTarget {
 interface UiState {
   focusedPr: Record<string, number | null>;
   setFocusedPr(tab: string, prNumber: number): void;
+  /** PR workspace currently mounted in the visible content layer. */
+  visiblePrWorkspace: { source: string; prNumber: number } | null;
+  setVisiblePrWorkspace(source: string, prNumber: number | null): void;
   diffScrollTarget: DiffScrollTarget | null;
   requestDiffScroll(path: string, side: "LEFT" | "RIGHT", line: number): void;
   /** PR whose title scrolled out of view — shown as a topstrip breadcrumb */
@@ -517,6 +520,15 @@ export const useUiStore = create<UiState>((set, get) => ({
   setFocusedPr(tab, prNumber) {
     set((s) => ({ focusedPr: { ...s.focusedPr, [tab]: prNumber } }));
     get().navPush(tab, prNumber);
+  },
+  visiblePrWorkspace: null,
+  setVisiblePrWorkspace(source, prNumber) {
+    set((s) => {
+      if (prNumber == null) {
+        return s.visiblePrWorkspace?.source === source ? { visiblePrWorkspace: null } : s;
+      }
+      return { visiblePrWorkspace: { source, prNumber } };
+    });
   },
   diffScrollTarget: null,
   requestDiffScroll(path, side, line) {

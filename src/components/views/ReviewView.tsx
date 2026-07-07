@@ -33,6 +33,11 @@ export function ReviewView() {
   const stacked = stackedPrList(queue, prStacks, sort);
   const pr = stacked.find((item) => item.pr.number === selected)?.pr ?? stacked[0]?.pr ?? null;
 
+  useEffect(() => {
+    useUiStore.getState().setVisiblePrWorkspace("review", pr?.number ?? null);
+    return () => useUiStore.getState().setVisiblePrWorkspace("review", null);
+  }, [pr?.number]);
+
   if (queue.length === 0) {
     return (
       <div className="main">

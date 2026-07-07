@@ -108,6 +108,7 @@ export type ShortcutActionId =
   | "tab_activity"
   | "tab_settings"
   | "new_draft"
+  | "refresh_current_pr"
   | "nav_back"
   | "nav_forward"
   | "toggle_pr_sidebar"

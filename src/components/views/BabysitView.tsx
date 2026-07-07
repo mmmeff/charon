@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePrData } from "../../lib/events";
 import { stackedPrList } from "../../lib/pr-stacks";
 import { useRepoStore, useUiStore } from "../../lib/store";
@@ -28,6 +28,10 @@ export function BabysitView() {
   const stacked = stackedPrList(myOpen, prStacks, sort);
   const pr = stacked.find((item) => item.pr.number === selected)?.pr ?? stacked[0]?.pr ?? null;
 
+  useEffect(() => {
+    useUiStore.getState().setVisiblePrWorkspace("open", pr?.number ?? null);
+    return () => useUiStore.getState().setVisiblePrWorkspace("open", null);
+  }, [pr?.number]);
 
   if (myOpen.length === 0) {
     return (

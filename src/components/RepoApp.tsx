@@ -58,6 +58,13 @@ const TAB_SHORTCUTS: Record<Tab, ShortcutActionId> = {
   settings: "tab_settings",
 };
 
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    !!target.closest("input, textarea, select, [contenteditable]")
+  );
+}
+
 /** One repo, one window: tabbed shell that owns the poller and flow context. */
 export function RepoApp({ repo }: { repo: string }) {
   const global = useGlobalConfig((s) => s.config);
@@ -207,6 +214,12 @@ export function RepoApp({ repo }: { repo: string }) {
   const seenReviewFiltersKey = useRef<string | null>(null);
   const reviewFiltersChangedInSettings = useRef(false);
   const previousTab = useRef(tab);
+  const currentViewedPrNumber = () => {
+    const ui = useUiStore.getState();
+    const visible = ui.visiblePrWorkspace;
+    if (ui.orphanPr != null) return visible?.source === "orphan" ? visible.prNumber : null;
+    return visible?.source === tab ? visible.prNumber : null;
+  };
 
   useEffect(() => {
     if (!repoStore.loaded || !gh || !global) return;
@@ -296,6 +309,14 @@ export function RepoApp({ repo }: { repo: string }) {
         e.preventDefault();
         setTab("drafts");
         ui.requestNewDraft();
+        return;
+      }
+      if (action === "refresh_current_pr") {
+        if (isTextEditingTarget(e.target)) return;
+        e.preventDefault();
+        const prNumber = currentViewedPrNumber();
+        if (prNumber == null) return;
+        void poller.refreshPr(prNumber);
         return;
       }
       if (action === "command_palette") {
@@ -500,6 +521,11 @@ function OrphanPrView({ prNumber, onClose }: { prNumber: number; onClose: () => 
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prNumber, ctx.repo]);
+
+  useEffect(() => {
+    useUiStore.getState().setVisiblePrWorkspace("orphan", pr?.number ?? null);
+    return () => useUiStore.getState().setVisiblePrWorkspace("orphan", null);
+  }, [pr?.number]);
 
   const mine = pr?.author === ctx.gh.login;
   const variant = mine ? (pr?.draft ? "draft" : "babysit") : "babysit";

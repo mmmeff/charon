@@ -94,6 +94,13 @@ export const SHORTCUT_CATALOG: ShortcutDef[] = [
     defaultBinding: { primary: true, key: "n" },
   },
   {
+    id: "refresh_current_pr",
+    group: "Actions",
+    label: "Refresh current PR",
+    description: "Refresh only the PR currently open in the workspace.",
+    defaultBinding: { primary: true, key: "r" },
+  },
+  {
     id: "nav_back",
     group: "Navigation",
     label: "Back",

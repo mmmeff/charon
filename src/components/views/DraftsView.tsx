@@ -97,6 +97,11 @@ export function DraftsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedNewDraft?.nonce]);
 
+  useEffect(() => {
+    useUiStore.getState().setVisiblePrWorkspace("drafts", pr?.number ?? null);
+    return () => useUiStore.getState().setVisiblePrWorkspace("drafts", null);
+  }, [pr?.number]);
+
   return (
     <div className="main split">
       <Sidebar>
