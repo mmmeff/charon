@@ -1,6 +1,6 @@
 /**
  * Local-only integration test: proves pr-copilot's ACP integration works
- * against every supported harness (cursor, opencode, claude-code, codex) —
+ * against every supported harness (cursor, opencode, omp, claude-code, codex) —
  * model listing, model/mode selection, and a baseline prompt all succeed.
  *
  * Why this exists: a previous regression silently called set_config_option
@@ -59,6 +59,15 @@ class AcpRpcError extends Error {
     this.agentId = opts.agentId;
     this.method = opts.method;
   }
+}
+
+function isMethodNotFound(e) {
+  return e instanceof AcpRpcError && (
+    e.rpcCode === -32601 ||
+    /unknown (acp )?(ext )?method|method not found/i.test(
+      String(e.message) + JSON.stringify(e.rpcData ?? "")
+    )
+  );
 }
 
 // --- Minimal ACP client — mirrors src/lib/acp.ts AcpConnection -----------
@@ -221,6 +230,7 @@ class AcpClient {
 const HARNESS = [
   { id: "cursor", command: "cursor-agent", args: ["acp"] },
   { id: "opencode", command: "opencode", args: ["acp"] },
+  { id: "omp", command: "omp", args: ["acp"] },
   // claude-code-acp proxies to Anthropic and needs ANTHROPIC_API_KEY in env.
   // Without it, initialize succeeds but session/prompt fails with
   // "Authentication required" (rpc -32000) — skip with an actionable message
@@ -297,7 +307,7 @@ async function isAvailable(h, probeMs = 30_000) {
 }
 
 // --- model/mode selection — mirrors src/lib/agents.ts:301ff (post-fix) ---
-function chooseModelStrategy(ns) {
+function chooseModelStrategy(ns, harnessId) {
   if (ns.models?.availableModels?.length) {
     const modelId = ns.models.currentModelId ?? ns.models.availableModels[0].modelId;
     return {
@@ -310,7 +320,31 @@ function chooseModelStrategy(ns) {
     (o) => (o.id === "model" || o.category === "model") && o.type === "select" && o.options?.length
   );
   if (opt) {
-    return { kind: "config-option-leave-alone", optionId: opt.id, currentValue: opt.currentValue };
+    const optionId = opt.id;
+    if (harnessId === "opencode") {
+      return {
+        kind: "config-option-set_model-only",
+        optionId,
+        currentValue: opt.currentValue,
+        apply: (c, sid, modelId) => c.setModel(sid, modelId),
+      };
+    }
+    return {
+      kind: "config-option-with-fallback",
+      optionId,
+      currentValue: opt.currentValue,
+      apply: async (c, sid, modelId) => {
+        try {
+          await c.setModel(sid, modelId);
+        } catch (e) {
+          if (isMethodNotFound(e)) {
+            await c.setConfigOption(sid, optionId, modelId);
+            return;
+          }
+          throw e;
+        }
+      },
+    };
   }
   return { kind: "self-managed" };
 }
@@ -318,10 +352,11 @@ function chooseModelStrategy(ns) {
 function chooseModeStrategy(ns) {
   const modes = ns.modes?.availableModes ?? [];
   if (modes.length === 0) return { kind: "no-modes" };
-  const ask = modes.find((m) => m.id === "ask");
-  if (ask) return { kind: "set-mode", modeId: "ask", apply: (c, sid) => c.setMode(sid, "ask") };
-  const plan = modes.find((m) => m.id === "plan");
-  if (plan) return { kind: "set-mode", modeId: "plan", apply: (c, sid) => c.setMode(sid, "plan") };
+  const preferred = ["ask", "plan"];
+  const selected = preferred.find((id) => modes.some((m) => m.id === id));
+  if (selected && selected !== ns.modes?.currentModeId) {
+    return { kind: "set-mode", modeId: selected, apply: (c, sid) => c.setMode(sid, selected) };
+  }
   return { kind: "leave-current", currentModeId: ns.modes?.currentModeId };
 }
 
@@ -358,13 +393,18 @@ describe("ACP harnesses — integration", SUITE_OPTS, () => {
       });
 
       it("session/new exposes a model strategy (native list, model config option, or self-managed)", () => {
-        const s = chooseModelStrategy(ns);
-        assert.ok(s.kind === "native-set_model" || s.kind === "config-option-leave-alone" || s.kind === "self-managed");
+        const s = chooseModelStrategy(ns, h.id);
+        assert.ok(
+          s.kind === "native-set_model" ||
+            s.kind === "config-option-with-fallback" ||
+            s.kind === "config-option-set_model-only" ||
+            s.kind === "self-managed"
+        );
         if (s.kind === "native-set_model") {
           assert.ok(ns.models.availableModels.length > 0);
           assert.ok(s.modelId);
         }
-        if (s.kind === "config-option-leave-alone") {
+        if (s.kind === "config-option-with-fallback" || s.kind === "config-option-set_model-only") {
           assert.ok(s.optionId != null);
           assert.ok(s.currentValue, "config-option picker but no currentValue");
         }
@@ -380,10 +420,13 @@ describe("ACP harnesses — integration", SUITE_OPTS, () => {
       });
 
       it("baseline prompt reaches end_turn and the model replies with pong", async () => {
-        const s = chooseModelStrategy(ns);
-        // pr-copilot's actual selection path: native -> set_model; config-option -> LEAVE ALONE (the fix).
+        const s = chooseModelStrategy(ns, h.id);
+        // pr-copilot's actual selection path: native -> set_model; config-option -> set_model, with
+        // config-option fallback only for non-opencode harnesses whose set_model method is missing.
         if (s.kind === "native-set_model") await s.apply(client, ns.sessionId);
-        // config-option-leave-alone and self-managed: do nothing (the harness's default applies).
+        if (s.kind === "config-option-with-fallback" || s.kind === "config-option-set_model-only") {
+          await s.apply(client, ns.sessionId, s.currentValue);
+        }
         const result = await client.prompt(ns.sessionId, BASELINE_PROMPT);
         assert.equal(result.stopReason, "end_turn");
         assert.ok(result.messageText.toLowerCase().includes("pong"), `baseline prompt did not produce pong: ${JSON.stringify(result.messageText)}`);
@@ -448,6 +491,67 @@ describe("opencode regression guard — set_config_option('model', …) avoidanc
         } else {
           t.diagnostic("opencode was patched — pr-copilot's avoidance is now defensive-only");
         }
+      } finally {
+        try { await client.kill(); } catch {}
+        try { rmSync(cwd, { recursive: true, force: true }); } catch {}
+      }
+    });
+  });
+});
+
+describe("omp ACP guard — config-option model fallback is necessary", SUITE_OPTS, () => {
+  const ompOk = PROBED.find((p) => p.h.id === "omp")?.ok ?? false;
+
+  describe("when omp is available", { ...SUITE_OPTS, skip: ompOk ? false : "omp not available" }, () => {
+    it("session/set_model is rejected as method-not-found (documents why the config-option fallback exists)", async () => {
+      const cwd = mkdtempSync(join(tmpdir(), "acp-it-omp-set-model-"));
+      const client = new AcpClient("it-omp-set-model", "omp", ["acp"], cwd);
+      try {
+        await client.start();
+        await client.initialize();
+        const ns = await client.newSession(cwd);
+        const opt = ns.configOptions?.find(
+          (o) => (o.id === "model" || o.category === "model") && o.type === "select" && o.options?.length
+        );
+        assert.ok(opt, "omp no longer exposes a model config option — re-evaluate this guard");
+        assert.ok(opt.currentValue, "omp model config option has no currentValue");
+
+        await assert.rejects(
+          () => client.setModel(ns.sessionId, opt.currentValue),
+          (e) => {
+            assert.ok(e instanceof AcpRpcError, `expected AcpRpcError, got ${e?.constructor?.name}`);
+            assert.ok(isMethodNotFound(e), `expected method-not-found rejection, got ${e.message} ${JSON.stringify(e.rpcData)}`);
+            return true;
+          }
+        );
+      } finally {
+        try { await client.kill(); } catch {}
+        try { rmSync(cwd, { recursive: true, force: true }); } catch {}
+      }
+    });
+
+    it('session/set_config_option("model") succeeds and thinking axis is exposed', async () => {
+      const cwd = mkdtempSync(join(tmpdir(), "acp-it-omp-config-option-"));
+      const client = new AcpClient("it-omp-config-option", "omp", ["acp"], cwd);
+      try {
+        await client.start();
+        await client.initialize();
+        const ns = await client.newSession(cwd);
+        const modelOpt = ns.configOptions?.find(
+          (o) => (o.id === "model" || o.category === "model") && o.type === "select" && o.options?.length
+        );
+        assert.ok(modelOpt, "omp no longer exposes a model config option");
+        assert.ok(modelOpt.currentValue, "omp model config option has no currentValue");
+
+        const thinking = ns.configOptions?.find(
+          (o) => o.id === "thinking" && o.category === "thought_level" && o.type === "select" && o.options?.length
+        );
+        assert.ok(thinking, "omp no longer exposes the thinking thought_level select");
+        const thinkingValues = thinking.options.map((o) => typeof o === "string" ? o : o.value);
+        assert.ok(thinkingValues.includes("auto"), `thinking options missing auto: ${JSON.stringify(thinkingValues)}`);
+        assert.ok(thinkingValues.includes("xhigh"), `thinking options missing xhigh: ${JSON.stringify(thinkingValues)}`);
+
+        await assert.doesNotReject(() => client.setConfigOption(ns.sessionId, "model", modelOpt.currentValue));
       } finally {
         try { await client.kill(); } catch {}
         try { rmSync(cwd, { recursive: true, force: true }); } catch {}
