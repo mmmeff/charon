@@ -100,6 +100,15 @@ export function modelConfigOption(
  * the context window, then a "fast" tag when fast=true, dropping the rest.
  * `default` becomes "Auto". Harnesses without bracketed ids (e.g. codex) just
  * keep their name.
+ *
+ * Provider qualification: harnesses like oh-my-pi list models as
+ * `provider/model-id` but expose a bare `name` ("Claude Sonnet 3.5") that
+ * drops the provider — so Anthropic's, OpenRouter's, and Cursor's Claude
+ * variants all read identically. When the id carries a slash namespace the
+ * name lacks, prepend the full namespace (`openrouter/~anthropic/Claude
+ * Fable Latest`) so models are disambiguable. Ids without a slash (cursor's
+ * native bracketed ids, codex) and names already starting with the namespace
+ * are left alone. The stored modelId is never modified — only the label.
  */
 export function modelLabel(m: AcpModel): string {
  const base = m.modelId.replace(/\[.*\]$/, "");
@@ -121,7 +130,11 @@ export function modelLabel(m: AcpModel): string {
  ]
   .filter(Boolean)
   .join(", ");
- const name = m.name || base;
+ let name = m.name || base;
+ const slash = base.lastIndexOf("/");
+ if (slash > 0 && !name.toLowerCase().startsWith(base.slice(0, slash).toLowerCase() + "/")) {
+  name = `${base.slice(0, slash)}/${name}`;
+ }
  return detail ? `${name} (${detail})` : name;
 }
 
