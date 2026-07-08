@@ -38,7 +38,9 @@ function ApplyForm({
  * exist; the review itself is launched from the composer.
  */
 export function FindingsStrip({ pr }: { pr: PrSummary }) {
-  const findings = useRepoStore((s) => s.findings).filter((f) => f.prNumber === pr.number);
+  const findings = useRepoStore((s) => s.findings).filter(
+    (f) => f.prNumber === pr.number && f.status !== "dismissed"
+  );
   const summary = useRepoStore((s) => s.reviewSummaries[pr.number]);
   const clearFindings = useRepoStore((s) => s.clearFindings);
   const [showSummary, setShowSummary] = useState(false);
@@ -162,12 +164,21 @@ export function FindingCard({ finding, pr }: { finding: ReviewFinding; pr: PrSum
             </button>
           )}
           {finding.status === "applied" && (
-            <button
-              className="link small"
-              onClick={() => void updateFinding(finding.key, { status: "open", agentRunId: undefined })}
-            >
-              reopen
-            </button>
+            <>
+              <button
+                className="link small"
+                onClick={() => void updateFinding(finding.key, { status: "open", agentRunId: undefined })}
+              >
+                reopen
+              </button>
+              <button
+                className="link small"
+                title="Hide this finding from the diff"
+                onClick={() => void updateFinding(finding.key, { status: "dismissed" })}
+              >
+                dismiss
+              </button>
+            </>
           )}
         </div>
         {applyOpen && finding.status === "open" && (
