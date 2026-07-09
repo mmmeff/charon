@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, memo, useMemo } from "react";
 import { killAgent, steerAgent } from "../lib/agents";
+import { resumeCommand } from "../lib/agent-runs";
 import { navigateToPr } from "../lib/nav";
 import { activeHarness, harnessReasoningCollapsed } from "../lib/defaults";
 import { useGlobalConfig, useUiStore } from "../lib/store";
@@ -310,11 +311,27 @@ export function AgentCard({
   const [open, setOpen] = useState(defaultOpen);
   const [showPrompt, setShowPrompt] = useState(false);
   const [steer, setSteer] = useState("");
+ const [resumeCopied, setResumeCopied] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const githubUrl = useGlobalConfig((s) => s.config?.githubUrl ?? "https://github.com");
   const openCommit = useUiStore((s) => s.openCommit);
   const prUrl = run.prNumber == null ? "" : `${githubUrl}/${run.repo}/pull/${run.prNumber}`;
   const active = run.status === "running" || run.status === "starting";
+ const resumeCmd = active ? null : resumeCommand(run);
+ const copyResume = () => {
+  if (!resumeCmd) return;
+  navigator.clipboard?.writeText(resumeCmd).catch(() => {
+   // webview fallback
+   const ta = document.createElement("textarea");
+   ta.value = resumeCmd;
+   document.body.appendChild(ta);
+   ta.select();
+   document.execCommand("copy");
+   ta.remove();
+  });
+  setResumeCopied(true);
+  setTimeout(() => setResumeCopied(false), 1500);
+ };
   // Reasoning/thinking entries render inside a collapsible disclosure; this
   // sets its initial open state (default-on => collapsed). Resolved per render
   // from the live global config so a settings flip takes effect on the next
@@ -421,6 +438,18 @@ export function AgentCard({
               Stop
             </button>
           )}
+     {resumeCmd && (
+      <button
+       className="small"
+       title={`Copy terminal command to resume this session:\n${resumeCmd}`}
+       onClick={(e) => {
+        e.stopPropagation();
+        copyResume();
+       }}
+      >
+       {resumeCopied ? "✓ copied" : "⌘ resume"}
+      </button>
+     )}
         </div>
       </div>
       {run.error && (

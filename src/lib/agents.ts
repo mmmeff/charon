@@ -413,6 +413,9 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     status: "running",
     steerable: true,
     mode: ns.modes?.currentModeId,
+    sessionId,
+    harnessId: harness?.id,
+    harnessCommand: command,
    });
 
    // set mode (default session mode is "agent"). We no longer swallow

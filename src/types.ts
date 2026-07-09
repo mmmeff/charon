@@ -488,6 +488,12 @@ export interface AgentRun {
   mode?: string;
   /** agent-assigned session title */
   sessionTitle?: string;
+ /** ACP session id from `session/new` — basis for harness resume commands */
+ sessionId?: string;
+ /** harness id this run was launched with (activeHarness can change later) */
+ harnessId?: string;
+ /** the exact harness binary used at launch (custom paths survive) */
+ harnessCommand?: string;
   /** true while a turn is in flight and the user can steer/interrupt */
   steerable: boolean;
   /** overrides the lifecycle notification category (e.g. CI triage → "ci_analysis") */
