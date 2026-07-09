@@ -861,7 +861,9 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .rail-version {
   margin-top: 6px; font-size: 8px; letter-spacing: 0.08em;
   color: var(--fg-subtle); user-select: none;
+  text-decoration: none;
 }
+.rail-version:hover { color: var(--fg); text-decoration: underline; }
 
 /* agent card accordion */
 .agent-head {
