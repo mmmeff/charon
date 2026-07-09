@@ -43,6 +43,7 @@ Where each thing lives. Touch it here, change it here.
 **`src/lib/github.ts`** — REST v3 client for github.com and GHE. All HTTP goes through native commands only; this module builds requests and parses responses.
 
 **`src/lib/flows.ts`** — Three fixed flow types: review, fix, analysis. Each assembles context (diffs, checks, comments), spawns an agent run via the harness layer, then takes post-run actions (post comment, push branch). `FlowContext` threads state across steps; flows are the core work engine.
+Fix-flow pushes are app-owned: agents commit but never push; `validateAndPush` runs the per-repo `validationCommand` in the worktree and pushes only on success (rejected commits land on a `pr-copilot/rejected/<runId>` rescue branch). Prompt-level "do not push" is not enforcement — an agent-side push is detected post-hoc and fails the run.
 
 **`src/lib/agents.ts` + `src/lib/acp.ts`** — Harness spawn/lifecycle and ACP sessions. Agents run as child processes with JSON-RPC over stdout; tool calls and reasoning chunks parse into structured events. Runs persist through app restarts via native blob storage.
 

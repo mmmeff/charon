@@ -204,6 +204,10 @@ export interface RepoConfig {
   reviewPrompt: string;
   /** dependency/validation policy injected into every fix-flow prompt */
   fixPolicy: string;
+ /** shell command Charon runs in the worktree before pushing a fix flow's
+  *  commit (e.g. `npm run typecheck && npm run lint`). Empty = skip
+  *  validation; Charon still owns the push either way. */
+ validationCommand: string;
   babysitFilters: ClassFilters;
   reviewFilters: PrReviewFilters;
   /** Overrides keyed by event id; missing ids fall back to catalog defaults */

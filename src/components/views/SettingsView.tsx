@@ -536,8 +536,23 @@ export function SettingsView() {
          onChange={(fixPolicy) => update({ fixPolicy })}
         />
         <small>
-         Injected into every fix/apply agent prompt. The default forbids dependency installs and full
-         builds (slow and disk-hungry in monorepos) — loosen it for repos where agents should run tests.
+         Injected into every fix/apply agent prompt. The default requires scoped typecheck/lint before
+         committing and allows deterministic lockfile installs (with <code>--ignore-scripts</code>) —
+         tighten it for repos where agents must not install anything.
+        </small>
+       </label>
+       <label className="field">
+        <span>Pre-push validation command</span>
+        <input
+         type="text"
+         value={config.validationCommand}
+         placeholder="npm run typecheck && npm run lint"
+         onChange={(e) => update({ validationCommand: e.target.value })}
+        />
+        <small>
+         Fix agents commit but never push; Charon runs this in the worktree and pushes only when it
+         exits 0. A failure fails the run and keeps the commit local. Empty: Charon still owns the
+         push, just without a validation step.
         </small>
        </label>
        <label className="field">

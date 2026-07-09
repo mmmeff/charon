@@ -32,7 +32,7 @@ export const EVENT_CATALOG: EventDef[] = [
    "If the breakages are legitimately the result of our changes, implement a fix on the PR's branch. " +
    "Make sure all related type-checking/linting/tests are passing before calling the work done. Avoid " +
    "running suites for the entire project and just focus on PR-related tests/files. Once all good, " +
-   "commit and push to the associated PR's branch.",
+   "commit your fix — Charon validates and pushes it after the run.",
  },
  {
   id: "ci_succeeded",
@@ -84,7 +84,7 @@ export const EVENT_CATALOG: EventDef[] = [
   appliesTo: "mine",
   defaultEnabled: false,
   defaultPrompt:
-   "the base branch {base-branch} moved for PR {pr-number}; rebase or merge the branch up to date and push",
+   "the base branch {base-branch} moved for PR {pr-number}; merge {base-branch} into the branch (do not rebase — the push is never forced) and commit — Charon validates and pushes after the run",
  },
  {
   id: "branch_out_of_date",
@@ -94,7 +94,7 @@ export const EVENT_CATALOG: EventDef[] = [
   appliesTo: "mine",
   defaultEnabled: false,
   defaultPrompt:
-   "PR {pr-number} is flagged out-of-date with {base-branch}; update the branch and push",
+   "PR {pr-number} is flagged out-of-date with {base-branch}; merge {base-branch} into the branch (do not rebase — the push is never forced) and commit — Charon validates and pushes after the run",
  },
 
  // --- My PRs — Incoming Feedback ---
@@ -304,13 +304,24 @@ export const DEFAULT_REVIEW_FILTERS: PrReviewFilters = {
 export const DEFAULT_REVIEW_PROMPT =
  "Run the thermonuclear code quality review on PR {pr-number} and propose inline comments with severity and confidence.";
 
-export const DEFAULT_FIX_POLICY = `- Do NOT install dependencies (npm/pnpm/yarn install, pip, cargo fetch, bundle install, …) and do NOT run
+/** Pre-gate default policy. Kept verbatim so loading an old config can detect
+ *  "user never customized this" and upgrade it to the current default. */
+export const LEGACY_FIX_POLICY = `- Do NOT install dependencies (npm/pnpm/yarn install, pip, cargo fetch, bundle install, …) and do NOT run
   full builds or test suites. This may be a large monorepo; installs are slow, expensive, and waste disk.
 - Validate by reading the code carefully. You may run fast static checks that need no installation
   (parsing a file, a single-file typecheck if the toolchain already works) — nothing that downloads anything.
 - CI on the pushed branch is the validation backstop. In your proposal, note what CI should confirm.
 - If you are genuinely unable to make the change safely without running something heavyweight, make the
   smallest correct change you can and say exactly what you could not verify.`;
+
+export const DEFAULT_FIX_POLICY = `- Before committing, validate your change: run the repo's typecheck and lint scoped to the files you
+  touched, plus any focused tests that cover them. Do NOT run full project builds or whole-repo suites.
+- If the toolchain needs dependencies, a deterministic lockfile install is allowed (\`npm ci --ignore-scripts\`,
+  \`pnpm install --frozen-lockfile --ignore-scripts\`, or the repo's equivalent). Never add new packages, and
+  never let installs execute arbitrary scripts. This worktree persists per branch, so an install pays off
+  across runs.
+- If validation is genuinely impossible here (toolchain cannot come up without heavyweight setup), make the
+  smallest correct change you can and say exactly what you could not verify — CI is the backstop, not the default.`;
 
 export const DEFAULT_DRAFT_CREATE_CONFIG: DraftCreateConfig = {
  baseBranch: "",
@@ -330,6 +341,7 @@ export function defaultRepoConfig(): RepoConfig {
   pollIntervalSec: 60,
   reviewPrompt: DEFAULT_REVIEW_PROMPT,
   fixPolicy: DEFAULT_FIX_POLICY,
+  validationCommand: "",
   babysitFilters: { ...DEFAULT_BABYSIT_FILTERS },
   reviewFilters: { ...DEFAULT_REVIEW_FILTERS },
   ciAutoAnalysis: true,

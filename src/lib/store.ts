@@ -15,7 +15,7 @@ import type {
   Skill,
   Swarm,
 } from "../types";
-import { defaultGlobalConfig, defaultRepoConfig, syncActiveModelPrefs } from "./defaults";
+import { defaultGlobalConfig, defaultRepoConfig, syncActiveModelPrefs, DEFAULT_FIX_POLICY, LEGACY_FIX_POLICY } from "./defaults";
 import { reLeaseWorktree, removeWorktree } from "./worktree";
 import { native } from "./tauri";
 
@@ -185,6 +185,10 @@ function migrateRepoConfig(raw: string | null): RepoConfig {
   cfg.reviewFilters = migrateReviewFilters(parsed.reviewFilters);
   cfg.skills = migrateSkillSelection(parsed.skills, defaults.skills);
   cfg.draftCreate = migrateDraftCreate(parsed.draftCreate, defaults.draftCreate);
+ // Pre-gate configs persisted the old default fix policy verbatim. If the
+ // user never customized it, upgrade to the current default (which pairs
+ // with the app-owned validation gate). Customized policies are untouched.
+ if (cfg.fixPolicy.trim() === LEGACY_FIX_POLICY.trim()) cfg.fixPolicy = DEFAULT_FIX_POLICY;
   return cfg;
 }
 

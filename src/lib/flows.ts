@@ -134,6 +134,7 @@ function fixFlowWrapper(
   task: string,
   propose = true
 ): string {
+ const validation = ctx.config.validationCommand.trim();
   return `You are Charon's autonomous code fix agent working on repository ${ctx.repo}, PR #${pr.number} ("${pr.title}").
 
 Your working directory is a dedicated git worktree at ${wt.path}, checked out from origin/${pr.headRef}
@@ -144,25 +145,16 @@ ${task}
 
 WORKFLOW:
 1. Investigate and implement the fix in this worktree.
-2. Commit with a clear message and push to the PR branch with:
-   git push origin HEAD:${pr.headRef}
-   (Pushing to this branch is explicitly authorized — ${
-     pr.author === ctx.gh.login
-       ? "it is the user's own PR branch"
-       : `the user explicitly launched this fix on ${pr.author}'s branch from the app`
-   }.)
-   Other agents may be pushing fixes to this branch concurrently. If the push is rejected because
-   the remote moved, run \`git pull --rebase origin ${pr.headRef}\`, resolve any conflicts in favor of
-   keeping both fixes intact, and push again. NEVER force-push.
-3. If you determine no code change is needed, do not commit or push; explain why in your ${
-    propose ? "proposal" : "final message"
+2. Commit the change locally with a clear message. Do NOT push — Charon ${validation ? `runs \`${validation}\` in this worktree and, only if it passes, pushes` : "pushes"
+  } your commit to ${pr.headRef} after the run. Never run \`git push\` yourself.
+   Leave the worktree clean: everything you changed must be committed, nothing left unstaged.
+3. If you determine no code change is needed, do not commit; explain why in your ${propose ? "proposal" : "final message"
   }.
 
 DEPENDENCY & VALIDATION POLICY:
 ${ctx.config.fixPolicy}
 ${HITL_CONTRACT}
-${
-  propose
+${propose
     ? PROPOSAL_CONTRACT
     : `
 No PR comment is wanted for this run. Do NOT emit a proposal block; end with a short summary
@@ -189,6 +181,108 @@ export async function recordPushedCommit(runId: string, wt: Worktree): Promise<v
   } catch (e) {
     console.warn("could not record pushed commit", e);
   }
+}
+
+async function gitIn(wt: Worktree, args: string[]): Promise<string> {
+ const res = await native.runGit(args, wt.path);
+ if (res.code !== 0) {
+  throw new Error(`git ${args.join(" ")} failed (${res.code}):\n${res.stderr || res.stdout}`);
+ }
+ return res.stdout;
+}
+
+async function runValidation(ctx: FlowContext, wt: Worktree): Promise<void> {
+ const cmd = ctx.config.validationCommand.trim();
+ if (!cmd) return;
+ const res = await native.runExec("sh", ["-lc", cmd], wt.path);
+ if (res.code !== 0) {
+  const out = truncate(`${res.stdout}\n${res.stderr}`.trim(), 4000);
+  throw new Error(
+   `validation failed (\`${cmd}\` exited ${res.code}) — commit NOT pushed:\n${out}`
+  );
+ }
+ // A validation command that mutates tracked files (eslint --fix, codegen,
+ // snapshot updates) and exits 0 would make the committed tree differ from
+ // the validated one. Refuse to push in that case.
+ const dirty = (await gitIn(wt, ["status", "--porcelain"])).trim();
+ if (dirty) {
+  throw new Error(
+   `validation command modified tracked files — the commit no longer matches the validated tree, nothing was pushed. ` +
+   `Use a check-only command (no --fix/--write). Modified:\n${truncate(dirty, 1500)}`
+  );
+ }
+}
+
+/**
+ * App-owned push gate for fix flows (Fix 2). The agent commits but never
+ * pushes; after a clean run this validates the worktree and pushes the commit.
+ * Throwing here fails the run's post-processing, so a red validation surfaces
+ * as a run error instead of red CI on the PR.
+ *
+ * Enforcement note: agents hold the authed remote in their worktree, so a
+ * prompt-disobedient agent CAN push (credential stripping would break the
+ * app's own push path). We detect that case — remote tip already at the
+ * agent's HEAD — and fail the run as a policy violation rather than blessing
+ * an unvalidated push.
+ *
+ * Returns the pushed sha, or null when the agent made no commit.
+ */
+export async function validateAndPush(ctx: FlowContext, runId: string, wt: Worktree): Promise<string | null> {
+ const head = (await gitIn(wt, ["rev-parse", "HEAD"])).trim();
+ try {
+  const dirty = (await gitIn(wt, ["status", "--porcelain"])).trim();
+  if (dirty) {
+   throw new Error(
+    `agent left uncommitted changes in the worktree — nothing was pushed:\n${truncate(dirty, 1500)}`
+   );
+  }
+  if (!head || head === wt.baseSha) return null; // clean tree, no commit — nothing to push
+  await gitIn(wt, ["fetch", "origin", wt.prBranch]);
+  const remote = (await gitIn(wt, ["rev-parse", `origin/${wt.prBranch}`])).trim();
+  if (remote === head) {
+   throw new Error(
+    `agent pushed to origin/${wt.prBranch} itself, bypassing Charon's validation gate. ` +
+    `The commit ${head.slice(0, 7)} is already on the remote — review it manually; CI is the only check it got.`
+   );
+  }
+
+  await runValidation(ctx, wt);
+
+  let push = await native.runGit(["push", "origin", `HEAD:${wt.prBranch}`], wt.path);
+  if (push.code !== 0 && /rejected|fetch first|non-fast-forward/i.test(push.stderr || push.stdout)) {
+   // remote moved (another agent's fix landed): rebase, RE-validate — the
+   // rebased tree is not the tree we just validated — then retry once.
+   await gitIn(wt, ["pull", "--rebase", "origin", wt.prBranch]);
+   await runValidation(ctx, wt);
+   push = await native.runGit(["push", "origin", `HEAD:${wt.prBranch}`], wt.path);
+  }
+  if (push.code !== 0) {
+   throw new Error(`push failed (${push.code}):\n${push.stderr || push.stdout}`);
+  }
+  const pushed = (await gitIn(wt, ["rev-parse", "HEAD"])).trim();
+  useAgentStore.getState().update(runId, { commitSha: pushed });
+  return pushed;
+ } catch (e) {
+  // A failed `pull --rebase` can leave rebase state behind (and HEAD
+  // detached mid-rebase, which would poison the rescue ref below). Abort
+  // best-effort; a no-op abort just errors and is ignored.
+  await native.runGit(["rebase", "--abort"], wt.path).catch(() => undefined);
+  // The worktree is released (temp: removed; persistent: hard-reset on next
+  // lease), so pin the rejected commit under a rescue ref in the shared
+  // clone before rethrowing — it stays inspectable via `git log`.
+  // Rescue only when a commit actually exists — a dirty tree with no commit
+  // would just pin baseSha, which helps nobody.
+  const rescue = `pr-copilot/rejected/${runId}`;
+  const saved =
+   head && head !== wt.baseSha
+    ? await native
+     .runGit(["branch", "-f", rescue, "HEAD"], wt.path)
+     .then((r) => r.code === 0)
+     .catch(() => false)
+    : false;
+  const msg = e instanceof Error ? e.message : String(e);
+  throw new Error(saved ? `${msg}\n\nThe unpushed commit is saved on branch ${rescue} in ${wt.clonePath}.` : msg);
+ }
 }
 
 interface DraftPrMetadata {
@@ -534,11 +628,12 @@ async function createReviewProposal(
 // ---------------------------------------------------------------------------
 
 /**
- * Fix flow: worktree → agent implements/commits/pushes (automated) → PR-facing
- * response becomes a pending proposal (gated on approval). Conflict/branch
- * maintenance runs (kind "conflict_fix") skip the proposal entirely — merging
- * main isn't worth a PR comment. opts.replyToCommentId pins the proposal to
- * an inline review comment as a threaded reply.
+ * Fix flow: worktree → agent implements/commits (never pushes) → Charon
+ * validates and pushes via validateAndPush → PR-facing response becomes a
+ * pending proposal (gated on approval). Conflict/branch maintenance runs
+ * (kind "conflict_fix") skip the proposal entirely — merging main isn't worth
+ * a PR comment. opts.replyToCommentId pins the proposal to an inline review
+ * comment as a threaded reply.
  */
 export async function runFixFlow(
   ctx: FlowContext,
@@ -569,7 +664,7 @@ export async function runFixFlow(
       cwd: wt.path,
       onDone: async (run) => {
         try {
-          await recordPushedCommit(run.id, wt);
+     await validateAndPush(ctx, run.id, wt);
           if (propose) {
             await createProposalFromFixOutput(
               ctx,
@@ -691,8 +786,7 @@ export async function runReviewFlow(
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   const diff = truncate(diffText, MAX_DIFF_CHARS, "\n…[diff truncated — review what is shown]");
   const scopeBlock = selection
-    ? `\nSCOPE: review ONLY this selected region — ${selection.path} lines ${selection.startLine}–${selection.endLine} (${
-        selection.side === "RIGHT" ? "new" : "old"
+  ? `\nSCOPE: review ONLY this selected region — ${selection.path} lines ${selection.startLine}–${selection.endLine} (${selection.side === "RIGHT" ? "new" : "old"
       } side):
 \`\`\`
 ${selection.snippet}
@@ -761,8 +855,7 @@ export async function runSelfReviewFlow(
   const diffText = await ctx.gh.getPullDiff(ctx.repo, pr.number);
   const diff = truncate(diffText, MAX_DIFF_CHARS, "\n…[diff truncated — review what is shown]");
   const scopeBlock = selection
-    ? `\nSCOPE: review ONLY this selected region — ${selection.path} lines ${selection.startLine}–${selection.endLine} (${
-        selection.side === "RIGHT" ? "new" : "old"
+  ? `\nSCOPE: review ONLY this selected region — ${selection.path} lines ${selection.startLine}–${selection.endLine} (${selection.side === "RIGHT" ? "new" : "old"
       } side):
 \`\`\`
 ${selection.snippet}
@@ -867,8 +960,7 @@ export async function applyFindings(
 of this PR. Treat each as a strong recommendation: verify it is correct in context, then implement the fix.
 If a finding is wrong, skip it and say why in your final message.
 
-${findings.map(findingInstruction).join("\n\n")}${
-    guidance?.trim()
+${findings.map(findingInstruction).join("\n\n")}${guidance?.trim()
       ? `\n\nADDITIONAL GUIDANCE FROM THE USER (takes precedence):\n${guidance.trim()}`
       : ""
   }`;
@@ -890,9 +982,15 @@ ${findings.map(findingInstruction).join("\n\n")}${
         cwd: wt.path,
         onDone: async (run) => {
           try {
-            await recordPushedCommit(run.id, wt);
+      await validateAndPush(ctx, run.id, wt);
             const s = useRepoStore.getState();
             for (const f of findings) await s.updateFinding(f.key, { status: "applied" });
+     } catch (e) {
+      // gate failure (dirty tree, red validation, push): findings go
+      // back to open so the user can retry; the run itself shows the error
+      const s = useRepoStore.getState();
+      for (const f of findings) await s.updateFinding(f.key, { status: "open", agentRunId: undefined });
+      throw e;
           } finally {
             await releaseWorktree(wt);
           }
@@ -941,12 +1039,10 @@ warranted, do not commit or push — explain your reasoning in the reply instead
 THREAD:
 ${threadText}
 
-After the work, draft a response to the thread${
-    isInline
+After the work, draft a response to the thread${isInline
       ? `: use proposal type "reply" with in_reply_to ${root.id}`
       : ` as a top-level PR comment (proposal type "comment")`
-  }, describing what you changed and pushed — or why you made no change.${
-    guidance?.trim()
+  }, describing what you changed and pushed — or why you made no change.${guidance?.trim()
       ? `\n\nADDITIONAL GUIDANCE FROM THE USER (takes precedence):\n${guidance.trim()}`
       : ""
   }`;
@@ -1278,8 +1374,7 @@ THE DIFF:
 ${truncate(diffText, MAX_DIFF_CHARS)}
 \`\`\`
 
-Answer directly and concretely; reference files and line numbers from the diff where useful.${
-    followUpToRunId
+Answer directly and concretely; reference files and line numbers from the diff where useful.${followUpToRunId
       ? " You are continuing the prior exchange above — build on your earlier answer; don't repeat it."
       : ""
   }`;
