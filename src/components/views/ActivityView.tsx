@@ -3,6 +3,7 @@ import type { AgentRun, Swarm } from "../../types";
 import { isActiveAgentStatus as isActive, isVisibleAgentRun } from "../../lib/agent-runs";
 import { useAgentStore, useSwarmStore } from "../../lib/store";
 import { AgentCard } from "../AgentCard";
+import { Stagger, StaggerItem } from "../amicro/stagger";
 import { SwarmHost } from "../SwarmHost";
 import { EmptyState } from "../common";
 
@@ -166,15 +167,19 @@ export function ActivityView() {
 
       {/* ---- active agents grid ---- */}
       {hasActive && (
-        <div className="agent-grid">
+        <Stagger className="agent-grid">
           {activeItems.map((item, i) =>
             item.kind === "swarm" ? (
-              <SwarmHost key={`swarm-${item.swarm.id}`} swarm={item.swarm} showDiff={false} />
+              <StaggerItem key={`swarm-${item.swarm.id}`}>
+                <SwarmHost swarm={item.swarm} showDiff={false} />
+              </StaggerItem>
             ) : (
-              <AgentCard key={item.run.id} run={item.run} defaultOpen={true} />
+              <StaggerItem key={item.run.id}>
+                <AgentCard run={item.run} defaultOpen={true} />
+              </StaggerItem>
             )
           )}
-        </div>
+        </Stagger>
       )}
 
       {/* ---- completed runs grouped by completion date ---- */}
@@ -255,13 +260,19 @@ function CollapsibleGroup({
       </button>
       {open && (
         <>
+          <Stagger>
           {items.map((item, i) =>
             item.kind === "swarm" ? (
-              <SwarmHost key={`swarm-${item.swarm.id}`} swarm={item.swarm} showDiff={false} />
+              <StaggerItem key={`swarm-${item.swarm.id}`}>
+                <SwarmHost swarm={item.swarm} showDiff={false} />
+              </StaggerItem>
             ) : (
-              <AgentCard key={item.run.id} run={item.run} defaultOpen={false} />
+              <StaggerItem key={item.run.id}>
+                <AgentCard run={item.run} defaultOpen={false} />
+              </StaggerItem>
             )
           )}
+          </Stagger>
           {hasMore && (
             <div className="agent-group-more">
               <button className="small" onClick={() => setPage((c) => c + LATER_PAGE)}>

@@ -5,6 +5,8 @@ import { stackedPrList, type PrStackRenderItem } from "../../lib/pr-stacks";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { age, usePastHero, useScrollMemory, useScrolledPrTitle, type SortKey } from "../../lib/ui";
+import { FadeIn } from "../amicro/fade-in";
+import { Stagger, StaggerItem } from "../amicro/stagger";
 import { Badge, BranchBadge, CiBadge, EmptyState, LoadingField, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
 import { ChecksPanel } from "../ChecksPanel";
 import { Composer, RunResults, type ComposerMode } from "../Composer";
@@ -95,15 +97,17 @@ export function ReviewView() {
         {needsAttention.length > 0 && (
           <div className="list-group-label">Needs attention ({needsAttention.length})</div>
         )}
-        {needsAttention.map(card)}
+        <Stagger>{needsAttention.map((item) => <StaggerItem key={item.pr.number}>{card(item)}</StaggerItem>)}</Stagger>
         {repositoryPrs.length > 0 && (
           <div className="list-group-label" title="Open PRs by other people that match your To Review filters">
             Repository PRs ({repositoryPrs.length})
           </div>
         )}
-        {repositoryPrs.map(card)}
+        <Stagger>{repositoryPrs.map((item) => <StaggerItem key={item.pr.number}>{card(item)}</StaggerItem>)}</Stagger>
       </Sidebar>
-      <div className="content">{pr && <ReviewWorkspace key={pr.number} pr={pr} />}</div>
+      <FadeIn className="content" key={pr?.number ?? "none"} duration={0.35}>
+        {pr && <ReviewWorkspace key={pr.number} pr={pr} />}
+      </FadeIn>
     </div>
   );
 }

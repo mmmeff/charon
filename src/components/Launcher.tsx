@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { refreshModels } from "../lib/agents";
 import { labeledModels, probeHarness, summarizeProbe } from "../lib/acp";
 import { AsciiField } from "./AsciiField";
+import { Stagger, StaggerItem } from "./amicro/stagger";
 import { IconCharonMoon } from "./icons";
 import {
   defaultGlobalConfig,
@@ -393,8 +394,9 @@ function RepoList({
 
       <hr />
       {config.repos.length === 0 && <p className="subtle">No repositories yet.</p>}
+      <Stagger>
       {config.repos.map((r) => (
-        <div key={r} className="repo-item">
+        <StaggerItem key={r} className="repo-item">
           <a
             href="#"
             onClick={(e) => {
@@ -415,8 +417,9 @@ function RepoList({
               Remove
             </button>
           </div>
-        </div>
+        </StaggerItem>
       ))}
+      </Stagger>
     </div>
   );
 }
