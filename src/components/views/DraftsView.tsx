@@ -8,6 +8,8 @@ import { formatShortcut, resolveShortcutMap } from "../../lib/shortcuts";
 import { age, type SortKey } from "../../lib/ui";
 import type { AgentRun, Swarm } from "../../types";
 import { AgentCard } from "../AgentCard";
+import { FadeIn } from "../amicro/fade-in";
+import { Stagger, StaggerItem } from "../amicro/stagger";
 import { ApprovalsBadge, Badge, CiBadge, EmptyState, RunningAgentsChip, SortPicker, Spinner } from "../common";
 import { useFlow } from "../flow";
 import { Sidebar } from "../Panels";
@@ -126,20 +128,22 @@ export function DraftsView() {
           <span className="draft-create-hint">{newDraftShortcut}</span>
         </button>
         {drafts.length === 0 && pendingItems.length === 0 && <p className="subtle">No draft PRs.</p>}
+        <Stagger>
         {pendingItems.map((run) => (
+          <StaggerItem key={run.swarmId ? `swarm-group-${run.swarmId}:${run.id}` : run.id}>
           <PendingDraftCard
-            key={run.swarmId ? `swarm-group-${run.swarmId}:${run.id}` : run.id}
             run={run}
             swarm={run.swarmId ? swarmsById[run.swarmId] : undefined}
             selected={!creating && visiblePending?.id === run.id}
             onClick={() => selectPending(run.id)}
           />
+          </StaggerItem>
         ))}
         {stacked.map((item) => {
           const p = item.pr;
           return (
+            <StaggerItem key={p.number}>
             <PrStackCard
-              key={p.number}
               item={item}
               selected={!creating && pr?.number === p.number}
               onClick={() => setSelected(p.number)}
@@ -161,10 +165,16 @@ export function DraftsView() {
                 </Badge>
               </div>
             </PrStackCard>
+            </StaggerItem>
           );
         })}
+        </Stagger>
       </Sidebar>
-      <div className="content">
+      <FadeIn
+        className="content"
+        duration={0.35}
+        key={creating ? "new-draft" : visiblePending ? `pending-${visiblePending.id}` : pr ? `pr-${pr.number}` : "empty"}
+      >
         {creating ? (
           <NewDraftWorkspace
             onStarted={(id) => {
@@ -196,7 +206,7 @@ export function DraftsView() {
             </EmptyState>
           </div>
         )}
-      </div>
+      </FadeIn>
     </div>
   );
 }

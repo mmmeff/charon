@@ -55,6 +55,8 @@ Fix-flow pushes are app-owned: agents commit but never push; `validateAndPush` r
 
 **`src/components/RepoApp.tsx` + views** — Per-repo shell with Drafts/Open/Review/Activity/Settings tabs, command palette, keyboard shortcuts, flow context provider. Launcher window lists recent repos and opens them into RepoApp instances.
 
+**`src/components/amicro/`** — Motion micro-interactions adapted from the amicro registry (MIT, Tailwind-free: inline styles + CSS vars). `DotSpinner` backs every `Spinner`; entrances (`FadeIn`/`FadeUp`/`ScaleIn`), `Stagger` list wrappers, `TypingIndicator`, spring `presets`. `MotionConfig reducedMotion="user"` in main.tsx honors the OS setting; the spinners also freeze under it via `useReducedMotion`.
+
 ## WORKING CONVENTIONS
 
 - **Commands**: `npm run tauri dev` (full app), `cargo check --manifest-path=src-tauri/Cargo.toml` (native layer). No formatter — verification is `npm run typecheck` plus `npm run lint` (ESLint flat config in `eslint.config.js`). The single enforced rule is `react-hooks/rules-of-hooks` (`error`): it fails any build that calls a hook after an early return — the bug that crashed `RunResults` when `swarmActive` flipped. `exhaustive-deps` is off; re-enable as `warn` for a sweep when warranted. Build chain: `npm run build` runs `tsc && vite build`; `prebuild` generates icons from `app-icon.png`, so icon files in `src-tauri/icons/` are not committed.

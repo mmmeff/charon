@@ -7,6 +7,8 @@ import type { SortKey } from "../lib/ui";
 import type { Severity } from "../types";
 import { AsciiField } from "./AsciiField";
 import { AsciiMoon } from "./AsciiMoon";
+import { DotSpinner } from "./amicro/dot-spinner";
+import { FadeUp } from "./amicro/fade-up";
 
 // NOTE: keep this file component-only. Hooks and plain functions belong in
 // src/lib/ui.ts — mixed exports here break Vite Fast Refresh in dev.
@@ -41,7 +43,9 @@ export function Section({ label, children }: { label?: string; children: ReactNo
           <span>{label}</span>
         </div>
       )}
-      {children}
+      <FadeUp duration={0.35} yOffset={8}>
+        {children}
+      </FadeUp>
     </section>
   );
 }
@@ -107,7 +111,7 @@ export function EmptyState({
     <div className="empty-stage">
       <AsciiMoon fill />
       <div className="empty-stage-scrim" aria-hidden />
-      <div className="empty">
+      <FadeUp className="empty" duration={0.5} yOffset={14}>
         <h3>{loading ? <span className="empty-loading-title"><Spinner /> Loading…</span> : title}</h3>
         {loading ? (
           <p>Fetching from GitHub.</p>
@@ -115,7 +119,7 @@ export function EmptyState({
           children && <p>{children}</p>
         )}
         {!loading && action && <div className="empty-action">{action}</div>}
-      </div>
+      </FadeUp>
     </div>
   );
 }
@@ -235,8 +239,9 @@ export function MergeBadge({ state }: { state: string }) {
   return <Badge color="gray">{state || "unknown"}</Badge>;
 }
 
-export function Spinner() {
-  return <span className="spin" />;
+/** Inline loading indicator — amicro dot spinner, inherits text color. */
+export function Spinner({ size = 10 }: { size?: number }) {
+  return <DotSpinner size={size} />;
 }
 
 export function SortPicker({ value, onChange }: { value: SortKey; onChange: (k: SortKey) => void }) {

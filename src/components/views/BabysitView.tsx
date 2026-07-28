@@ -3,6 +3,8 @@ import { usePrData } from "../../lib/events";
 import { stackedPrList } from "../../lib/pr-stacks";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import { age, type SortKey } from "../../lib/ui";
+import { FadeIn } from "../amicro/fade-in";
+import { Stagger, StaggerItem } from "../amicro/stagger";
 import { ApprovalsBadge, Badge, CiBadge, EmptyState, MergeBadge, RunningAgentsChip, SortPicker } from "../common";
 import { useFlow } from "../flow";
 import { Sidebar } from "../Panels";
@@ -52,14 +54,15 @@ export function BabysitView() {
           </span>
           <SortPicker value={sort} onChange={setSort} />
         </div>
+        <Stagger>
         {stacked.map((item) => {
           const p = item.pr;
           const pending = proposals.filter(
             (x) => x.prNumber === p.number && x.status === "pending"
           ).length;
           return (
+            <StaggerItem key={p.number}>
             <PrStackCard
-              key={p.number}
               item={item}
               selected={pr?.number === p.number}
               onClick={() => setSelected(p.number)}
@@ -81,11 +84,15 @@ export function BabysitView() {
                 {pending > 0 && <Badge color="yellow">{pending} pending</Badge>}
               </div>
             </PrStackCard>
+            </StaggerItem>
           );
         })}
+        </Stagger>
 
       </Sidebar>
-      <div className="content">{pr && <PrWorkspace key={pr.number} pr={pr} variant="babysit" />}</div>
+      <FadeIn className="content" key={pr?.number ?? "none"} duration={0.35}>
+        {pr && <PrWorkspace key={pr.number} pr={pr} variant="babysit" />}
+      </FadeIn>
     </div>
   );
 }

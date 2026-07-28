@@ -3,6 +3,7 @@ import { parseUnifiedDiff } from "../lib/diff";
 import { useUiStore } from "../lib/store";
 import { age } from "../lib/ui";
 import type { CommitInfo, FileDiff } from "../types";
+import { ScaleIn } from "./amicro/scale-in";
 import { LoadingField } from "./common";
 import { DiffViewer } from "./DiffViewer";
 import { useFlow } from "./flow";
@@ -67,7 +68,7 @@ export function CommitDiffModal() {
 
   return (
     <div className="modal-backdrop" onMouseDown={close}>
-      <div className="modal-card commit-modal" onMouseDown={(e) => e.stopPropagation()}>
+      <ScaleIn className="modal-card commit-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <code className="commit-sha">{view.sha.slice(0, 10)}</code>
           {meta?.message && <span className="commit-modal-msg">{firstLine(meta.message)}</span>}
@@ -99,7 +100,7 @@ export function CommitDiffModal() {
           )}
           {files && files.length > 0 && <DiffViewer files={files} />}
         </div>
-      </div>
+      </ScaleIn>
     </div>
   );
 }

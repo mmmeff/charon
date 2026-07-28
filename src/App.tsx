@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { DotSpinner } from "./components/amicro/dot-spinner";
+import { ScaleIn } from "./components/amicro/scale-in";
 import { Launcher } from "./components/Launcher";
 import { RepoApp } from "./components/RepoApp";
 import { native } from "./lib/tauri";
@@ -18,13 +20,13 @@ function UpdateToast() {
   const version = ready ?? available;
   if (!version || snoozedUntil > Date.now()) return null;
   return (
-    <div className="update-toast">
+    <ScaleIn className="update-toast" from={0.9}>
       <span>
         time to update — Charon v{version} is {ready ? "ready" : "out"}
       </span>
       {updating && !ready ? (
         <span className="update-toast-busy">
-          <span className="spin" /> updating…
+          <DotSpinner /> updating…
         </span>
       ) : (
         <button className="update-toast-link" onClick={() => void kickOffUpdate()}>
@@ -41,7 +43,7 @@ function UpdateToast() {
           ✕
         </button>
       )}
-    </div>
+    </ScaleIn>
   );
 }
 
@@ -125,7 +127,7 @@ export default function App() {
   if (!loaded || (autoOpening && !repo)) {
     return (
       <div className="empty" style={{ paddingTop: 120 }}>
-        <span className="spin" /> Loading…
+        <DotSpinner size={12} /> Loading…
       </div>
     );
   }

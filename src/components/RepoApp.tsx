@@ -39,6 +39,8 @@ import {
  IconSidePanel,
 } from "./icons";
 import { AsciiField } from "./AsciiField";
+import { FadeIn } from "./amicro/fade-in";
+import { Spinner } from "./common";
 import { CommitDiffModal } from "./CommitDiffModal";
 import { CommandPalette } from "./CommandPalette";
 import { PrWorkspace } from "./PrWorkspace";
@@ -343,7 +345,7 @@ export function RepoApp({ repo }: { repo: string }) {
   return (
    <div className="empty" style={{ paddingTop: 90 }}>
     <AsciiField height={150} color="255, 79, 0" opacity={0.35} />
-    <span className="spin" /> Loading {repo}…
+    <Spinner size={12} /> Loading {repo}…
    </div>
   );
  }
@@ -537,7 +539,7 @@ function OrphanPrView({ prNumber, onClose }: { prNumber: number; onClose: () => 
  const variant = mine ? (pr?.draft ? "draft" : "babysit") : "babysit";
 
  return (
-  <div className="orphan-pr-overlay">
+  <FadeIn className="orphan-pr-overlay" duration={0.3}>
    <div className="orphan-pr-bar">
     <button className="link small" onClick={onClose} title="Close (Esc)">
      ✕ close
@@ -564,10 +566,10 @@ function OrphanPrView({ prNumber, onClose }: { prNumber: number; onClose: () => 
    {error && <div className="empty" style={{ padding: 40, color: "var(--red)" }}>{error}</div>}
    {!pr && !error && (
     <div className="empty" style={{ padding: 40 }}>
-     <span className="spin" /> Loading PR #{prNumber}…
+     <Spinner size={12} /> Loading PR #{prNumber}…
     </div>
    )}
    {pr && <PrWorkspace pr={pr} variant={variant} />}
-  </div>
+  </FadeIn>
  );
 }

@@ -1971,15 +1971,6 @@ input[type="checkbox"] { accent-color: var(--orange); }
 }
 .repo-item:hover { border-left-color: var(--orange); }
 
-/* ---- spinner: rotating square ---- */
-.spin {
-  display: inline-block; width: 10px; height: 10px;
-  border: 2px solid var(--fg-subtle); border-top-color: var(--orange);
-  animation: spin 0.7s steps(8) infinite;
-  vertical-align: -1px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
 /* live agent indicator on PR list cards */
 .livedot {
   width: 6px; height: 6px; background: var(--acid); display: inline-block;
@@ -2324,8 +2315,7 @@ a.act-event-detail:hover { color: var(--orange); }
   .thinking-track::before,
   .thinking-track::after,
   .thinking-pulse,
-  .thinking-cursor,
-  .spin {
+  .thinking-cursor {
     animation: none !important;
   }
 }

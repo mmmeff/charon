@@ -8,6 +8,7 @@ import { useAgentStore, useRepoStore, useSwarmStore } from "../lib/store";
 import type { AgentRun, LineSelection, PrSummary, SwarmContenderSpec } from "../types";
 import { timeAgo } from "../lib/ui";
 import { AgentCard } from "./AgentCard";
+import { TypingIndicator } from "./amicro/typing-indicator";
 import { Badge, Spinner } from "./common";
 import { Markdown } from "./Markdown";
 import { ModelPicker, ReasoningPicker } from "./ModelPicker";
@@ -451,7 +452,7 @@ function FollowupAnswer({ run, onDismiss, dismissed }: { run: AgentRun; onDismis
         <Markdown text={cleanResultText(run.resultText)} />
       ) : running ? (
         <div className="row">
-          <Spinner /> <span className="subtle">thinking…</span>
+          <TypingIndicator /> <span className="subtle">thinking…</span>
         </div>
       ) : null}
       {run.resultText && run.status === "done" && (
