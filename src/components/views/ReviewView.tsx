@@ -272,21 +272,27 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
         <header className="pr-hero" ref={heroRef}>
           {/* the PR itself: title + state */}
           <div className="pr-hero-id">
-            <h2 className="viewtitle">
-              <a href={pr.url} title="Open on GitHub">
-                #{pr.number} {pr.title} <span className="ext">↗</span>
-              </a>
-            </h2>
-            <div className="row pr-hero-meta">
-              <Badge color={pr.requestedFromMe ? "purple" : "gray"}>
-                {pr.requestedFromMe ? "review requested" : "teammate PR"}
-              </Badge>
-              <CiBadge checks={checks} />
-              <BranchBadge head={pr.headRef} base={pr.baseRef} />
-              <PrLabels pr={pr} />
-              <span className="subtle">
-                by {pr.author} · {pr.changedFiles} files
-              </span>
+            <a className="pr-hero-num" href={pr.url} title="Open on GitHub">
+              <span className="pr-hero-num-hash">#</span>
+              {pr.number}
+            </a>
+            <div className="pr-hero-idmain">
+              <h2 className="viewtitle">
+                <a href={pr.url} title="Open on GitHub">
+                  {pr.title} <span className="ext">↗</span>
+                </a>
+              </h2>
+              <div className="row pr-hero-meta">
+                <Badge color={pr.requestedFromMe ? "purple" : "gray"}>
+                  {pr.requestedFromMe ? "review requested" : "teammate PR"}
+                </Badge>
+                <CiBadge checks={checks} />
+                <BranchBadge head={pr.headRef} base={pr.baseRef} />
+                <PrLabels pr={pr} />
+                <span className="subtle">
+                  by {pr.author} · {pr.changedFiles} files
+                </span>
+              </div>
             </div>
           </div>
 

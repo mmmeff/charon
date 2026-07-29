@@ -163,7 +163,7 @@ export function PrTitle({ pr }: { pr: PrSummary }) {
     return (
       <h2 className="viewtitle">
         <a href={pr.url} title="Open on GitHub">
-          #{pr.number} {pr.title} <span className="ext">↗</span>
+          {pr.title} <span className="ext">↗</span>
         </a>
         {mine && (
           <button className="link small title-edit" title="Rename PR" onClick={() => startEdit()}>
@@ -178,6 +178,7 @@ export function PrTitle({ pr }: { pr: PrSummary }) {
     <div className="card" style={{ padding: 10, marginBottom: 10 }}>
       <input
         type="text"
+        className="input-prose"
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}

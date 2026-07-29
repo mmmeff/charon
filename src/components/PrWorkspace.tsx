@@ -162,25 +162,31 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         <header className="pr-hero" ref={heroRef}>
           {/* the PR itself: title + state */}
           <div className="pr-hero-id">
-            <PrTitle pr={pr} />
-            <div className="row pr-hero-meta">
-              {pr.draft && <Badge color="gray">draft</Badge>}
-              {pr.autoMerge && (
-                <Badge color="green" title="Auto-merge is armed — merges once all requirements pass">
-                  ⏻ automerge
-                </Badge>
-              )}
-              {variant === "babysit" && (
-                <>
-                  <ApprovalsMenu pr={pr} />
-                  <ReviewersMenu pr={pr} />
-                </>
-              )}
-              <BranchBadge head={pr.headRef} base={pr.baseRef} />
-              <PrLabels pr={pr} />
-              <span className="subtle">
-                +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
-              </span>
+            <a className="pr-hero-num" href={pr.url} title="Open on GitHub">
+              <span className="pr-hero-num-hash">#</span>
+              {pr.number}
+            </a>
+            <div className="pr-hero-idmain">
+              <PrTitle pr={pr} />
+              <div className="row pr-hero-meta">
+                {pr.draft && <Badge color="gray">draft</Badge>}
+                {pr.autoMerge && (
+                  <Badge color="green" title="Auto-merge is armed — merges once all requirements pass">
+                    ⏻ automerge
+                  </Badge>
+                )}
+                {variant === "babysit" && (
+                  <>
+                    <ApprovalsMenu pr={pr} />
+                    <ReviewersMenu pr={pr} />
+                  </>
+                )}
+                <BranchBadge head={pr.headRef} base={pr.baseRef} />
+                <PrLabels pr={pr} />
+                <span className="subtle">
+                  +{pr.additions} −{pr.deletions} · updated {timeAgo(pr.updatedAt)}
+                </span>
+              </div>
             </div>
           </div>
 

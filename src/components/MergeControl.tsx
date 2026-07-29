@@ -49,6 +49,10 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
   const state = pr.mergeableState;
   const blocked = state === "blocked" || state === "behind";
   const conflicted = state === "dirty";
+  // "unstable" means mergeable with checks still failing. Merging stays
+  // available, but the accent fill is reserved for a clean merge so the
+  // loudest control on the surface is never the one to think twice about.
+  const clean = state === "clean";
   const approvals = new Set(
     reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)
   ).size;
@@ -102,7 +106,7 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
           (confirming ? (
             <>
               <button
-                className={`small ${blocked ? "danger" : "primary"}`}
+                className={`small ${blocked || !clean ? "danger" : "primary"}`}
                 disabled={busy}
                 onClick={() => void merge()}
               >
@@ -126,9 +130,15 @@ export function MergeControl({ pr }: { pr: PrSummary }) {
                 </button>
               ) : (
                 <button
-                  className="small primary"
+                  className={`small ${clean ? "primary" : ""}`}
                   disabled={conflicted || !methods || busy}
-                  title={conflicted ? "Resolve conflicts first" : METHOD_LABELS[method]}
+                  title={
+                    conflicted
+                      ? "Resolve conflicts first"
+                      : clean
+                        ? METHOD_LABELS[method]
+                        : `${METHOD_LABELS[method]} — checks are still failing`
+                  }
                   onClick={() => setConfirming(true)}
                 >
                   Merge…

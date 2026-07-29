@@ -316,22 +316,24 @@ function PendingDraftWorkspace({ run, onCleared }: { run: AgentRun; onCleared: (
       <div className="ws-main pr-shell">
         <header className="pr-hero pending-draft-hero">
           <div className="pr-hero-id">
-            <h2>{swarm ? swarmPromptTitle(swarm) : pendingDraftTitle(run)}</h2>
-            <div className="row pr-hero-meta">
-              {swarm ? (
-                <>
-                  <Badge color={swarm.status === "running" ? "blue" : swarm.status === "resolved" ? "green" : "gray"}>
-                    {swarm.status === "running" ? "under construction" : swarm.status === "resolved" ? "resolved" : "abandoned"}
-                  </Badge>
-                  <Badge color="gray">swarm · {swarm.contenders.length} models</Badge>
-                </>
-              ) : (
-                <>
-                  <Badge color={status.color}>{status.label}</Badge>
-                  <Badge color="gray">new draft</Badge>
-                  {run.draftCreate?.branch && <span className="subtle">{run.draftCreate.branch}</span>}
-                </>
-              )}
+            <div className="pr-hero-idmain">
+              <h2>{swarm ? swarmPromptTitle(swarm) : pendingDraftTitle(run)}</h2>
+              <div className="row pr-hero-meta">
+                {swarm ? (
+                  <>
+                    <Badge color={swarm.status === "running" ? "blue" : swarm.status === "resolved" ? "green" : "gray"}>
+                      {swarm.status === "running" ? "under construction" : swarm.status === "resolved" ? "resolved" : "abandoned"}
+                    </Badge>
+                    <Badge color="gray">swarm · {swarm.contenders.length} models</Badge>
+                  </>
+                ) : (
+                  <>
+                    <Badge color={status.color}>{status.label}</Badge>
+                    <Badge color="gray">new draft</Badge>
+                    {run.draftCreate?.branch && <span className="subtle">{run.draftCreate.branch}</span>}
+                  </>
+                )}
+              </div>
             </div>
           </div>
           <div className={`pending-draft-agent ${active ? "active" : ""}`}>

@@ -457,7 +457,7 @@ export function AgentCard({
           {run.error}
           {run.errorDetail && (
             <details style={{ marginTop: 4 }}>
-              <summary className="subtle" style={{ cursor: "pointer", fontSize: 11.5 }}>
+              <summary className="subtle" style={{ cursor: "pointer", fontSize: "var(--t-meta)" }}>
                 diagnostic details
               </summary>
               <pre
@@ -466,8 +466,9 @@ export function AgentCard({
                   padding: 8,
                   background: "var(--bg-inset)",
                   border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  fontSize: 11.5,
+                  borderRadius: 0,
+                  fontFamily: "var(--mono)",
+                  fontSize: "var(--t-meta)",
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
                   maxHeight: 320,
