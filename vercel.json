@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "mkdir -p site/assets && cp docs/*.png docs/tour.gif app-icon.png site/assets/",
+  "buildCommand": "mkdir -p site/assets && cp docs/*.png docs/*.jpg docs/tour.gif app-icon.png site/assets/",
   "outputDirectory": "site",
   "installCommand": "",
   "framework": null,

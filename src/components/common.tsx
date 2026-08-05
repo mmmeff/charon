@@ -5,8 +5,7 @@ import { useAgentStore } from "../lib/store";
 import { useFlow } from "./flow";
 import type { SortKey } from "../lib/ui";
 import type { Severity } from "../types";
-import { AsciiField } from "./AsciiField";
-import { AsciiMoon } from "./AsciiMoon";
+import { BrandField } from "./BrandField";
 import { DotSpinner } from "./amicro/dot-spinner";
 import { FadeUp } from "./amicro/fade-up";
 
@@ -92,7 +91,7 @@ export function ApprovalsBadge({ prNumber }: { prNumber: number }) {
   );
 }
 
-/** Empty-state block: full-bleed ASCII Charon backdrop + tracked uppercase title. */
+/** Empty-state block: full-bleed Charon field + a compact action panel. */
 export function EmptyState({
   title,
   children,
@@ -109,7 +108,7 @@ export function EmptyState({
 }) {
   return (
     <div className="empty-stage">
-      <AsciiMoon fill />
+      <BrandField />
       <div className="empty-stage-scrim" aria-hidden />
       <FadeUp className="empty" duration={0.5} yOffset={14}>
         <h3>{loading ? <span className="empty-loading-title"><Spinner /> Loading…</span> : title}</h3>
@@ -124,7 +123,7 @@ export function EmptyState({
   );
 }
 
-/** Slim animated ASCII strip for loading/waiting states. */
+/** Slim signal strip for loading and waiting states. */
 export function LoadingField({
   label,
   height = 56,
@@ -136,7 +135,11 @@ export function LoadingField({
 }) {
   return (
     <div className="loading-field">
-      <AsciiField height={height} opacity={0.35} speed={1.6} color={color} />
+      <div
+        className="loading-signal"
+        style={{ height, "--loading-signal-color": color } as React.CSSProperties}
+        aria-hidden
+      />
       <span className="subtle">
         <Spinner /> {label}
       </span>
@@ -144,7 +147,7 @@ export function LoadingField({
   );
 }
 
-/** Ambient thinking/routing field for agent-owned work surfaces. */
+/** Compact progress signal for agent-owned work surfaces. */
 export function ThinkingField({
   compact = false,
   ariaLabel = "Thinking",
@@ -167,10 +170,7 @@ export function ThinkingField({
       <div className="thinking-track">
         <span className="thinking-node active" />
         <span className="thinking-node" />
-        <span className="thinking-node" />
-        <span className="thinking-pulse p1" />
-        <span className="thinking-pulse p2" />
-        <span className="thinking-pulse p3" />
+        <span className="thinking-progress" />
       </div>
       <div className="thinking-terminal">
         {terminalLines.map((line, i) => {

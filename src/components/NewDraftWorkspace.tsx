@@ -4,7 +4,6 @@ import { startSwarm } from "../lib/swarm";
 import { useAgentStore, useSwarmStore, useUiStore } from "../lib/store";
 import { uid } from "../lib/template";
 import { Section, Spinner } from "./common";
-import { AsciiMoon } from "./AsciiMoon";
 import { ModelPicker, ReasoningPicker } from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
 import { SwarmHost } from "./SwarmHost";
@@ -124,8 +123,6 @@ export function NewDraftWorkspace({
 
   return (
     <div className="workspace new-draft-workspace">
-      <AsciiMoon fill />
-      <div className="empty-stage-scrim" aria-hidden />
       <div className="ws-main pr-shell">
         <header className="pr-hero new-draft-hero">
           <div className="pr-hero-id">

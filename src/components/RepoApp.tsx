@@ -38,7 +38,7 @@ import {
  IconSettings,
  IconSidePanel,
 } from "./icons";
-import { AsciiField } from "./AsciiField";
+import { BrandField } from "./BrandField";
 import { FadeIn } from "./amicro/fade-in";
 import { Spinner } from "./common";
 import { CommitDiffModal } from "./CommitDiffModal";
@@ -136,6 +136,21 @@ export function RepoApp({ repo }: { repo: string }) {
  const prSidebarOpen = useUiStore((s) => s.prSidebarOpen);
  const setPrSidebarOpen = useUiStore((s) => s.setPrSidebarOpen);
  const orphanPr = useUiStore((s) => s.orphanPr);
+
+ // A narrow window cannot carry both review sidebars without crushing the
+ // evidence surface. Collapse activity at the breakpoint; the rail can reopen
+ // it as an overlay when the user needs it.
+ useEffect(() => {
+  const narrowWindow = window.matchMedia("(max-width: 860px)");
+  const closeActivity = (matches: boolean) => {
+   if (matches) setActivityPanelOpen(false);
+  };
+  const onChange = (event: MediaQueryListEvent) => closeActivity(event.matches);
+  closeActivity(narrowWindow.matches);
+  narrowWindow.addEventListener("change", onChange);
+  return () => narrowWindow.removeEventListener("change", onChange);
+ }, [setActivityPanelOpen]);
+
  // keep the breadcrumb mounted briefly on hide so it can animate out
  const [crumb, setCrumb] = useState(scrolledPr);
  const [crumbLeaving, setCrumbLeaving] = useState(false);
@@ -343,9 +358,12 @@ export function RepoApp({ repo }: { repo: string }) {
  }
  if (!repoStore.loaded || !ctxRef.current) {
   return (
-   <div className="empty" style={{ paddingTop: 90 }}>
-    <AsciiField height={150} color="255, 79, 0" opacity={0.35} />
-    <Spinner size={12} /> Loading {repo}…
+   <div className="empty-stage">
+    <BrandField variant="coral" />
+    <div className="empty-stage-scrim" aria-hidden />
+    <div className="empty">
+     <Spinner size={12} /> Loading {repo}…
+    </div>
    </div>
   );
  }
@@ -405,11 +423,6 @@ export function RepoApp({ repo }: { repo: string }) {
 
     <div className="app-col">
      <div className="topstrip">
-      {prData.polling && (
-       <div className="topstrip-field" aria-hidden>
-        <AsciiField height={36} color="255, 79, 0" opacity={0.22} speed={2.6} />
-       </div>
-      )}
       <button
        className="rail-btn navbtn"
        disabled={navIndex <= 0}

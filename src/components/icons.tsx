@@ -89,8 +89,7 @@ export const IconAgent = () => (
   </svg>
 );
 
-/** Brand mark: the Charon cube logo. `id` is kept for call-site
- *  compatibility but no longer used (was a clip-path id). */
+/** Raster Charon mark. `id` remains for call-site compatibility. */
 export const IconCharonMoon = ({ size = 20 }: { size?: number; id?: string }) => (
   <img src={charonLogo} width={size} height={size} alt="Charon" style={{ display: "block" }} />
 );

@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { refreshModels } from "../lib/agents";
 import { labeledModels, probeHarness, summarizeProbe } from "../lib/acp";
-import { AsciiField } from "./AsciiField";
+import { BrandField } from "./BrandField";
 import { Stagger, StaggerItem } from "./amicro/stagger";
-import { IconCharonMoon } from "./icons";
 import {
   defaultGlobalConfig,
   harnessModelDefaults,
@@ -162,10 +161,10 @@ function Onboarding({
   return (
     <div className="launcher">
       <div className="hero">
-        <AsciiField height={120} opacity={0.45} />
+        <BrandField variant="coral" />
         <div className="hero-text">
           <h1>
-            <IconCharonMoon size={26} id="connect" /> CHARON
+            CHARON
           </h1>
           <div className="sub">human-in-the-loop agents for pull requests</div>
         </div>
@@ -345,10 +344,10 @@ function RepoList({
   return (
     <div className="launcher">
       <div className="hero">
-        <AsciiField height={120} opacity={0.45} />
+        <BrandField variant="coral" />
         <div className="hero-text">
           <h1>
-            <IconCharonMoon size={26} id="picker" /> CHARON
+            CHARON
           </h1>
         </div>
       </div>

@@ -1,1060 +1,2019 @@
 <!doctype html>
+<!--
+THESIS: Charon turns pull-request evidence into a celestial contact sheet. It refuses the category's terminal-dashboard landing page.
+OWN-WORLD: Ink black, coral, cobalt, warm paper, halftone dots, film grain, crop marks, hard frames, and Charon's moon.
+STORY: AI widened the review gap. Charon gathers the diff, checks, discussion, context, and visible agent work so the developer can judge the change.
+FIRST VIEWPORT: Charon's moon fills the upper-left frame. A real review screen fills the right reel. The offer and download action anchor the lower-left frame.
+FORM: The fourth grounded direction, a film contact sheet and edit-decision ledger, staged as pierced density. Seed 8c9ba770.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Charon: Code Review Agent</title>
 <meta name="description" content="Review diffs, CI, comments, context, and agent output in one place. Edit proposals. Approve what lands."/>
+<meta name="theme-color" content="#050607"/>
 <meta property="og:title" content="Charon: Code Review Agent"/>
 <meta property="og:description" content="Review diffs, CI, comments, context, and agent output in one place. Edit proposals. Approve what lands."/>
 <meta property="og:image" content="https://charon.sh/assets/og.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:type" content="website"/>
 <meta property="og:url" content="https://charon.sh/"/>
+<meta property="og:type" content="website"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:image" content="https://charon.sh/assets/og.png"/>
-<meta name="twitter:title" content="Charon — Code Review Agent"/>
+<meta name="twitter:title" content="Charon: Code Review Agent"/>
 <meta name="twitter:description" content="Review AI code before it lands."/>
 <link rel="canonical" href="https://charon.sh/"/>
 <link rel="icon" type="image/png" href="assets/charon-logo.png"/>
 <style>
-/* Self-hosted, no CDN. Archivo's wdth axis supplies the condensed uppercase
-   micro-labels and the expanded ultra-bold display; Plex Mono holds only what
-   is measured — commands, logs, code, the ASCII art. */
-@font-face{
-  font-family:"Archivo Variable";
-  font-style:normal;
-  font-display:swap;
-  font-weight:100 900;
-  font-stretch:62% 125%;
-  src:url(fonts/archivo-wdth.woff2) format("woff2-variations");
-}
-@font-face{
-  font-family:"IBM Plex Mono";
-  font-style:normal;
-  font-display:swap;
-  font-weight:400;
-  src:url(fonts/plex-mono-400.woff2) format("woff2");
-}
-@font-face{
-  font-family:"IBM Plex Mono";
-  font-style:normal;
-  font-display:swap;
-  font-weight:600;
-  src:url(fonts/plex-mono-600.woff2) format("woff2");
+@font-face {
+  font-family: "Archivo Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url("fonts/archivo-wdth.woff2") format("woff2-variations");
 }
 
-:root{
-  /* channels — every wash and glow mixes from these, so a hue moves once */
-  --rgb-bg:22 25 24;
-  --rgb-ink:201 220 207;
-  --rgb-orange:255 111 69;
-
-  --bg:#161918;
-  --bg-raised:#1e2220;
-  --bg-overlay:#262b28;
-  --border:#2f3733;
-  --fg:#c9dccf;
-  --fg-muted:#9bb0a4;
-  --orange:#ff6f45;
-  --acid:#cbf24f;
-  --red:#ff2e55;
-
-  --sans:"Archivo Variable", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-  --mono:"IBM Plex Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
-
-  --w-cond:82%;
-  --w-wide:112%;
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("fonts/plex-mono-400.woff2") format("woff2");
 }
-*{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{
-  background:var(--bg);
-  color:var(--fg);
-  font-family:var(--sans);
-  font-size:15px;
-  line-height:1.65;
-  -webkit-font-smoothing:antialiased;
-  overflow-x:hidden;
-}
-::selection{background:var(--orange);color:var(--bg)}
-a{color:var(--acid);text-decoration:none}
-a:hover{text-decoration:underline}
-img{max-width:100%;display:block}
 
-/* ---------- nav ---------- */
-nav{
-  position:fixed;top:0;left:0;right:0;z-index:50;
-  display:flex;align-items:center;gap:14px;
-  padding:14px 28px;
-  background:color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter:blur(10px);
-  border-bottom:1px solid var(--border);
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("fonts/plex-mono-600.woff2") format("woff2");
 }
-nav .mark{width:22px;height:22px;flex:none}
-nav .name{font-weight:800;font-stretch:var(--w-wide);letter-spacing:.2em;font-size:13px}
-nav .links{margin-left:auto;display:flex;gap:22px;font-size:11px;font-stretch:var(--w-cond);font-weight:700;letter-spacing:.1em;text-transform:uppercase}
-nav .links a{color:var(--fg-muted)}
-nav .links a:hover{color:var(--acid);text-decoration:none}
-nav .links a.dl{color:var(--orange)}
 
-/* ---------- hero ---------- */
-header{
-  position:relative;min-height:92svh;
-  display:flex;align-items:center;
-  overflow:hidden;
+:root {
+  --ink: #050607;
+  --ink-soft: #111315;
+  --paper: #f3ebdd;
+  --paper-dim: #b8b1a7;
+  --coral: #ff574d;
+  --cobalt: #216dff;
+  --electric: #75b6ff;
+  --yellow: #ffc95c;
+  --green: #126b58;
+  --line-dark: rgba(5, 6, 7, 0.28);
+  --line-light: rgba(243, 235, 221, 0.28);
+  --display: "Archivo Variable", "Helvetica Neue", Arial, sans-serif;
+  --sans: "Archivo Variable", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --page: min(100% - 32px, 1440px);
 }
-#hero-canvas{
-  position:absolute;inset:0;width:100%;height:100%;display:block;
+
+* {
+  box-sizing: border-box;
 }
-header::after{
-  content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+
+html {
+  background: var(--ink);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+  background: url("assets/film-grain.png") center / 420px 420px repeat;
+  mix-blend-mode: soft-light;
+  opacity: 0.18;
+}
+
+::selection {
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+a {
+  color: inherit;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+figure {
+  margin: 0;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 4px;
+}
+
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 2000;
+  padding: 10px 14px;
+  background: var(--paper);
+  color: var(--ink);
+  transform: translateY(-160%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+.site-nav {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 7px max(18px, calc((100vw - 1440px) / 2));
+  border-bottom: 1px solid var(--coral);
+  background: rgba(5, 6, 7, 0.96);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--coral);
+  font-family: var(--display);
+  font-size: 17px;
+  font-stretch: 72%;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.brand img {
+  width: 26px;
+  height: 26px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2.5vw, 32px);
+  margin-left: auto;
+}
+
+.nav-links a {
+  color: var(--coral);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.nav-links a:not(.download-link):hover {
+  color: var(--coral);
+}
+
+.download-link,
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--coral);
+  box-shadow: 4px 4px 0 var(--cobalt);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.download-link {
+  min-height: 34px;
+  padding: 7px 14px;
+  box-shadow: 2px 2px 0 var(--cobalt);
+  color: var(--ink);
+}
+
+.nav-links .download-link {
+  color: var(--ink);
+}
+
+.download-link:hover,
+.button:hover {
+  box-shadow: 7px 7px 0 var(--cobalt);
+  transform: translate(-2px, -2px);
+}
+
+.button.secondary {
+  border: 1px solid var(--paper);
+  background: var(--ink);
+  box-shadow: none;
+  color: var(--paper);
+}
+
+.button.secondary:hover {
+  background: var(--paper);
+  color: var(--ink);
+  transform: none;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  padding-top: 52px;
+}
+
+header[id],
+section[id] {
+  scroll-margin-top: 64px;
+}
+
+.hero {
+  position: relative;
+  order: 1;
+  min-height: calc(100svh - 52px);
+  overflow: hidden;
+  padding: 0 18px;
+  background: var(--coral);
+  color: var(--ink);
+}
+
+.hero-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: minmax(650px, calc(100svh - 52px));
+  gap: 0;
+  width: min(100%, 1440px);
+  min-height: calc(100svh - 52px);
+  margin: 0 auto;
+  overflow: hidden;
+  background: var(--coral);
+}
+
+.hero-grid::after {
+  content: "";
+  position: absolute;
+  right: -2%;
+  bottom: 9%;
+  z-index: 5;
+  width: 44%;
+  height: 7%;
   background:
-    linear-gradient(100deg, var(--bg) 8%, color-mix(in srgb, var(--bg) 92%, transparent) 40%, transparent 66%),
-    linear-gradient(to top, var(--bg) 0%, transparent 14%);
+    linear-gradient(
+      to bottom,
+      transparent 0 16%,
+      var(--cobalt) 16% 29%,
+      transparent 29% 45%,
+      var(--ink) 45% 56%,
+      transparent 56% 70%,
+      var(--cobalt) 70% 84%,
+      transparent 84%
+    );
+  opacity: 0.82;
+  translate: 8% 0;
+  clip-path: polygon(0 18%, 100% 0, 96% 100%, 8% 76%);
+  pointer-events: none;
 }
-.hero-inner{
-  position:relative;z-index:2;
-  padding:120px 28px 80px;
-  max-width:1100px;margin:0 auto;width:100%;
+
+.frame {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
 }
-.wordmark{
-  font-family:var(--mono);
-  font-size:clamp(7px,1.55vw,16px);
-  line-height:1.12;
-  color:var(--fg);
-  text-shadow:0 0 24px rgb(var(--rgb-orange) / .25);
-  white-space:pre;
-  user-select:none;
+
+.moon-frame {
+  grid-column: 1 / 8;
+  grid-row: 1;
+  isolation: isolate;
+  min-height: 100%;
+  overflow: visible;
+  background: var(--coral);
 }
-.wordmark b{color:var(--orange);font-weight:inherit}
-.tagline{
-  margin-top:28px;
-  font-size:clamp(12px,1.5vw,15px);
-  font-stretch:var(--w-cond);
-  font-weight:700;
-  letter-spacing:.2em;
-  text-transform:uppercase;
-  color:var(--acid);
+
+.moon-frame::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  z-index: 2;
+  background:
+    linear-gradient(to right, transparent 0 68%, var(--coral) 96%),
+    linear-gradient(to bottom, rgba(255, 87, 77, 0.08), transparent 54%, rgba(33, 109, 255, 0.5));
+  mix-blend-mode: normal;
+  pointer-events: none;
 }
-.hero-sub{
-  margin-top:18px;
-  max-width:560px;
-  color:var(--fg-muted);
-  font-size:14px;
+
+.moon-frame > #hero-moon {
+  width: 118%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 35% 50%;
+  filter: saturate(1.82) contrast(1.42) brightness(1.08);
+  scale: 1.16;
+  transition: scale 1200ms cubic-bezier(0.16, 1, 0.3, 1), translate 220ms ease-out;
 }
-.hero-sub strong{color:var(--fg);font-weight:600}
-.cta-row{margin-top:36px;display:flex;gap:14px;flex-wrap:wrap}
-.btn{
-  display:inline-block;
-  padding:13px 26px;
-  font-family:var(--sans);font-size:12px;font-stretch:var(--w-cond);font-weight:700;letter-spacing:.1em;
-  border:1px solid var(--orange);
-  color:var(--orange);
-  background:transparent;
-  cursor:pointer;
-  transition:all .15s ease;
-  text-transform:uppercase;
+
+.starburst {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  pointer-events: none;
 }
-.btn:hover{background:var(--orange);color:var(--bg);text-decoration:none;box-shadow:4px 4px 0 rgba(0,0,0,.45)}
-.btn.ghost{border-color:var(--border);color:var(--fg-muted)}
-.btn.ghost:hover{border-color:var(--fg);color:var(--fg);background:transparent;box-shadow:none}
-.hero-meta{
-  margin-top:22px;font-size:11px;letter-spacing:.1em;color:var(--fg-muted);
+
+.moon-star {
+  position: absolute;
+  right: -25%;
+  bottom: -17%;
+  z-index: 4;
+  width: clamp(250px, 34vw, 500px);
+  height: clamp(250px, 34vw, 500px);
+  max-width: none;
+  mix-blend-mode: screen;
+  opacity: 0.88;
 }
-.hero-meta span{color:var(--acid)}
-.scroll-hint{
-  position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
-  z-index:2;color:var(--fg-muted);font-size:11px;letter-spacing:.3em;
-  animation:bob 2.4s ease-in-out infinite;
+
+.app-frame {
+  grid-column: 7 / 13;
+  grid-row: 1;
+  z-index: 4;
+  align-self: start;
+  height: min(48vh, 480px);
+  margin: clamp(270px, 30vh, 310px) clamp(18px, 3vw, 42px) 0 0;
+  isolation: isolate;
+  overflow: visible;
+  padding: 0;
+  background: transparent;
 }
-@keyframes bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,8px)}}
-@media (max-width:700px){
-  header::after{
-    background:
-      linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--bg) 78%, transparent) 30%, color-mix(in srgb, var(--bg) 85%, transparent) 100%),
-      linear-gradient(to top, var(--bg) 0%, transparent 14%);
+
+.app-frame::before,
+.app-frame::after {
+  display: none;
+}
+
+.app-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  border: 0;
+  box-shadow:
+    10px 0 0 rgba(33, 109, 255, 0.88),
+    -7px 0 0 rgba(5, 6, 7, 0.82);
+  filter: saturate(1.06) contrast(1.06) brightness(1.08);
+}
+
+.film-label {
+  display: none;
+}
+
+.film-label.edge {
+  top: 50%;
+  right: 14px;
+  writing-mode: vertical-rl;
+  transform: translateY(-50%);
+}
+
+.film-label.footer {
+  right: 44px;
+  bottom: 15px;
+}
+
+.hero-copy {
+  grid-column: 1 / 7;
+  grid-row: 1;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr auto;
+  align-content: space-between;
+  min-height: 100%;
+  padding: clamp(32px, 5vw, 76px) 0 clamp(34px, 5vw, 70px) clamp(10px, 1.4vw, 22px);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.hero-heading-wrap {
+  min-width: 0;
+}
+
+.kicker {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  max-width: 5.7ch;
+  margin-bottom: 0;
+  font-family: var(--display);
+  color: var(--ink);
+  font-size: clamp(4rem, 6.4vw, 6rem);
+  font-stretch: 64%;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.8;
+  text-transform: uppercase;
+  word-spacing: 0.08em;
+}
+
+.hero-title-line {
+  display: block;
+}
+
+.hero-offer {
+  align-self: end;
+  min-width: 0;
+  max-width: 38ch;
+  padding-left: clamp(4px, 3.4vw, 52px);
+}
+
+.hero-sub {
+  max-width: 42ch;
+  margin-bottom: 24px;
+  padding: 12px 14px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: clamp(16px, 1.3vw, 18px);
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.hero-sub strong {
+  color: var(--paper);
+  font-weight: 820;
+}
+
+.hero .button {
+  background: var(--ink);
+  box-shadow: 5px 5px 0 var(--cobalt);
+  color: var(--coral);
+}
+
+.hero .button:hover {
+  box-shadow: 8px 8px 0 var(--cobalt);
+}
+
+.hero .button.secondary {
+  border-color: var(--ink);
+  background: var(--paper);
+  box-shadow: none;
+  color: var(--ink);
+}
+
+.hero .button.secondary:hover {
+  background: var(--ink);
+  color: var(--coral);
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hero-principle {
+  grid-column: 10 / 13;
+  grid-row: 1;
+  z-index: 7;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: clamp(28px, 4vw, 58px) clamp(10px, 1.5vw, 22px) 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.hero-principle .starburst {
+  display: none;
+}
+
+.hero-principle strong {
+  display: block;
+  max-width: 9ch;
+  font-family: var(--display);
+  font-size: clamp(2rem, 3.4vw, 3.2rem);
+  font-stretch: 64%;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  text-transform: uppercase;
+  word-spacing: 0.08em;
+}
+
+.hero-principle small {
+  margin-top: 14px;
+  font-family: var(--mono);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.section {
+  position: relative;
+  padding: clamp(64px, 7vw, 96px) max(18px, calc((100vw - 1440px) / 2));
+}
+
+.section-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: clamp(24px, 4vw, 64px);
+  align-items: end;
+  margin-bottom: clamp(36px, 5vw, 64px);
+}
+
+.section h2 {
+  max-width: 12ch;
+  margin-bottom: 0;
+  font-family: var(--display);
+  font-size: clamp(3rem, 7vw, 6rem);
+  font-stretch: 76%;
+  letter-spacing: -0.04em;
+  line-height: 0.88;
+  text-transform: uppercase;
+  word-spacing: 0.08em;
+}
+
+.section-intro {
+  max-width: 62ch;
+  margin-bottom: 0;
+  font-size: clamp(16px, 1.4vw, 20px);
+}
+
+.gap-section {
+  order: 3;
+  overflow: hidden;
+  padding-top: clamp(72px, 9vw, 132px);
+  padding-bottom: clamp(72px, 9vw, 132px);
+  background: var(--cobalt);
+  color: var(--ink);
+}
+
+.gap-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -12%;
+  width: 62%;
+  height: 18px;
+  background:
+    linear-gradient(
+      to bottom,
+      var(--ink) 0 18%,
+      transparent 18% 32%,
+      var(--coral) 32% 58%,
+      transparent 58% 72%,
+      var(--ink) 72% 100%
+    );
+  opacity: 0.82;
+  clip-path: polygon(0 42%, 100% 0, 96% 100%, 9% 70%);
+}
+
+.gap-star {
+  position: absolute;
+  right: -7%;
+  bottom: -20%;
+  z-index: 1;
+  width: clamp(320px, 42vw, 640px);
+  height: clamp(320px, 42vw, 640px);
+  max-width: none;
+  mix-blend-mode: screen;
+  opacity: 0.88;
+  filter: saturate(1.34) contrast(1.18);
+}
+
+.gap-section .section-head {
+  position: relative;
+  z-index: 2;
+  grid-template-columns: minmax(0, 0.78fr) minmax(360px, 1.22fr);
+  margin-bottom: 4px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.gap-section h2 {
+  max-width: 9ch;
+  font-size: clamp(3.8rem, 6vw, 6rem);
+  font-stretch: 64%;
+}
+
+.gap-section .section-intro strong {
+  font-weight: 850;
+}
+
+.gap-graphic {
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.gap-graphic svg {
+  width: 100%;
+  height: clamp(300px, 31vw, 430px);
+  min-height: 0;
+}
+
+.gap-fill {
+  opacity: 1;
+}
+
+.gap-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 4;
+  stroke-dasharray: 1500;
+  stroke-dashoffset: 1500;
+}
+
+.gap-line.generated {
+  stroke: var(--ink);
+}
+
+.gap-line.reviewed {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.gap-graphic.in .gap-line.generated {
+  animation: draw-line 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.gap-graphic.in .gap-line.reviewed {
+  animation: draw-line 1.2s 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes draw-line {
+  to {
+    stroke-dashoffset: 0;
   }
-  nav{padding:12px 16px}
-  nav .links{gap:12px;font-size:11px}
 }
 
-/* ---------- ticker ---------- */
-.ticker{
-  border-top:1px solid var(--border);
-  border-bottom:1px solid var(--border);
-  background:var(--bg-raised);
-  overflow:hidden;white-space:nowrap;
-  padding:10px 0;
-  font-size:11px;font-stretch:var(--w-cond);font-weight:700;letter-spacing:.14em;color:var(--fg-muted);
-  text-transform:uppercase;user-select:none;
-}
-.ticker-track{display:inline-block;animation:tick 60s linear infinite}
-.ticker:hover .ticker-track{animation-play-state:paused}
-@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-.ticker em{font-style:normal;color:var(--orange);padding:0 18px}
-.ticker i{font-style:normal;color:var(--acid)}
-
-/* ---------- sections ---------- */
-section{padding:110px 28px;max-width:1100px;margin:0 auto}
-.sec-label{
-  font-size:11px;font-stretch:var(--w-cond);font-weight:700;letter-spacing:.16em;color:var(--orange);
-  text-transform:uppercase;
-  margin-bottom:14px;
-}
-.sec-label::before{content:"// "}
-h2{
-  font-size:clamp(24px,3.4vw,38px);
-  font-weight:800;font-stretch:var(--w-wide);letter-spacing:.02em;line-height:1.14;
-  margin-bottom:22px;text-transform:uppercase;
-}
-h2 .a{color:var(--acid)}
-.prose{max-width:68ch;color:var(--fg-muted);font-size:15px}
-.prose strong{color:var(--fg);font-weight:600}
-.prose em{color:var(--acid);font-style:normal}
-.prose+.prose{margin-top:16px}
-
-/* corner-ticked cards */
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:48px}
-.card{
-  position:relative;
-  border:1px solid var(--border);
-  background:var(--bg-raised);
-  padding:26px 24px;
-  transition:border-color .2s ease, transform .2s ease;
-}
-.card::before,.card::after{
-  content:"+";position:absolute;color:var(--fg-muted);font-size:13px;line-height:1;
-  transition:color .2s ease;
-}
-.card::before{top:-7px;left:-5px}
-.card::after{bottom:-7px;right:-5px}
-.card:hover{border-color:var(--acid);transform:translateY(-3px)}
-.card:hover::before,.card:hover::after{color:var(--acid)}
-.card h3{font-size:13px;font-weight:800;font-stretch:var(--w-cond);letter-spacing:.1em;margin-bottom:12px;color:var(--fg);text-transform:uppercase}
-.card h3 .n{color:var(--orange);margin-right:8px}
-.card p{font-size:13px;color:var(--fg-muted)}
-.card p strong{color:var(--fg)}
-
-/* ---------- thesis: loud hot take + review-gap graphic ---------- */
-#bottleneck{padding-top:96px}
-.thesis-hed{
-  font-size:clamp(34px,6.4vw,82px);
-  line-height:.94;letter-spacing:-.03em;text-transform:uppercase;font-weight:800;font-stretch:var(--w-wide);
-  color:var(--fg);margin:10px 0 0;max-width:14ch;
-}
-.thesis-hed .a{color:var(--acid)}
-.thesis-hed .o{color:var(--orange)}
-.thesis-sub{margin-top:24px;max-width:560px;color:var(--fg-muted);font-size:clamp(14px,1.7vw,17px)}
-.thesis-sub strong{color:var(--fg);font-weight:600}
-.thesis-kicker{
-  margin-top:30px;font-size:clamp(15px,2.1vw,21px);color:var(--fg);
-  letter-spacing:.02em;max-width:680px;
-}
-.thesis-kicker .o{color:var(--orange);font-weight:700}
-
-.gap-graphic{
-  margin:54px 0 6px;border:1px solid var(--border);background:var(--bg-raised);
-  position:relative;overflow:hidden;
-}
-.gap-graphic svg{display:block;width:100%;height:auto}
-.gap-line{fill:none;stroke-width:3.5;stroke-linecap:round;stroke-dasharray:1700;stroke-dashoffset:1700}
-.gap-line.gen{stroke:var(--orange);filter:drop-shadow(0 0 10px rgb(var(--rgb-orange) / .45))}
-.gap-line.rev{stroke:var(--fg);opacity:.85}
-.gap-fill{opacity:0}
-.gap-graphic.in .gap-line.gen{animation:gapdraw 1.7s cubic-bezier(.4,0,.2,1) forwards}
-.gap-graphic.in .gap-line.rev{animation:gapdraw 1.4s cubic-bezier(.4,0,.2,1) .25s forwards}
-.gap-graphic.in .gap-fill{animation:gapfade 1s ease 1s forwards}
-.gap-graphic.in .gap-head{animation:gappulse 1.6s ease-in-out 1.6s infinite}
-.gap-label{font-family:var(--mono);text-transform:uppercase}
-.gap-head{opacity:0}
-@keyframes gapdraw{to{stroke-dashoffset:0}}
-@keyframes gapfade{from{opacity:0}to{opacity:1}}
-@keyframes gappulse{0%,100%{opacity:1}50%{opacity:.35}}
-.card a{color:var(--fg)}
-.card a:hover{color:var(--acid)}
-.card .cmd{
-  display:block;margin:12px 0;padding:8px 10px;
-  background:var(--bg);border:1px solid var(--border);
-  font-family:var(--mono);font-size:12px;color:var(--acid);overflow-x:auto;white-space:nowrap;
-}
-.card .cmd::before{content:"$ ";color:var(--fg-muted)}
-.harness-note{margin-top:40px;font-size:13px;color:var(--fg-muted);max-width:680px}
-.harness-note a{color:var(--acid)}
-
-/* harnesses — contrasting band, centered content */
-#harnesses{max-width:none;background:var(--bg-raised);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-.harness-inner{max-width:900px;margin:0 auto;text-align:center}
-.harness-inner .prose,.harness-inner .harness-note{margin-left:auto;margin-right:auto}
-
-/* harness "app launcher" — icon tiles with a label, like desktop shortcuts */
-.apps{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:52px auto 0;max-width:720px;justify-items:center}
-@media(max-width:640px){.apps{grid-template-columns:repeat(2,1fr);gap:28px}}
-.app{display:flex;flex-direction:column;align-items:center;gap:14px;text-decoration:none}
-.app:hover{text-decoration:none}
-.app-tile{
-  width:96px;height:96px;display:flex;align-items:center;justify-content:center;
-  border:1px solid var(--border);border-radius:22px;
-  background:radial-gradient(130% 130% at 30% 18%, var(--bg-overlay), var(--bg));
-  box-shadow:0 12px 30px rgba(0,0,0,.5), inset 0 1px 0 rgb(var(--rgb-ink) / .05);
-  transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
-}
-.app:hover .app-tile{
-  transform:translateY(-5px);
-  border-color:var(--orange);
-  box-shadow:0 18px 44px rgb(var(--rgb-orange) / .22), inset 0 1px 0 rgb(var(--rgb-ink) / .08);
-}
-.app-tile svg{width:42px;height:42px;fill:var(--fg);transition:fill .18s ease}
-.app:hover .app-tile svg{fill:var(--orange)}
-.app-name{font-size:11px;font-stretch:var(--w-cond);font-weight:700;letter-spacing:.12em;color:var(--fg);text-transform:uppercase;text-align:center}
-.app:hover .app-name{color:var(--acid)}
-
-/* ---------- feature rows ---------- */
-.feature{
-  display:grid;grid-template-columns:5fr 7fr;gap:48px;align-items:center;
-  margin-top:90px;
-}
-.feature.flip{grid-template-columns:7fr 5fr}
-.feature.flip .ftext{order:2}
-.feature.flip .fshot{order:1}
-.ftext h3{
-  font-size:19px;font-weight:800;font-stretch:var(--w-wide);letter-spacing:.02em;
-  margin-bottom:14px;text-transform:uppercase;
-}
-.ftext h3::before{content:attr(data-n) " ";color:var(--orange);font-size:13px;vertical-align:middle;letter-spacing:.2em}
-.ftext p{color:var(--fg-muted);font-size:14px}
-.ftext p strong{color:var(--fg)}
-.ftext p em{color:var(--acid);font-style:normal}
-.fshot{
-  border:1px solid var(--border);
-  box-shadow:10px 10px 0 rgba(0,0,0,.45);
-  position:relative;
-}
-.fshot img{cursor:zoom-in;transition:filter .15s ease}
-.fshot img:hover{filter:brightness(1.08)}
-.lightbox{
-  position:fixed;inset:0;z-index:200;
-  display:flex;align-items:center;justify-content:center;
-  padding:3vmin;cursor:zoom-out;
-  background:color-mix(in srgb, var(--bg) 94%, transparent);
-  backdrop-filter:blur(6px);
-  opacity:0;pointer-events:none;transition:opacity .18s ease;
-}
-.lightbox.open{opacity:1;pointer-events:auto}
-.lightbox img{
-  max-width:100%;max-height:100%;object-fit:contain;
-  border:1px solid var(--border);box-shadow:12px 12px 0 rgba(0,0,0,.5);
-}
-.lightbox .lb-cap{
-  position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
-  font-size:11px;letter-spacing:.22em;color:var(--fg-muted);text-transform:uppercase;
-}
-.fshot::before{
-  content:attr(data-cap);
-  position:absolute;top:-26px;left:0;
-  font-size:10px;letter-spacing:.22em;color:var(--fg-muted);text-transform:uppercase;
-}
-@media (max-width:840px){
-  .feature,.feature.flip{grid-template-columns:1fr;gap:28px}
-  .feature.flip .ftext{order:1}
-  .feature.flip .fshot{order:2}
+.thesis-kicker {
+  position: relative;
+  z-index: 2;
+  max-width: 680px;
+  margin: 28px 0 0 auto;
+  font-size: clamp(17px, 1.8vw, 24px);
+  font-weight: 720;
+  line-height: 1.25;
 }
 
-/* ---------- divider canvases ---------- */
-.divider{display:block;width:100%;height:140px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.thesis-kicker strong {
+  font-weight: 900;
+}
 
-/* ---------- terminal ---------- */
-.term-wrap{max-width:1100px;margin:0 auto}
-.term{
-  border:1px solid var(--border);
-  background:var(--bg-raised);
-  box-shadow:10px 10px 0 rgba(0,0,0,.45);
+.workflow {
+  order: 2;
+  padding-top: 24px;
+  padding-bottom: 30px;
+  border-top: 0;
+  border-bottom: 0;
+  background: var(--ink);
+  color: var(--paper);
 }
-.term-bar{
-  display:flex;align-items:center;gap:8px;
-  padding:10px 14px;border-bottom:1px solid var(--border);
-  font-size:10px;font-stretch:var(--w-cond);font-weight:700;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--fg-muted);
-}
-.term-bar .dot{width:9px;height:9px;border-radius:50%;background:var(--border)}
-.term-bar .dot.o{background:var(--orange)}
-.term-bar .dot.a{background:var(--acid)}
-.term-body{
-  padding:20px 22px;min-height:340px;
-  font-family:var(--mono);
-  font-size:13px;line-height:1.7;
-  white-space:pre-wrap;word-break:break-word;
-}
-.term-body .ev{color:var(--orange)}
-.term-body .ok{color:var(--acid)}
-.term-body .dim{color:var(--fg-muted)}
-.term-body .hl{color:var(--fg);font-weight:600}
-.cursor{
-  display:inline-block;width:8px;height:15px;background:var(--acid);
-  vertical-align:text-bottom;animation:blink 1s steps(1) infinite;
-}
-@keyframes blink{50%{opacity:0}}
 
-/* ---------- under the hood ---------- */
-.hood{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);margin-top:48px}
-.hood>div{background:var(--bg);padding:22px}
-.hood h4{font-size:10px;font-stretch:var(--w-cond);font-weight:700;letter-spacing:.16em;color:var(--orange);margin-bottom:10px;text-transform:uppercase}
-.hood p{font-size:13px;color:var(--fg-muted)}
-.hood p code{color:var(--acid);font-family:var(--mono);font-size:12px}
+.workflow .section-head {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 0 0 12px;
+  border-top: 0;
+  border-bottom: 1px solid var(--coral);
+}
 
-.callout{
-  margin-top:48px;border:1px solid var(--border);border-left:3px solid var(--orange);
-  background:var(--bg-raised);padding:22px 26px;
-  font-size:13px;color:var(--fg-muted);max-width:820px;
+.workflow .section-head::after {
+  content: "Six frames. One clearer merge. →";
+  justify-self: end;
+  color: var(--coral);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.callout strong{color:var(--fg)}
-.callout a{color:var(--acid)}
 
-/* ---------- footer ---------- */
-.outro{
-  position:relative;text-align:center;padding:140px 28px;overflow:hidden;
+.workflow .section-head h2 {
+  max-width: none;
+  color: var(--coral);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-stretch: 100%;
+  letter-spacing: 0.08em;
+  line-height: 1;
 }
-#outro-canvas{position:absolute;inset:0;width:100%;height:100%}
-.outro-inner{
-  position:relative;z-index:2;
-  display:inline-block;
-  background:color-mix(in srgb, var(--bg) 90%, transparent);
-  backdrop-filter:blur(5px);
-  border:1px solid var(--border);
-  padding:54px 72px;
-}
-.outro-inner::before,.outro-inner::after{
-  content:"+";position:absolute;color:var(--fg-muted);font-size:13px;line-height:1;
-}
-.outro-inner::before{top:-7px;left:-5px}
-.outro-inner::after{bottom:-7px;right:-5px}
-.outro h2{margin-bottom:14px}
-.outro p{color:var(--fg-muted);font-size:14px;margin-bottom:34px}
-@media (max-width:700px){.outro-inner{padding:38px 26px}}
-footer{
-  border-top:1px solid var(--border);
-  padding:26px 28px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;
-  font-size:12px;color:var(--fg-muted);max-width:none;
-}
-footer .right{margin-left:auto;display:flex;gap:20px}
 
-/* ---------- reveal ---------- */
-.rv{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s ease}
-.rv.in{opacity:1;transform:none}
-@media (prefers-reduced-motion: reduce){
-  .rv{opacity:1;transform:none;transition:none}
-  .ticker-track{animation:none}
-  .scroll-hint{animation:none}
-  .cursor{animation:none}
-  .gap-line{stroke-dashoffset:0 !important;animation:none !important}
-  .gap-fill,.gap-head{opacity:1 !important;animation:none !important}
+.workflow .section-intro {
+  display: none;
+}
+
+.review-reel {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  padding-bottom: 24px;
+}
+
+.review-reel::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 7px;
+  left: 0;
+  height: 1px;
+  background: var(--coral);
+  box-shadow: none;
+}
+
+.reel-item {
+  position: relative;
+  display: grid;
+  grid-template-rows: 96px auto;
+  min-width: 0;
+  grid-column: span 1;
+  padding: 0 clamp(10px, 1.35vw, 20px);
+  border-right: 1px solid rgba(255, 87, 77, 0.46);
+}
+
+.reel-item:first-child {
+  padding-left: 0;
+}
+
+.reel-item:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.reel-item::after {
+  content: "";
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  z-index: 1;
+  width: 11px;
+  height: 11px;
+  border: 3px solid var(--coral);
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
+.proof {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  min-height: 96px;
+  padding: 0;
+  border: 0;
+  background: var(--ink);
+  color: inherit;
+  cursor: zoom-in;
+  font: inherit;
+  text-align: left;
+}
+
+.proof img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  filter: saturate(0.68) contrast(1.16) brightness(0.78);
+  transition: filter 240ms ease, scale 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reel-item:hover .proof img {
+  filter: saturate(1.12) contrast(1.08) brightness(0.98);
+  scale: 1.06;
+}
+
+.reel-caption {
+  display: block;
+  padding: 12px 0 0;
+}
+
+.frame-number {
+  color: var(--coral);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.reel-copy h3 {
+  margin: 4px 0 7px;
+  font-family: var(--display);
+  color: var(--paper);
+  font-size: clamp(15px, 1.35vw, 20px);
+  font-stretch: 70%;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-transform: uppercase;
+  word-spacing: 0.08em;
+}
+
+.reel-copy p {
+  max-width: 52ch;
+  margin-bottom: 0;
+  color: var(--paper-dim);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.reel-copy em {
+  color: var(--electric);
+  font-style: normal;
+  font-weight: 750;
+}
+
+.reel-copy strong {
+  color: var(--paper);
+  font-weight: 850;
+}
+
+.agents {
+  order: 5;
+  overflow: hidden;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  background: var(--coral);
+  color: var(--ink);
+}
+
+.agents .section-head {
+  margin-bottom: 36px;
+}
+
+.agents a {
+  color: var(--ink);
+}
+
+.agent-list {
+  border-top: 1px solid var(--ink);
+}
+
+.agent-link {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  gap: 24px;
+  align-items: center;
+  padding: 18px 0 16px;
+  border-bottom: 1px solid var(--ink);
+  text-decoration: none;
+}
+
+.agent-index,
+.agent-command {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.agent-link strong {
+  font-family: var(--display);
+  font-size: clamp(2.3rem, 6vw, 5.5rem);
+  font-stretch: 76%;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  text-transform: uppercase;
+  word-spacing: 0.08em;
+}
+
+.agent-command {
+  max-width: 34ch;
+  text-align: right;
+}
+
+.agent-link strong::after {
+  content: " ↗";
+  display: inline-block;
+  color: var(--cobalt);
+  transition: translate 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.agent-link:hover strong::after {
+  translate: 8px -4px;
+}
+
+.harness-note {
+  max-width: 74ch;
+  margin: 36px 0 0 auto;
+  font-size: 16px;
+}
+
+.observed {
+  order: 4;
+  background: var(--ink);
+}
+
+.observed .section-head {
+  margin-bottom: 48px;
+}
+
+.observed .section-head h2 {
+  color: var(--coral);
+  font-stretch: 64%;
+}
+
+.terminal-shell {
+  position: relative;
+  padding: 10px;
+  background: var(--cobalt);
+  box-shadow: 10px 10px 0 var(--coral), 18px 20px 48px rgba(0, 0, 0, 0.46);
+}
+
+.terminal {
+  overflow: hidden;
+  border: 1px solid var(--paper);
+  background: #08090a;
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(243, 235, 221, 0.2);
+  color: var(--paper-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.terminal-body {
+  min-height: 430px;
+  padding: clamp(18px, 3vw, 38px);
+  overflow: auto;
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.25vw, 15px);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.terminal-body .dim {
+  color: var(--paper-dim);
+}
+
+.terminal-body .hl {
+  color: var(--coral);
+}
+
+.terminal-body .ok {
+  color: var(--yellow);
+}
+
+.terminal-body .ev {
+  color: var(--electric);
+  font-weight: 800;
+}
+
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1em;
+  margin-left: 2px;
+  background: var(--coral);
+  vertical-align: text-bottom;
+  animation: blink 900ms steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.under-hood {
+  order: 6;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.spec-ledger {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(40px, 8vw, 120px);
+  border-top: 1px solid var(--ink);
+}
+
+.spec {
+  min-height: 0;
+  padding: clamp(28px, 4vw, 48px) 0;
+  border-bottom: 1px solid var(--ink);
+}
+
+.spec h3 {
+  margin-bottom: 18px;
+  color: #d83b32;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spec p {
+  max-width: 46ch;
+  margin-bottom: 0;
+  color: #2f3132;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.spec code,
+.callout code {
+  padding: 0.12em 0.3em;
+  background: rgba(33, 109, 255, 0.12);
+  color: #0042c2;
+  font-family: var(--mono);
+  font-size: 0.88em;
+}
+
+.spec a,
+.callout a {
+  color: #0042c2;
+  font-weight: 700;
+}
+
+.callout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  gap: clamp(26px, 6vw, 100px);
+  margin-top: clamp(60px, 10vw, 120px);
+  padding-top: 32px;
+  border-top: 8px solid var(--coral);
+  font-size: clamp(18px, 2.2vw, 28px);
+}
+
+.callout strong {
+  font-family: var(--display);
+  font-size: clamp(2.2rem, 4.5vw, 4.8rem);
+  font-stretch: 76%;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  text-transform: uppercase;
+  word-spacing: 0.08em;
+}
+
+.outro {
+  order: 7;
+  position: relative;
+  display: grid;
+  min-height: 80svh;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.outro-moon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 42% center;
+  filter: saturate(1.42) contrast(1.18);
+  opacity: 0.72;
+}
+
+.outro::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, var(--ink) 0 28%, rgba(5, 6, 7, 0.18) 72%),
+    linear-gradient(to top, var(--ink), transparent 40%);
+}
+
+.outro-inner {
+  position: relative;
+  z-index: 2;
+  align-self: end;
+  width: var(--page);
+  margin: 0 auto;
+  padding: 80px 0;
+}
+
+.outro-star {
+  width: clamp(58px, 7vw, 96px);
+  height: clamp(58px, 7vw, 96px);
+  margin-bottom: 32px;
+}
+
+.outro h2 {
+  max-width: 8ch;
+  margin-bottom: 20px;
+  font-family: var(--display);
+  font-size: clamp(4rem, 10vw, 6rem);
+  font-stretch: 75%;
+  letter-spacing: -0.04em;
+  line-height: 0.84;
+  text-transform: uppercase;
+  word-spacing: 0.08em;
+}
+
+.outro p {
+  margin-bottom: 28px;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.site-footer {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  padding: 26px max(16px, calc((100vw - 1440px) / 2));
+  border-top: 1px solid var(--line-light);
+  background: var(--ink);
+  color: var(--paper-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 24px;
+  margin-left: auto;
+}
+
+.footer-links a:hover {
+  color: var(--coral);
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  border: 0;
+  background: rgba(5, 6, 7, 0.94);
+  cursor: zoom-out;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.lightbox.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lightbox img {
+  max-width: 100%;
+  max-height: calc(100svh - 80px);
+  border: 1px solid var(--coral);
+  box-shadow: 12px 12px 0 var(--cobalt);
+}
+
+.lightbox-caption {
+  position: absolute;
+  right: 24px;
+  bottom: 16px;
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 960px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(560px, 76svh) minmax(380px, 52svh);
+  }
+
+  .moon-frame,
+  .hero-copy,
+  .hero-principle {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .moon-frame {
+    width: 78%;
+  }
+
+  .hero-copy {
+    width: 68%;
+  }
+
+  .hero-principle {
+    width: 34%;
+    justify-self: end;
+    padding-left: 18px;
+    background: var(--coral);
+  }
+
+  .app-frame {
+    grid-column: 1;
+    grid-row: 2;
+    height: calc(100% - 48px);
+    margin: 24px;
+    background: var(--ink);
+  }
+
+  .hero-copy {
+    grid-template-columns: 1fr;
+  }
+
+  .section-head {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .section h2 {
+    max-width: 10ch;
+  }
+
+  .review-reel {
+    grid-template-columns: repeat(6, minmax(220px, 1fr));
+    padding-bottom: 54px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+  }
+
+  .reel-item {
+    grid-column: span 1;
+    scroll-snap-align: start;
+  }
+
+  .spec-ledger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .callout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  :root {
+    --page: min(100% - 32px, 1440px);
+  }
+
+  .site-nav {
+    min-height: 58px;
+  }
+
+  .brand {
+    font-size: 15px;
+  }
+
+  .nav-links a:not(.download-link) {
+    display: none;
+  }
+
+  main {
+    padding-top: 58px;
+  }
+
+  header[id],
+  section[id] {
+    scroll-margin-top: 70px;
+  }
+
+  .hero {
+    padding: 0;
+  }
+
+  .hero-grid {
+    min-height: 0;
+    grid-template-rows: minmax(620px, 78svh) auto minmax(300px, 50svh);
+    gap: 0;
+  }
+
+  .moon-frame {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+  }
+
+  .hero-copy {
+    grid-column: 1;
+    grid-row: 1;
+    width: 76%;
+  }
+
+  .app-frame {
+    grid-column: 1;
+    grid-row: 3;
+    height: calc(100% - 32px);
+    margin: 16px;
+  }
+
+  .hero-principle {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    min-height: 0;
+    padding: 22px 16px 24px;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+  }
+
+  .hero-copy {
+    min-height: 0;
+    padding: 30px 16px 32px;
+  }
+
+  .hero-offer {
+    width: min(82vw, 390px);
+    padding-left: 0;
+  }
+
+  h1 {
+    font-size: clamp(3.5rem, 17vw, 5.5rem);
+  }
+
+  .hero-principle strong {
+    max-width: 12ch;
+    font-size: clamp(2rem, 10vw, 3rem);
+  }
+
+  .hero-principle small {
+    margin-top: 10px;
+  }
+
+  .moon-star {
+    right: -18%;
+    bottom: -12%;
+    width: 320px;
+    height: 320px;
+  }
+
+  .section {
+    padding: 76px 16px;
+  }
+
+  .workflow {
+    padding-top: 32px;
+    padding-bottom: 52px;
+  }
+
+  .gap-section {
+    padding-top: 64px;
+    padding-bottom: 64px;
+  }
+
+  .gap-section .section-head {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .section h2 {
+    font-size: clamp(2.8rem, 16vw, 4.8rem);
+  }
+
+  .gap-graphic svg {
+    width: 180%;
+    max-width: none;
+    translate: -38% 0;
+  }
+
+  .review-reel {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 82vw;
+    grid-template-columns: none;
+    gap: 14px;
+    margin-right: -16px;
+    padding-right: 16px;
+    scrollbar-width: none;
+  }
+
+  .review-reel::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reel-item {
+    margin-bottom: 0;
+  }
+
+  .proof {
+    min-height: 118px;
+  }
+
+  .reel-item {
+    grid-template-rows: 118px auto;
+  }
+
+  .reel-caption {
+    display: block;
+  }
+
+  .workflow .section-head::after {
+    content: "Swipe the reel →";
+  }
+
+  .film-label.footer {
+    right: 38px;
+  }
+
+  .gap-star {
+    right: -42%;
+    bottom: -8%;
+    width: 440px;
+    height: 440px;
+    opacity: 0.72;
+  }
+
+  .agent-link {
+    grid-template-columns: 44px 1fr;
+  }
+
+  .agent-command {
+    display: none;
+  }
+
+  .terminal-shell {
+    padding: 7px;
+    box-shadow: 7px 7px 0 var(--coral);
+  }
+
+  .terminal-body {
+    min-height: 400px;
+    padding: 16px;
+  }
+
+  .spec-ledger {
+    grid-template-columns: 1fr;
+  }
+
+  .spec {
+    min-height: 0;
+  }
+
+  .outro {
+    min-height: 70svh;
+  }
+
+  .outro::after {
+    background:
+      linear-gradient(to top, var(--ink) 0 24%, rgba(5, 6, 7, 0.12) 74%),
+      linear-gradient(to right, rgba(5, 6, 7, 0.86), transparent);
+  }
+
+  .outro h2 {
+    font-size: clamp(3.7rem, 18vw, 5rem);
+  }
+
+  .site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .footer-links {
+    margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .gap-line {
+    stroke-dashoffset: 0;
+  }
 }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
-<nav>
-  <img class="mark" src="assets/charon-logo.png" alt="Charon" aria-hidden="true"/>
-  <span class="name">CHARON</span>
-  <div class="links">
-    <a href="https://github.com/mmmeff/charon">GITHUB</a>
-    <a class="dl" href="https://github.com/mmmeff/charon/releases/latest">DOWNLOAD ↓</a>
+<nav class="site-nav" aria-label="Primary navigation">
+  <a class="brand" href="#top" aria-label="Charon home">
+    <img src="assets/charon-logo.png" alt="" aria-hidden="true"/>
+    <span>CHARON</span>
+  </a>
+  <div class="nav-links">
+    <a href="#bottleneck">Why Charon</a>
+    <a href="#workflow">Workflow</a>
+    <a href="https://github.com/mmmeff/charon">GitHub</a>
+    <a class="download-link" href="https://github.com/mmmeff/charon/releases/latest">Download ↓</a>
   </div>
 </nav>
 
-<header>
-  <canvas id="hero-canvas" aria-hidden="true"></canvas>
-  <div class="hero-inner">
-    <pre class="wordmark" aria-label="CHARON"> ██████╗██╗  ██╗ █████╗ ██████╗  ██████╗ ███╗   ██╗
-██╔════╝██║  ██║██╔══██╗██╔══██╗██╔═══██╗████╗  ██║
-██║     ███████║███████║██████╔╝██║   ██║██╔██╗ ██║
-██║     ██╔══██║██╔══██║██╔══██╗██║   ██║██║╚██╗██║
-╚██████╗██║  ██║██║  ██║██║  ██║╚██████╔╝██║ ╚████║
- ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝</pre>
-    <div class="tagline">The Review-First IDE</div>
-    <p class="hero-sub">Review <strong>diffs, CI, comments, context, and agent output</strong>
-in one place. Edit proposals. <strong>Approve what lands.</strong></p>
-    <div class="cta-row">
-      <a class="btn" href="https://github.com/mmmeff/charon/releases/latest">Download for macOS</a>
-      <a class="btn ghost" href="https://github.com/mmmeff/charon">View on GitHub</a>
-    </div>
-  </div>
-  <div class="scroll-hint">▼ SCROLL</div>
-</header>
+<main id="main">
+  <header class="hero" id="top" aria-labelledby="hero-title">
+    <div class="hero-grid">
+      <figure class="frame moon-frame">
+        <img id="hero-moon" src="assets/charon-contact-moon.jpg" alt="A coral and cobalt halftone portrait of Charon, Pluto's largest moon"/>
+        <img class="starburst moon-star" src="assets/starburst-electric.png" alt="" aria-hidden="true"/>
+      </figure>
 
-<div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
+      <figure class="frame app-frame">
+        <img src="assets/review.png" alt="Charon review workspace with a pull request diff, discussion, checks, and pending review controls"/>
+        <span class="film-label edge" aria-hidden="true">23A · 400TX</span>
+        <span class="film-label footer" aria-hidden="true">Charon contact sheet 003</span>
+        <figcaption class="visually-hidden"></figcaption>
+      </figure>
 
-<section id="bottleneck">
-  <h2 class="thesis-hed rv">AI WRITES CODE FASTER THAN ANYONE CAN <span class="o">READ</span> IT.</h2>
-  <p class="thesis-sub rv">Generation went vertical. Human review didn't. Everything in the gap ships
-  <strong>unread</strong>. Bugs, slop, and "looks fine to me."</p>
-
-  <div class="gap-graphic rv" role="img" aria-label="Chart: AI code generation rising exponentially while human review stays flat, with a widening unreviewed gap between them.">
-    <svg viewBox="0 0 1000 460" preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <pattern id="gaphatch" width="14" height="14" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-          <line x1="0" y1="0" x2="0" y2="14" stroke="#ff6f45" stroke-width="1.4" opacity="0.18"/>
-        </pattern>
-        <linearGradient id="gapgrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#ff6f45" stop-opacity="0.22"/>
-          <stop offset="1" stop-color="#ff6f45" stop-opacity="0.02"/>
-        </linearGradient>
-      </defs>
-
-      <!-- grid -->
-      <g stroke="#2f3733" stroke-width="1">
-        <line x1="64" y1="60"  x2="952" y2="60"/>
-        <line x1="64" y1="150" x2="952" y2="150"/>
-        <line x1="64" y1="240" x2="952" y2="240"/>
-        <line x1="64" y1="330" x2="952" y2="330"/>
-      </g>
-      <line x1="64" y1="400" x2="952" y2="400" stroke="#3d4741" stroke-width="1.5"/>
-
-      <!-- the gap: generated curve forward, reviewed curve back -->
-      <path class="gap-fill" fill="url(#gapgrad)"
-        d="M64 392 C 360 388 560 350 700 262 C 822 186 905 96 940 52
-           L 940 366 C 640 380 360 390 64 392 Z"/>
-      <path class="gap-fill" fill="url(#gaphatch)"
-        d="M64 392 C 360 388 560 350 700 262 C 822 186 905 96 940 52
-           L 940 366 C 640 380 360 390 64 392 Z"/>
-
-      <!-- reviewed (flat) -->
-      <path class="gap-line rev" d="M64 392 C 360 390 640 380 940 366"/>
-      <!-- generated (exponential) -->
-      <path class="gap-line gen" d="M64 392 C 360 388 560 350 700 262 C 822 186 905 96 940 52"/>
-      <circle class="gap-head" cx="940" cy="52" r="7" fill="#ff6f45"/>
-
-      <!-- labels -->
-      <text class="gap-label" x="708" y="120" fill="#ff6f45" font-size="22" font-weight="700" letter-spacing="3">GENERATED ↑</text>
-      <text class="gap-label" x="690" y="356" fill="#849889" font-size="18" letter-spacing="3">REVIEWED →</text>
-      <text class="gap-label" x="150" y="232" fill="#cbf24f" font-size="40" font-weight="800" letter-spacing="6">THE&#160;GAP</text>
-      <text class="gap-label" x="152" y="262" fill="#849889" font-size="15" letter-spacing="2">everything no one read</text>
-      <text class="gap-label" x="72"  y="430" fill="#849889" font-size="13" letter-spacing="3">AI SHOWS UP</text>
-      <text class="gap-label" x="852" y="430" fill="#849889" font-size="13" letter-spacing="3">TODAY</text>
-    </svg>
-  </div>
-
-  <p class="thesis-kicker rv">Charon is built for the gap. A review control room where agents do the
-  legwork and <span class="o">nothing lands without your sign-off.</span></p>
-</section>
-
-<canvas class="divider" data-flow aria-hidden="true"></canvas>
-
-<section id="tour">
-  <h2 class="rv">REVIEW-FIRST <span class="a">WORKFLOW</span></h2>
-  <p class="prose rv">Follow a change end to end: prompt, draft, green, review, agents, rules.</p>
-
-  <div class="feature">
-    <div class="ftext rv">
-      <h3 data-n="2.1">START FROM A PROMPT</h3>
-      <p>Describe the change. An agent branches, implements it in a fresh worktree, and opens the
-      draft PR.</p>
-    </div>
-    <div class="fshot rv" data-cap="new draft · prompt to PR"><img src="assets/new-draft.png" alt="New draft PR view" loading="lazy"/></div>
-  </div>
-
-  <div class="feature flip">
-    <div class="ftext rv">
-      <h3 data-n="2.2">DRAFTS ARE DIFFS</h3>
-      <p>Now shape it. Select lines, ask questions, or request edits. Agents work in isolated
-      worktrees and push to <em>your</em> branch.</p>
-    </div>
-    <div class="fshot rv" data-cap="drafts · line-scoped edits"><img src="assets/drafts.png" alt="Drafts view" loading="lazy"/></div>
-  </div>
-
-  <div class="feature">
-    <div class="ftext rv">
-      <h3 data-n="2.3">PRS STAY READY</h3>
-      <p>Once it's open, Charon keeps it green. CI failures, conflicts, bot findings, and teammate
-      reviews become fixes or findings. Each carries a severity, a confidence, and
-      <strong>Apply</strong> on the diff.</p>
-    </div>
-    <div class="fshot rv" data-cap="open-prs · event feed · proposals"><img src="assets/open-prs.png" alt="Open PRs view" loading="lazy"/></div>
-  </div>
-
-  <div class="feature flip">
-    <div class="ftext rv">
-      <h3 data-n="2.4">OWN THE REVIEW</h3>
-      <p>Then return the favor. An agent drafts inline comments from the full diff. You edit,
-      disable, change verdict, and submit <strong>once</strong>.</p>
-    </div>
-    <div class="fshot rv" data-cap="review · anchored comments · one verdict"><img src="assets/review.png" alt="Review view" loading="lazy"/></div>
-  </div>
-
-  <div class="feature">
-    <div class="ftext rv">
-      <h3 data-n="2.5">FULL RUN LOG</h3>
-      <p>All of it, in the open. Every run streams live: plan, tool calls, prompt, model, and
-      output in one feed. Steer or stop any agent mid-run.</p>
-    </div>
-    <div class="fshot rv" data-cap="agents · live runs, plans & tools"><img src="assets/activity.png" alt="Agents activity feed" loading="lazy"/></div>
-  </div>
-
-  <div class="feature flip">
-    <div class="ftext rv">
-      <h3 data-n="2.6">PROMPTS ARE POLICY</h3>
-      <p>And every behavior above is yours. Each handler is a toggleable prompt with variables and
-      <em>/skill</em> references. Context stays editable.</p>
-    </div>
-    <div class="fshot rv" data-cap="settings · event catalog"><img src="assets/settings-events.png" alt="Settings event catalog" loading="lazy"/></div>
-  </div>
-</section>
-
-<section id="harnesses">
-  <div class="harness-inner">
-  <h2 class="rv">BRING YOUR OWN <span class="a">AGENT</span></h2>
-  <p class="prose rv">Charon drives coding agents over the
-  <a href="https://agentclientprotocol.com">Agent Client Protocol</a> and supports the following
-  harnesses:</p>
-
-  <div class="apps rv">
-    <a class="app" href="https://cursor.com/cli" title="Cursor · cursor-agent acp">
-      <div class="app-tile">
-        <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><title>Cursor</title><path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/></svg>
+      <div class="hero-copy">
+        <div class="hero-heading-wrap">
+          <p class="kicker">Charon · Code Review Agent</p>
+          <h1 id="hero-title">
+            <span class="hero-title-line">Review</span>
+            <span class="hero-title-line">the change.</span>
+          </h1>
+        </div>
+        <div class="hero-offer">
+          <p class="hero-sub">Review <strong>diffs, CI, comments, context, and agent output</strong> in one place. Edit proposals. <strong>Approve what lands.</strong></p>
+          <div class="cta-row">
+            <a class="button" href="https://github.com/mmmeff/charon/releases/latest">Download for macOS</a>
+            <a class="button secondary" href="https://github.com/mmmeff/charon">View on GitHub</a>
+          </div>
+        </div>
       </div>
-      <span class="app-name">Cursor</span>
-    </a>
-    <a class="app" href="https://github.com/anthropics/claude-code" title="Claude Code · npx @zed-industries/claude-code-acp">
-      <div class="app-tile">
-        <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><title>Claude</title><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>
-      </div>
-      <span class="app-name">Claude Code</span>
-    </a>
-    <a class="app" href="https://github.com/openai/codex" title="Codex CLI · npx @zed-industries/codex-acp">
-      <div class="app-tile">
-        <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><title>OpenAI</title><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>
-      </div>
-      <span class="app-name">Codex CLI</span>
-    </a>
-    <a class="app" href="https://opencode.ai" title="opencode · opencode acp">
-      <div class="app-tile">
-        <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><title>OpenCode</title><path d="M22 24H2V0h20zM17 4.8H7v14.4h10z"/></svg>
-      </div>
-      <span class="app-name">opencode</span>
-    </a>
-  </div>
 
-  <p class="harness-note rv">Any ACP-speaking harness drops in behind the same
-  <em style="color:var(--acid);font-style:normal">event → { enabled, prompt }</em> interface. Switch
-  between them any time from Settings. Each keeps its own model and reasoning preferences.
-  Onboarding picks one and verifies the connection live.</p>
-  </div>
-</section>
-
-<section id="watch">
-  <div class="term-wrap">
-    <h2 class="rv">AGENTS, <span class="a">REVIEWED</span></h2>
-    <p class="prose rv" style="margin-bottom:42px">The agent gathers context and drafts a decision.
-    Nothing posts until you approve.</p>
-    <div class="term rv">
-      <div class="term-bar">
-        <span class="dot o"></span><span class="dot a"></span><span class="dot"></span>
-        <span style="margin-left:10px">charon · activity / boxcar/dispatch</span>
-      </div>
-      <div class="term-body" id="term"><span class="cursor"></span></div>
+      <aside class="hero-principle" aria-label="Charon principle">
+        <img class="starburst" src="assets/starburst-ink.png" alt="" aria-hidden="true"/>
+        <strong>You approve what touches GitHub.</strong>
+        <small>Agents investigate.</small>
+      </aside>
     </div>
-  </div>
-</section>
+  </header>
 
-<section id="hood">
-  <h2 class="rv">LOCAL. PROMPTABLE. <span class="a">ACP.</span></h2>
-  <div class="hood rv">
-    <div><h4>Stack</h4><p>Tauri 2 with a Rust backend for HTTP, git, and process spawning; React + TypeScript front end. One window per repo, config stored locally.</p></div>
-    <div><h4>Events</h4><p>Every handler is <code>event → { enabled, prompt }</code>. Prompts interpolate <code>{pr-number}</code>, <code>{check-name}</code>, <code>{comment-body}</code>, and <code>/skill</code> references.</p></div>
-    <div><h4>Agents</h4><p>Every run is an <a href="https://agentclientprotocol.com">ACP</a> session over stdio. Tool calls, plans, and reasoning stream live, and you can steer or cancel mid-run. Fixes run in dedicated worktrees; reviews run read-only.</p></div>
-    <div><h4>GitHub</h4><p>Works against github.com and GitHub Enterprise (<code>/api/v3</code>). REST plus a dash of GraphQL. Fine-grained PAT recommended.</p></div>
-    <div><h4>Skills</h4><p>Imported from <code>~/.cursor/commands</code> and <code>~/.cursor/skills</code>, selectable per stage. <code>humanize</code> ships built in.</p></div>
-    <div><h4>Releases</h4><p>Every push to main bumps the version, tags it, builds a universal DMG, and publishes. Installed apps <strong>self-update</strong> with a one-click restart.</p></div>
-  </div>
-  <div class="callout rv">
-    <strong>Bring your own agent.</strong> Charon speaks <a href="https://agentclientprotocol.com">ACP</a>:
-    <a href="https://cursor.com/cli">Cursor</a>, <a href="https://github.com/anthropics/claude-code">Claude Code</a>,
-    <a href="https://github.com/openai/codex">Codex CLI</a>, <a href="https://opencode.ai">opencode</a>, or any command you configure.
-    <a href="https://github.com/mmmeff/charon/issues">Contributions welcome.</a>
-  </div>
-</section>
+  <section class="section gap-section" id="bottleneck" aria-labelledby="gap-title">
+    <img class="starburst gap-star" src="assets/starburst-electric.png" alt="" aria-hidden="true"/>
+    <div class="section-head">
+      <h2 id="gap-title">AI writes code faster than anyone can read it.</h2>
+      <p class="section-intro">Generation went vertical. Human review didn't. Everything in the gap ships <strong>unread</strong>. Bugs, slop, and "looks fine to me."</p>
+    </div>
 
-<div class="outro">
-  <canvas id="outro-canvas" data-flow aria-hidden="true"></canvas>
-  <div class="outro-inner">
-    <h2 class="rv">REVIEW THE <span class="a">CHANGE</span></h2>
-    <p class="rv">Free. Open source. macOS universal.</p>
-    <div class="rv"><a class="btn" href="https://github.com/mmmeff/charon/releases/latest">Download Charon</a></div>
-  </div>
-</div>
+    <div class="gap-graphic" role="img" aria-label="AI code generation rises sharply while human review stays nearly flat, creating a widening unreviewed gap.">
+      <svg viewBox="0 0 1200 520" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <defs>
+          <pattern id="gap-dots" width="8" height="8" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.4" fill="#050607"/>
+          </pattern>
+        </defs>
+        <line x1="70" y1="408" x2="1130" y2="408" stroke="#050607" stroke-width="1"/>
+        <path class="gap-fill" fill="url(#gap-dots)" d="M70 408 C 330 404 550 380 720 300 C 900 216 1030 108 1110 54 L 1110 398 C 800 407 420 411 70 408 Z"/>
+        <path class="gap-line reviewed" d="M70 408 C 420 412 800 407 1110 398"/>
+        <path class="gap-line generated" d="M70 408 C 330 404 550 380 720 300 C 900 216 1030 108 1110 54"/>
+        <text x="810" y="124" fill="#050607" font-family="Archivo Variable, sans-serif" font-size="22" font-weight="800">GENERATED CODE</text>
+        <text x="800" y="378" fill="#050607" font-family="Archivo Variable, sans-serif" font-size="22" font-weight="800">REVIEWED CODE</text>
+        <text x="110" y="260" fill="#050607" font-family="Archivo Variable, sans-serif" font-size="54" font-weight="900">THE GAP</text>
+        <text x="112" y="296" fill="#050607" font-family="Archivo Variable, sans-serif" font-size="17">everything no one read</text>
+        <text x="70" y="468" fill="#050607" font-family="IBM Plex Mono, monospace" font-size="13">AI SHOWS UP</text>
+        <text x="1058" y="468" fill="#050607" font-family="IBM Plex Mono, monospace" font-size="13">TODAY</text>
+      </svg>
+    </div>
 
-<footer>
+    <p class="thesis-kicker">Charon is built for the gap. A review control room where agents do the legwork and <strong>nothing lands without your sign-off.</strong></p>
+  </section>
+
+  <section class="section workflow" id="workflow" aria-labelledby="workflow-title">
+    <div class="section-head">
+      <h2 id="workflow-title">Review-first workflow</h2>
+      <p class="section-intro">Follow a change end to end: prompt, draft, green, review, agents, rules.</p>
+    </div>
+
+    <div class="review-reel">
+      <article class="reel-item">
+        <button class="proof" type="button" data-caption="New draft · prompt to PR" aria-label="Open New draft screenshot">
+          <img src="assets/new-draft.png" alt="New draft PR view" loading="lazy"/>
+        </button>
+        <div class="reel-caption">
+          <span class="frame-number">2.1</span>
+          <div class="reel-copy">
+            <h3>Start from a prompt</h3>
+            <p>Describe the change. An agent branches, implements it in a fresh worktree, and opens the draft PR.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="reel-item">
+        <button class="proof" type="button" data-caption="Drafts · diffs first" aria-label="Open Drafts screenshot">
+          <img src="assets/drafts.png" alt="Charon drafts workspace" loading="lazy"/>
+        </button>
+        <div class="reel-caption">
+          <span class="frame-number">2.2</span>
+          <div class="reel-copy">
+            <h3>Drafts are diffs</h3>
+            <p>Now shape it. Select lines, ask questions, or request edits. Agents work in isolated worktrees and push to <em>your</em> branch.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="reel-item">
+        <button class="proof" type="button" data-caption="Open PRs · watched continuously" aria-label="Open Pull Requests screenshot">
+          <img src="assets/open-prs.png" alt="Charon open pull requests workspace" loading="lazy"/>
+        </button>
+        <div class="reel-caption">
+          <span class="frame-number">2.3</span>
+          <div class="reel-copy">
+            <h3>PRs stay ready</h3>
+            <p>Once it's open, Charon keeps it green. CI failures, conflicts, bot findings, and teammate reviews become fixes or findings. Each carries a severity, a confidence, and <strong>Apply</strong> on the diff.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="reel-item">
+        <button class="proof" type="button" data-caption="Review · judgment stays human" aria-label="Open Review screenshot">
+          <img src="assets/review.png" alt="Charon pull request review workspace" loading="lazy"/>
+        </button>
+        <div class="reel-caption">
+          <span class="frame-number">2.4</span>
+          <div class="reel-copy">
+            <h3>Own the review</h3>
+            <p>Then return the favor. An agent drafts inline comments from the full diff. You edit, disable, change verdict, and submit <strong>once</strong>.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="reel-item">
+        <button class="proof" type="button" data-caption="Activity · every run visible" aria-label="Open Activity screenshot">
+          <img src="assets/activity.png" alt="Charon agent activity log" loading="lazy"/>
+        </button>
+        <div class="reel-caption">
+          <span class="frame-number">2.5</span>
+          <div class="reel-copy">
+            <h3>Full run log</h3>
+            <p>All of it, in the open. Every run streams live: plan, tool calls, prompt, model, and output in one feed. Steer or stop any agent mid-run.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="reel-item">
+        <button class="proof" type="button" data-caption="Settings · prompts are policy" aria-label="Open Settings screenshot">
+          <img src="assets/settings-events.png" alt="Charon event prompt settings" loading="lazy"/>
+        </button>
+        <div class="reel-caption">
+          <span class="frame-number">2.6</span>
+          <div class="reel-copy">
+            <h3>Prompts are policy</h3>
+            <p>And every behavior above is yours. Each handler is a toggleable prompt with variables and <em>/skill</em> references. Context stays editable.</p>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section agents" id="agents" aria-labelledby="agents-title">
+    <div class="section-head">
+      <h2 id="agents-title">Bring your own agent</h2>
+      <p class="section-intro">Charon drives coding agents over the <a href="https://agentclientprotocol.com">Agent Client Protocol</a> and supports the following harnesses.</p>
+    </div>
+
+    <div class="agent-list">
+      <a class="agent-link" href="https://cursor.com/cli">
+        <span class="agent-index">001</span>
+        <strong>Cursor</strong>
+        <span class="agent-command">cursor-agent acp</span>
+      </a>
+      <a class="agent-link" href="https://github.com/anthropics/claude-code">
+        <span class="agent-index">002</span>
+        <strong>Claude Code</strong>
+        <span class="agent-command">npx @zed-industries/claude-code-acp</span>
+      </a>
+      <a class="agent-link" href="https://github.com/openai/codex">
+        <span class="agent-index">003</span>
+        <strong>Codex CLI</strong>
+        <span class="agent-command">npx @zed-industries/codex-acp</span>
+      </a>
+      <a class="agent-link" href="https://opencode.ai">
+        <span class="agent-index">004</span>
+        <strong>opencode</strong>
+        <span class="agent-command">opencode acp</span>
+      </a>
+    </div>
+
+    <p class="harness-note">Any ACP-speaking harness drops in behind the same <code>event → { enabled, prompt }</code> interface. Switch between them any time from Settings. Each keeps its own model and reasoning preferences. Onboarding picks one and verifies the connection live.</p>
+  </section>
+
+  <section class="section observed" id="observed" aria-labelledby="observed-title">
+    <div class="section-head">
+      <h2 id="observed-title">Agents, reviewed</h2>
+      <p class="section-intro">The agent gathers context and drafts a decision. Nothing posts until you approve.</p>
+    </div>
+
+    <div class="terminal-shell">
+        <div class="terminal">
+          <div class="terminal-bar">
+            charon · activity / boxcar/dispatch
+          </div>
+        <div class="terminal-body" id="terminal-output"><span class="cursor" aria-hidden="true"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section under-hood" id="under-hood" aria-labelledby="under-hood-title">
+    <div class="section-head">
+      <h2 id="under-hood-title">Local. Promptable. ACP.</h2>
+      <p class="section-intro">The desktop shell owns I/O. GitHub owns collaboration. Agents do bounded work in between.</p>
+    </div>
+
+    <div class="spec-ledger">
+      <div class="spec">
+        <h3>Stack</h3>
+        <p>Tauri 2 with a Rust backend for HTTP, git, and process spawning; React + TypeScript front end. One window per repo, config stored locally.</p>
+      </div>
+      <div class="spec">
+        <h3>Events</h3>
+        <p>Every handler is <code>event → { enabled, prompt }</code>. Prompts interpolate <code>{pr-number}</code>, <code>{check-name}</code>, <code>{comment-body}</code>, and <code>/skill</code> references.</p>
+      </div>
+      <div class="spec">
+        <h3>Agents</h3>
+        <p>Every run is an <a href="https://agentclientprotocol.com">ACP</a> session over stdio. Tool calls, plans, and reasoning stream live, and you can steer or cancel mid-run. Fixes run in dedicated worktrees; reviews run read-only.</p>
+      </div>
+      <div class="spec">
+        <h3>GitHub</h3>
+        <p>Works against github.com and GitHub Enterprise <code>/api/v3</code>. REST plus a dash of GraphQL. Fine-grained PAT recommended.</p>
+      </div>
+      <div class="spec">
+        <h3>Skills</h3>
+        <p>Imported from <code>~/.cursor/commands</code> and <code>~/.cursor/skills</code>, selectable per stage. <code>humanize</code> ships built in.</p>
+      </div>
+      <div class="spec">
+        <h3>Releases</h3>
+        <p>Every push to main bumps the version, tags it, builds a universal DMG, and publishes. Installed apps <strong>self-update</strong> with a one-click restart.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Bring your own agent.</strong>
+      <div>Charon speaks <a href="https://agentclientprotocol.com">ACP</a>: <a href="https://cursor.com/cli">Cursor</a>, <a href="https://github.com/anthropics/claude-code">Claude Code</a>, <a href="https://github.com/openai/codex">Codex CLI</a>, <a href="https://opencode.ai">opencode</a>, or any command you configure. <a href="https://github.com/mmmeff/charon/issues">Contributions welcome.</a></div>
+    </div>
+  </section>
+
+  <section class="outro" aria-labelledby="outro-title">
+    <img class="outro-moon" src="assets/charon-contact-moon.jpg" alt="" aria-hidden="true"/>
+    <div class="outro-inner">
+      <img class="starburst outro-star" src="assets/starburst-electric.png" alt="" aria-hidden="true"/>
+      <h2 id="outro-title">Review the change.</h2>
+      <p>Free. Open source. macOS universal.</p>
+      <a class="button" href="https://github.com/mmmeff/charon/releases/latest">Download Charon</a>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
   <span>© Matt Frey · MIT</span>
-  <div class="right">
+  <div class="footer-links">
     <a href="https://github.com/mmmeff/charon">github</a>
     <a href="https://github.com/mmmeff/charon/releases">releases</a>
     <a href="https://github.com/mmmeff/charon/issues">issues</a>
   </div>
 </footer>
 
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot preview">
+  <img id="lightbox-image" src="assets/review.png" alt=""/>
+  <div class="lightbox-caption" id="lightbox-caption"></div>
+</div>
+
 <script>
-/* ============================================================
-   ASCII shader engine — two passes:
-   1. scene shader rendered at one-texel-per-character-cell
-   2. composite pass maps cell luminance to a glyph atlas
-   ============================================================ */
-const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const VERT = `#version 300 es
-void main(){
-  vec2 p = vec2((gl_VertexID<<1 & 2), (gl_VertexID & 2));
-  gl_Position = vec4(p*2.0-1.0, 0.0, 1.0);
-}`;
+const gapGraphic = document.querySelector(".gap-graphic");
+const gapObserver = new IntersectionObserver(
+  ([entry]) => {
+    if (!entry.isIntersecting) {
+      return;
+    }
 
-const SCENE_FRAG = `#version 300 es
-precision highp float;
-out vec4 o;
-uniform vec2 uCells;
-uniform float uTime;
-uniform float uAspect;
-uniform vec2 uMouse;
-uniform int uMode;
+    gapGraphic.classList.add("in");
+    gapObserver.disconnect();
+  },
+  { threshold: 0.24 },
+);
+gapObserver.observe(gapGraphic);
 
-float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
-float noise(vec2 p){
-  vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
-  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
-  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
-}
-float fbm(vec2 p){
-  float v=0.0, a=0.5;
-  for(int i=0;i<5;i++){ v+=a*noise(p); p=p*2.03+vec2(17.0,9.2); a*=0.5; }
-  return v;
-}
-
-vec3 moonScene(vec2 uv){
-  vec3 col = vec3(0.0);
-
-  // stars: sparse, per-cell twinkle
-  vec2 cell = floor(uv*uCells);
-  float s = hash(cell*1.37);
-  float tw = step(0.992, s) * (0.35 + 0.65*pow(0.5+0.5*sin(uTime*1.7 + s*60.0), 2.0));
-  col += vec3(0.91,0.89,0.83) * tw * 0.65;
-
-  // drifting embers rising on the left
-  vec2 ep = uv*vec2(uAspect,1.0);
-  float em = noise(vec2(ep.x*14.0, ep.y*3.0 - uTime*0.22));
-  float ember = smoothstep(0.965, 1.0, em) * smoothstep(0.85, 0.2, uv.x) * 0.7;
-  col += vec3(1.0,0.31,0.0) * ember;
-
-  // the moon — on portrait screens, smaller and tucked top-right
-  float portrait = smoothstep(1.15, 0.7, uAspect);
-  vec2 c = vec2(mix(0.73, 0.86, portrait) + uMouse.x*0.012,
-                mix(0.46, 0.84, portrait) + uMouse.y*0.012);
-  vec2 p = uv - c; p.x *= uAspect;
-  float r = 0.40 * mix(1.0, 0.5, portrait);
-  float d = length(p);
-
-  if(d < r){
-    vec2 q = p / r;
-    float z = sqrt(max(0.0, 1.0 - dot(q,q)));
-    vec3 n = vec3(q, z);
-    float lon = atan(q.x, z) + uTime*0.045;
-    float lat = asin(clamp(q.y, -1.0, 1.0));
-    vec2 sp = vec2(lon*1.4, lat*1.6);
-
-    float tex = fbm(sp*2.6 + 7.0);
-    vec3 albedo = mix(vec3(0.62,0.59,0.53), vec3(0.84,0.81,0.73), tex);
-
-    // dusty red polar cap (Mordor Macula, but it's a marketing site)
-    float capEdge = 0.62 + 0.20*fbm(vec2(lon*2.2, 3.0));
-    float cap = smoothstep(capEdge-0.10, capEdge+0.14, lat);
-    albedo = mix(albedo, vec3(0.61,0.27,0.12), cap*0.92);
-
-    // canyon band
-    float chY = lat + 0.16 - 0.12*noise(vec2(lon*1.8, 9.0));
-    float ch = smoothstep(0.045, 0.0, abs(chY));
-    albedo = mix(albedo, vec3(0.30,0.28,0.24), ch*0.65);
-
-    // craters
-    float cr = smoothstep(0.60, 0.78, fbm(sp*5.5 + 13.0));
-    albedo *= 1.0 - 0.28*cr;
-
-    vec3 L = normalize(vec3(-0.55, 0.38, 0.72));
-    float diff = clamp(dot(n,L), 0.0, 1.0);
-    col = albedo * (0.05 + 1.05*pow(diff, 1.15));
-
-    // warm rim on the lit limb
-    float rim = pow(1.0 - z, 2.6);
-    col += vec3(1.0,0.31,0.0) * rim * 0.4 * smoothstep(0.0,0.3,diff);
-  } else {
-    float glow = exp(-(d - r)*8.0);
-    col += vec3(1.0,0.31,0.0) * glow * 0.22;
-  }
-  return col;
-}
-
-vec3 flowScene(vec2 uv){
-  vec2 p = uv*vec2(uAspect,1.0)*2.6;
-  float t = uTime*0.10;
-  float w = fbm(p*1.6 - vec2(t*0.7, t));
-  float v = fbm(p + vec2(t, -t*0.5) + w*1.6);
-  vec3 col = vec3(0.0);
-  col = mix(col, vec3(0.91,0.89,0.83)*0.45, smoothstep(0.38, 0.78, v));
-  col = mix(col, vec3(1.0,0.31,0.0), smoothstep(0.72, 0.92, v)*0.85);
-  col = mix(col, vec3(0.81,0.95,0.30), smoothstep(0.90, 1.0, v)*0.7);
-  return col;
-}
-
-void main(){
-  vec2 uv = gl_FragCoord.xy / uCells;
-  o = vec4(uMode==0 ? moonScene(uv) : flowScene(uv), 1.0);
-}`;
-
-const COMP_FRAG = `#version 300 es
-precision highp float;
-out vec4 o;
-uniform sampler2D uScene;
-uniform sampler2D uGlyphs;
-uniform vec2 uCells;
-uniform vec2 uCellPx;
-uniform float uGlyphN;
-void main(){
-  vec2 cell = floor(gl_FragCoord.xy / uCellPx);
-  vec2 cuv = (cell + 0.5) / uCells;
-  vec3 c = texture(uScene, cuv).rgb;
-  float luma = clamp(dot(c, vec3(0.299,0.587,0.114)), 0.0, 1.0);
-  float gi = floor(min(luma, 0.999) * uGlyphN);
-  vec2 inCell = vec2(
-    fract(gl_FragCoord.x / uCellPx.x),
-    1.0 - fract(gl_FragCoord.y / uCellPx.y)
-  );
-  vec2 guv = vec2((gi + inCell.x) / uGlyphN, inCell.y);
-  float a = texture(uGlyphs, guv).a;
-  // glyph density carries the luminance; keep color punchy
-  vec3 tint = c / max(luma, 0.02);
-  vec3 col = tint * min(1.0, 0.35 + luma*1.1);
-  o = vec4(col * a, 1.0);
-}`;
-
-const RAMP = " .,:;i+*xeo#%@";
-
-function makeGlyphAtlas(cellW, cellH){
-  const n = RAMP.length;
-  const cv = document.createElement('canvas');
-  cv.width = cellW * n; cv.height = cellH;
-  const g = cv.getContext('2d');
-  g.clearRect(0,0,cv.width,cv.height);
-  g.fillStyle = '#fff';
-  // must be monospace: the atlas packs one glyph per fixed-width cell, so a
-  // proportional face would misalign every character in the ASCII field
-  const monoStack = getComputedStyle(document.documentElement).getPropertyValue('--mono').trim();
-  g.font = `${Math.floor(cellH*0.82)}px ${monoStack}`;
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  for(let i=0;i<n;i++) g.fillText(RAMP[i], i*cellW + cellW/2, cellH/2 + 1);
-  return cv;
-}
-
-function compile(gl, type, src){
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src); gl.compileShader(s);
-  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-  return s;
-}
-function program(gl, fs){
-  const p = gl.createProgram();
-  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, VERT));
-  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs));
-  gl.linkProgram(p);
-  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-  return p;
-}
-
-function asciiShader(canvas, mode){
-  const gl = canvas.getContext('webgl2', {antialias:false, alpha:false});
-  if(!gl) return; // graceful: charcoal background remains
-
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  const CW = Math.round(8*dpr), CH = Math.round(15*dpr);
-
-  const scene = program(gl, SCENE_FRAG);
-  const comp = program(gl, COMP_FRAG);
-  const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
-
-  // glyph atlas
-  const atlas = makeGlyphAtlas(CW, CH);
-  const glyphTex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, glyphTex);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-  // scene FBO
-  const sceneTex = gl.createTexture();
-  const fbo = gl.createFramebuffer();
-  let cols = 0, rows = 0;
-
-  function resize(){
-    const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
-    const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
-    if(canvas.width === w && canvas.height === h && cols) return;
-    canvas.width = w; canvas.height = h;
-    cols = Math.max(2, Math.ceil(w / CW));
-    rows = Math.max(2, Math.ceil(h / CH));
-    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  }
-
-  const u = (p, name) => gl.getUniformLocation(p, name);
-  let mouse = [0,0];
-  if(mode === 0){
-    addEventListener('pointermove', e => {
-      mouse = [(e.clientX/innerWidth)*2-1, -((e.clientY/innerHeight)*2-1)];
-    }, {passive:true});
-  }
-
-  let visible = true, raf = 0;
-  new IntersectionObserver(es => {
-    visible = es[0].isIntersecting;
-    if(visible && !raf) raf = requestAnimationFrame(frame);
-  }).observe(canvas);
-  document.addEventListener('visibilitychange', () => {
-    if(!document.hidden && visible && !raf) raf = requestAnimationFrame(frame);
+if (!reducedMotion) {
+  const moon = document.getElementById("hero-moon");
+  const moonFrame = moon.closest(".moon-frame");
+  moonFrame.addEventListener("pointermove", (event) => {
+    const bounds = moonFrame.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    moon.style.translate = `${x * 8}px ${y * 6}px`;
   });
-
-  const t0 = performance.now();
-  function frame(){
-    raf = 0;
-    if(document.hidden || !visible) return;
-    resize();
-    const t = (performance.now() - t0) / 1000;
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.viewport(0, 0, cols, rows);
-    gl.useProgram(scene);
-    gl.uniform2f(u(scene,'uCells'), cols, rows);
-    gl.uniform1f(u(scene,'uTime'), REDUCED ? 0 : t);
-    gl.uniform1f(u(scene,'uAspect'), canvas.width / canvas.height);
-    gl.uniform2f(u(scene,'uMouse'), mouse[0], mouse[1]);
-    gl.uniform1i(u(scene,'uMode'), mode);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.useProgram(comp);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
-    gl.uniform1i(u(comp,'uScene'), 0);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, glyphTex);
-    gl.uniform1i(u(comp,'uGlyphs'), 1);
-    gl.uniform2f(u(comp,'uCells'), cols, rows);
-    gl.uniform2f(u(comp,'uCellPx'), CW, CH);
-    gl.uniform1f(u(comp,'uGlyphN'), RAMP.length);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    if(!REDUCED) raf = requestAnimationFrame(frame);
-  }
-  raf = requestAnimationFrame(frame);
-  addEventListener('resize', () => { if(REDUCED){ resize(); frame(); } });
+  moonFrame.addEventListener("pointerleave", () => {
+    moon.style.translate = "0 0";
+  });
 }
 
-try{
-  asciiShader(document.getElementById('hero-canvas'), 0);
-  document.querySelectorAll('canvas[data-flow]').forEach(c => asciiShader(c, 1));
-}catch(e){ console.warn('ascii shader disabled:', e); }
+const lightbox = document.getElementById("lightbox");
+const lightboxImage = document.getElementById("lightbox-image");
+const lightboxCaption = document.getElementById("lightbox-caption");
 
-/* ---------- event ticker ---------- */
-const EVENTS = ['change_detected','context_gap_found','review_requested','ci_failed',
-  'merge_conflict_detected','bug_bot_finding','self_review_finding','proposal_drafted',
-  'teammate_review_submitted','quality_bar_checked','agent_run_completed','draft_edit_requested',
-  'thread_resolved','review_approved','push_to_branch'];
-const tickerEl = document.getElementById('ticker');
-const seq = EVENTS.map(e => `<i>▸</i> ${e} <em>·</em>`).join(' ');
-tickerEl.innerHTML = seq + ' ' + seq;
+function closeLightbox() {
+  lightbox.classList.remove("open");
+  lightboxImage.src = "assets/review.png";
+  lightboxImage.alt = "";
+  document.body.style.overflow = "";
+}
 
-/* ---------- screenshot lightbox ---------- */
-const lb = document.createElement('div');
-lb.className = 'lightbox';
-lb.innerHTML = '<img alt=""/><div class="lb-cap"></div>';
-document.body.appendChild(lb);
-const lbImg = lb.querySelector('img'), lbCap = lb.querySelector('.lb-cap');
-document.querySelectorAll('.fshot img').forEach(img => {
-  img.addEventListener('click', () => {
-    lbImg.src = img.src;
-    lbImg.alt = img.alt;
-    lbCap.textContent = img.closest('.fshot').dataset.cap || '';
-    lb.classList.add('open');
+document.querySelectorAll(".proof").forEach((button) => {
+  button.addEventListener("click", () => {
+    const image = button.querySelector("img");
+    lightboxImage.src = image.src;
+    lightboxImage.alt = image.alt;
+    lightboxCaption.textContent = button.dataset.caption || "";
+    lightbox.classList.add("open");
+    document.body.style.overflow = "hidden";
   });
 });
-lb.addEventListener('click', () => lb.classList.remove('open'));
-addEventListener('keydown', e => { if(e.key === 'Escape') lb.classList.remove('open'); });
 
-/* ---------- reveal on scroll ---------- */
-const ro = new IntersectionObserver(es => {
-  es.forEach(e => { if(e.isIntersecting){ e.target.classList.add('in'); ro.unobserve(e.target); } });
-}, {threshold: 0.12});
-document.querySelectorAll('.rv').forEach(el => ro.observe(el));
-
-/* ---------- terminal typing ---------- */
-const SCRIPT = [
-  ['ev','change'], ['dim','  '], ['hl','context_gap_found'], ['dim','  pr #482 · "rework dispatch retry queue"'], ['nl'],
-  ['dim','──────────────────────────────────────────────'], ['nl'],
-  ['ok','▸ review agent spawned'], ['dim','  cursor-agent · worktree /tmp/charon-wt-482 · model auto'], ['nl'],
-  ['dim','  reading diff, check output, linked issue, and review history'], ['nl'],
-  ['dim','  finding: retry policy changed but product invariant is unstated'], ['nl'],
-  ['dim','  missing context: should user-visible retries preserve the 250ms floor?'], ['nl'],
-  ['dim','  patching '], ['hl','src/queue/backoff.ts'], ['dim','; inject clock, document invariant'], ['nl'],
-  ['dim','  $ npm test -- retry_queue   '], ['ok','✓ 41 passed'], ['nl'],
-  ['ok','▸ review proposal drafted'], ['dim','  2 findings · 1 fix · 1 context question'], ['nl'],
-  ['nl'],
-  ['ev','decision'], ['dim','  '], ['hl','waiting_for_you'], ['dim','  approve the fix, edit the context, or send the review'], ['nl'],
-  ['dim','  [ edit ]  [ regenerate ]  [ humanize ]  [ '], ['ok','approve & send'], ['dim',' ]  [ dismiss ]'], ['nl'],
-  ['nl'],
-  ['acid-note','  nothing was posted. every change is review until you say otherwise.'], ['nl']
-];
-const termEl = document.getElementById('term');
-let started = false;
-new IntersectionObserver(es => {
-  if(es[0].isIntersecting && !started){ started = true; typeLoop(); }
-}, {threshold: 0.3}).observe(termEl);
-
-function typeLoop(){
-  termEl.innerHTML = '<span class="cursor"></span>';
-  const cursor = termEl.querySelector('.cursor');
-  let i = 0, j = 0, span = null;
-  function step(){
-    if(i >= SCRIPT.length){
-      setTimeout(() => { if(!REDUCED) typeLoop(); }, 9000);
-      return;
-    }
-    const [cls, text] = SCRIPT[i];
-    if(cls === 'nl'){
-      termEl.insertBefore(document.createTextNode('\n'), cursor);
-      i++; j = 0; span = null;
-      setTimeout(step, REDUCED ? 0 : 60);
-      return;
-    }
-    if(!span){
-      span = document.createElement('span');
-      span.className = cls === 'acid-note' ? 'ok' : cls;
-      termEl.insertBefore(span, cursor);
-    }
-    if(REDUCED){ span.textContent = text; i++; j = 0; span = null; step(); return; }
-    const chunk = cls === 'dim' ? 3 : 1;
-    span.textContent = text.slice(0, j += chunk);
-    if(j >= text.length){ i++; j = 0; span = null; }
-    setTimeout(step, cls === 'dim' ? 8 : 22);
+lightbox.addEventListener("click", closeLightbox);
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeLightbox();
   }
+});
+
+const terminalScript = [
+  ["ev", "change"],
+  ["dim", "  "],
+  ["hl", "context_gap_found"],
+  ["dim", "  pr #482 · \"rework dispatch retry queue\""],
+  ["nl"],
+  ["dim", "──────────────────────────────────────────────"],
+  ["nl"],
+  ["ok", "▸ review agent spawned"],
+  ["dim", "  cursor-agent · worktree /tmp/charon-wt-482 · model auto"],
+  ["nl"],
+  ["dim", "  reading diff, check output, linked issue, and review history"],
+  ["nl"],
+  ["dim", "  finding: retry policy changed but product invariant is unstated"],
+  ["nl"],
+  ["dim", "  missing context: should user-visible retries preserve the 250ms floor?"],
+  ["nl"],
+  ["dim", "  patching "],
+  ["hl", "src/queue/backoff.ts"],
+  ["dim", "; inject clock, document invariant"],
+  ["nl"],
+  ["dim", "  $ npm test -- retry_queue   "],
+  ["ok", "✓ 41 passed"],
+  ["nl"],
+  ["ok", "▸ review proposal drafted"],
+  ["dim", "  2 findings · 1 fix · 1 context question"],
+  ["nl"],
+  ["nl"],
+  ["ev", "decision"],
+  ["dim", "  "],
+  ["hl", "waiting_for_you"],
+  ["dim", "  approve the fix, edit the context, or send the review"],
+  ["nl"],
+  ["dim", "  [ edit ]  [ regenerate ]  [ humanize ]  [ "],
+  ["ok", "approve & send"],
+  ["dim", " ]  [ dismiss ]"],
+  ["nl"],
+  ["nl"],
+  ["ok", "  nothing was posted. every change is review until you say otherwise."],
+  ["nl"],
+];
+
+const terminal = document.getElementById("terminal-output");
+let terminalStarted = false;
+
+function typeTerminal() {
+  terminal.innerHTML = '<span class="cursor" aria-hidden="true"></span>';
+  const cursor = terminal.querySelector(".cursor");
+  let row = 0;
+  let character = 0;
+  let span = null;
+
+  function step() {
+    if (row >= terminalScript.length) {
+      if (!reducedMotion) {
+        setTimeout(typeTerminal, 9000);
+      }
+      return;
+    }
+
+    const [className, text] = terminalScript[row];
+    if (className === "nl") {
+      terminal.insertBefore(document.createTextNode("\n"), cursor);
+      row += 1;
+      character = 0;
+      span = null;
+      setTimeout(step, reducedMotion ? 0 : 45);
+      return;
+    }
+
+    if (span === null) {
+      span = document.createElement("span");
+      span.className = className;
+      terminal.insertBefore(span, cursor);
+    }
+
+    if (reducedMotion) {
+      span.textContent = text;
+      row += 1;
+      character = 0;
+      span = null;
+      step();
+      return;
+    }
+
+    const chunkSize = className === "dim" ? 3 : 1;
+    character += chunkSize;
+    span.textContent = text.slice(0, character);
+
+    if (character >= text.length) {
+      row += 1;
+      character = 0;
+      span = null;
+    }
+
+    setTimeout(step, className === "dim" ? 8 : 20);
+  }
+
   step();
 }
+
+const terminalObserver = new IntersectionObserver(
+  ([entry]) => {
+    if (!entry.isIntersecting || terminalStarted) {
+      return;
+    }
+
+    terminalStarted = true;
+    typeTerminal();
+    terminalObserver.disconnect();
+  },
+  { threshold: 0.28 },
+);
+terminalObserver.observe(terminal);
 </script>
 </body>
 </html>

@@ -6,7 +6,6 @@ import { useCiAnalysis, useRepoStore } from "../lib/store";
 import { interpolate, prVars } from "../lib/template";
 import type { CheckInfo, PrSummary } from "../types";
 import { AgentLaunchForm } from "./AgentLaunchForm";
-import { AsciiField } from "./AsciiField";
 import { Badge, Spinner } from "./common";
 import { useFlow } from "./flow";
 
@@ -280,11 +279,6 @@ ${log.slice(-AGENT_LOG_TAIL)}
   return (
     <div className="checks-panel" ref={panelRef}>
       <div className="row checks-head">
-        {running > 0 && (
-          <div className="checks-head-fx" aria-hidden>
-            <AsciiField height={34} color="255, 176, 0" opacity={0.28} speed={1.5} />
-          </div>
-        )}
         <span className="checks-title">Checks</span>
         <Badge color={failing.length ? "red" : running ? "yellow" : "green"}>
           {failing.length
