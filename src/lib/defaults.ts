@@ -514,6 +514,9 @@ function seedPrefsFromDefaults(d: HarnessModelDefaults): HarnessModelPrefs {
   reasoningLabels,
   reasoningEffort: d.reasoningEffort,
   reasoningOverrides: { ...d.reasoningOverrides },
+  fastModels: [],
+  fastMode: false,
+  fastModeOverrides: {},
  };
 }
 
@@ -685,6 +688,9 @@ export function defaultGlobalConfig(): GlobalConfig {
   reasoningEffort: "",
   modelOverrides: {},
   reasoningOverrides: {},
+  fastModels: [],
+  fastMode: false,
+  fastModeOverrides: {},
   modelPrefs: {},
   repos: [],
   lastRepo: "",
@@ -726,6 +732,9 @@ export function syncActiveModelPrefs(cfg: GlobalConfig): GlobalConfig {
   reasoningLabels: cfg.reasoningLabels ?? {},
   reasoningEffort: cfg.reasoningEffort ?? "",
   reasoningOverrides: cfg.reasoningOverrides ?? {},
+  fastModels: cfg.fastModels ?? [],
+  fastMode: cfg.fastMode ?? false,
+  fastModeOverrides: cfg.fastModeOverrides ?? {},
  };
  return { ...cfg, modelPrefs: { ...(cfg.modelPrefs ?? {}), [cfg.activeHarness]: prefs } };
 }
@@ -746,7 +755,14 @@ export function switchHarness(cfg: GlobalConfig, h: Harness): GlobalConfig {
  if (synced.activeHarness === h.id) return { ...synced, harnesses };
  // Captured selections for the target harness win — restore them as-is.
  const captured = synced.modelPrefs?.[h.id];
- const prefs: HarnessModelPrefs = captured ?? seedPrefsFromDefaults(harnessModelDefaults(h.id));
+ const prefs: HarnessModelPrefs = captured
+  ? {
+   ...captured,
+   fastModels: captured.fastModels ?? [],
+   fastMode: captured.fastMode ?? false,
+   fastModeOverrides: captured.fastModeOverrides ?? {},
+  }
+  : seedPrefsFromDefaults(harnessModelDefaults(h.id));
  return { ...synced, harnesses, activeHarness: h.id, ...prefs };
 }
 

@@ -79,3 +79,85 @@ export function ReasoningPicker({ flowKind }: { flowKind?: string }) {
     </select>
   );
 }
+
+/**
+ * Codex Fast service-tier selection. Per-flow picks inherit the global
+ * default until the user chooses Standard or Fast explicitly. Mixed-model
+ * swarms apply Fast only to the models that advertise support.
+ */
+export function FastPicker({
+  flowKind,
+  models = [],
+}: {
+  flowKind?: string;
+  models?: string[];
+}) {
+  const global = useGlobalConfig((s) => s.config);
+  const save = useGlobalConfig((s) => s.save);
+  if (!global) return null;
+
+  const fallback =
+    (flowKind ? global.modelOverrides?.[flowKind] : "") ||
+    global.defaultModel;
+  const selected = models.length > 0
+    ? models.map((model) => model || fallback)
+    : [fallback];
+  const fastModels = global.fastModels ?? [];
+  const supportedCount = selected.filter((model) =>
+    fastModels.includes(model),
+  ).length;
+  if (
+    fastModels.length === 0 ||
+    (!!flowKind && supportedCount === 0)
+  ) {
+    return null;
+  }
+  const someUnsupported = supportedCount < selected.length;
+
+  const hasOverride =
+    !!flowKind &&
+    Object.prototype.hasOwnProperty.call(
+      global.fastModeOverrides ?? {},
+      flowKind,
+    );
+  const value = flowKind
+    ? hasOverride
+      ? (global.fastModeOverrides ?? {})[flowKind]
+        ? "fast"
+        : "standard"
+      : ""
+    : global.fastMode
+      ? "fast"
+      : "standard";
+
+  const set = (nextValue: string) => {
+    if (!flowKind) {
+      void save({
+        ...global,
+        fastMode: nextValue === "fast",
+      });
+      return;
+    }
+    const next = { ...(global.fastModeOverrides ?? {}) };
+    if (!nextValue) delete next[flowKind];
+    else next[flowKind] = nextValue === "fast";
+    void save({ ...global, fastModeOverrides: next });
+  };
+
+  const inherited = global.fastMode ? "fast" : "standard";
+  return (
+    <select
+      value={value}
+      title="Codex service tier; Fast uses increased usage"
+      onChange={(event) => set(event.target.value)}
+    >
+      {flowKind && (
+        <option value="">speed: {inherited} (default)</option>
+      )}
+      <option value="standard">speed: standard</option>
+      <option value="fast">
+        speed: fast{someUnsupported ? " where supported" : ""}
+      </option>
+    </select>
+  );
+}

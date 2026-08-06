@@ -106,6 +106,7 @@ function Onboarding({
       let modelLabels: Record<string, string> = {};
       let reasoningOptions: string[] = [];
       let reasoningLabels: Record<string, string> = {};
+      let fastModels: string[] = [];
       if (probe?.ok && probe.models.length) {
         // clean labels (Cursor bracket params -> "(level, context)", default ->
         // Auto), sorted by label; no synthetic "auto" entry
@@ -118,6 +119,7 @@ function Onboarding({
         reasoningOptions = probe.reasoning.options.map((o) => o.modelId);
         reasoningLabels = Object.fromEntries(probe.reasoning.options.map((o) => [o.modelId, o.name]));
       }
+      if (probe?.ok) fastModels = probe.fastModels ?? [];
       const rec = reconcileHarnessDefaults(harnessModelDefaults(h.id), models, reasoningOptions);
       // hardcoded default unavailable → fall back to the harness's own current pick
       const defaultModel =
@@ -149,6 +151,9 @@ function Onboarding({
         reasoningEffort,
         modelOverrides: rec.modelOverrides,
         reasoningOverrides: rec.reasoningOverrides,
+        fastModels,
+        fastMode: false,
+        fastModeOverrides: {},
       };
       await onDone(cfg);
     } catch (e) {

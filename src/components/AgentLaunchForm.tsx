@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { Spinner } from "./common";
-import { ModelPicker, ReasoningPicker } from "./ModelPicker";
+import {
+  FastPicker,
+  ModelPicker,
+  ReasoningPicker,
+} from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
 
 /**
@@ -60,6 +64,7 @@ export function AgentLaunchForm({
         </button>
         <ModelPicker value={model} onChange={setModel} flowKind={flowKind} />
         <ReasoningPicker flowKind={flowKind} />
+        <FastPicker flowKind={flowKind} models={[model]} />
         <button className="small" onClick={onClose}>
           Cancel
         </button>

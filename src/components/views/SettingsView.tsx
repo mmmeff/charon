@@ -35,7 +35,11 @@ import type {
  SkillSelection,
 } from "../../types";
 import { Badge, Spinner } from "../common";
-import { ModelPicker } from "../ModelPicker";
+import {
+ FastPicker,
+ ModelPicker,
+ ReasoningPicker,
+} from "../ModelPicker";
 import { PromptInput } from "../PromptInput";
 import { PrReviewFilterBuilder } from "../PrReviewFilterBuilder";
 import { ShortcutRecorder } from "../ShortcutRecorder";
@@ -363,6 +367,12 @@ export function SettingsView() {
        <h3>Default models (global)</h3>
        {(() => {
         const hasReasoning = global.reasoningOptions.length > 0;
+        const hasFast = global.fastModels.length > 0;
+        const defaultAxes = [
+         "model",
+         hasReasoning ? "reasoning" : "",
+         hasFast ? "speed" : "",
+        ].filter(Boolean).join(" + ");
         const reasoningSelect = (value: string, onChange: (v: string) => void, inheritLabel: string) =>
          hasReasoning ? (
           <select value={value} title="Reasoning effort" onChange={(e) => onChange(e.target.value)}>
@@ -380,7 +390,7 @@ export function SettingsView() {
         return (
          <>
           <label className="field">
-           <span>Global default {hasReasoning ? "model + reasoning" : "model"}</span>
+           <span>Global default {defaultAxes}</span>
            <div className="row" style={{ gap: 6 }}>
             <select
              value={global.defaultModel}
@@ -399,16 +409,19 @@ export function SettingsView() {
              (v) => void saveGlobal({ ...global, reasoningEffort: v }),
              "reasoning: harness default"
             )}
+            <FastPicker models={[global.defaultModel]} />
            </div>
            <small>
             Applies to every flow in every repo unless overridden — by a per-flow default
             below or an explicit pick in a launch form.
             {hasReasoning && " Reasoning is a separate axis on harnesses that expose it (e.g. Codex)."}
+            {hasFast && " Fast uses Codex's priority service tier and increased usage."}
            </small>
           </label>
           <p className="subtle" style={{ maxWidth: "76ch" }}>
            Every AI-driven flow, with what you can steer at launch. Set a per-flow default to
-           route a flow to a different model{hasReasoning ? " or reasoning effort" : ""} without
+           route a flow to a different model{hasReasoning ? " or reasoning effort" : ""}
+           {hasFast ? " or speed" : ""} without
            touching the launch forms.
           </p>
           {FLOW_MODEL_CATALOG.map((f) => {
@@ -453,6 +466,7 @@ export function SettingsView() {
                },
                `reasoning: ${globalReasoningLabel} (default)`
               )}
+              <FastPicker flowKind={f.kind} models={[current]} />
              </div>
             </label>
            );
@@ -683,16 +697,23 @@ export function SettingsView() {
        {config.ciAutoAnalysis !== false && (
         <label className="field">
          <span>Analysis model</span>
-         <ModelPicker
-          value={global.modelOverrides?.["ci_analysis"] ?? ""}
-          onChange={(m) => {
-           const next = { ...(global.modelOverrides ?? {}) };
-           if (m) next["ci_analysis"] = m;
-           else delete next["ci_analysis"];
-           void saveGlobal({ ...global, modelOverrides: next });
-          }}
-          flowKind="ci_analysis"
-         />
+         <div className="row" style={{ gap: 6 }}>
+          <ModelPicker
+           value={global.modelOverrides?.["ci_analysis"] ?? ""}
+           onChange={(m) => {
+            const next = { ...(global.modelOverrides ?? {}) };
+            if (m) next["ci_analysis"] = m;
+            else delete next["ci_analysis"];
+            void saveGlobal({ ...global, modelOverrides: next });
+           }}
+           flowKind="ci_analysis"
+          />
+          <ReasoningPicker flowKind="ci_analysis" />
+          <FastPicker
+           flowKind="ci_analysis"
+           models={[global.modelOverrides?.["ci_analysis"] ?? ""]}
+          />
+         </div>
          <small>
           The model behind each failure summary. A fast, cheap model is usually right here —
           leave it on the default to inherit your global default. (Also editable in Agent →

@@ -4,6 +4,7 @@ import {
  isMethodNotFound,
  labeledModels,
  modelConfigOption,
+ prepareCodexBridgeCatalog,
  probeHarness,
  reasoningConfigOption,
  sessionModels,
@@ -12,6 +13,7 @@ import {
  type AcpSessionUpdate,
 } from "./acp";
 import { isHiddenAgentRun, isVisibleAgentRun } from "./agent-runs";
+import { codexBridgeArgs } from "./codexModels";
 import { activeHarness } from "./defaults";
 import { native } from "./tauri";
 import { notify } from "./notify";
@@ -395,11 +397,38 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
    const harness = activeHarness(useGlobalConfig.getState().config!);
    const command = harness?.command || opts.binary;
    const args = harness?.args ?? ["acp"];
+   const cfg = useGlobalConfig.getState().config;
+   const reasoning =
+    cfg?.reasoningOverrides?.[opts.kind] || cfg?.reasoningEffort || "";
+   const fastMode =
+    cfg &&
+    Object.prototype.hasOwnProperty.call(
+     cfg.fastModeOverrides ?? {},
+     opts.kind,
+    )
+     ? cfg.fastModeOverrides[opts.kind]
+     : cfg?.fastMode ?? false;
+   const fast =
+    fastMode &&
+    !!opts.model &&
+    (cfg?.fastModels ?? []).includes(opts.model);
+   const codexCatalog = await prepareCodexBridgeCatalog(
+    command,
+    args,
+    sessionCwd,
+   );
+   const launchArgs = codexBridgeArgs(
+    command,
+    args,
+    reasoning,
+    fast,
+    codexCatalog.modelCatalogPath,
+   );
    // opencode swallows provider errors silently over ACP — enable the stall
    // diagnostic that tails its own log for a matching `stream error`.
    const isOpencode = harness?.id === "opencode" || command === "opencode";
          
-   await conn.spawn(command, args, opts.cwd);
+   await conn.spawn(command, launchArgs, opts.cwd);
    await conn.initialize();
    const ns = await conn.newSession(sessionCwd);
    const sessionId = ns.sessionId;
@@ -478,9 +507,6 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
    }
    // reasoning effort — a separate config-option axis where the harness
    // exposes it (codex). Per-flow override > global default.
-   const cfg = useGlobalConfig.getState().config;
-   const reasoning =
-    cfg?.reasoningOverrides?.[opts.kind] || cfg?.reasoningEffort;
    const rc = reasoningConfigOption(ns);
    if (reasoning && rc && rc.options!.some((o) => o.value === reasoning)) {
     await conn.setConfigOption(sessionId, rc.id, reasoning);
@@ -753,10 +779,9 @@ export function cleanResultText(text: string): string {
 }
 
 /**
- * Refresh the available-model list from the ACTIVE harness over ACP (the
- * model list `session/new` returns). Harness-agnostic: cursor exposes models
- * here, others (e.g. opencode) don't — those keep an empty list and run on
- * their own default. Called on each window's startup so the picker is fresh.
+ * Refresh the available-model list from the ACTIVE harness. ACP `session/new`
+ * is the primary source; Codex bridge probes supplement its list from the
+ * installed CLI. Called on each window's startup so the picker is fresh.
  */
 export async function refreshModels(
  global: import("../types").GlobalConfig,
@@ -808,6 +833,15 @@ export async function refreshModels(
  const reasoningOverrides: Record<string, string> = {};
  for (const [k, v] of Object.entries(global.reasoningOverrides ?? {}))
   if (reasoningOptions.includes(v)) reasoningOverrides[k] = v;
+ const fastModels = (probe.fastModels ?? []).filter((model) =>
+  models.includes(model),
+ );
+ const fastMode = fastModels.length > 0
+  ? global.fastMode ?? false
+  : false;
+ const fastModeOverrides = fastModels.length > 0
+  ? { ...(global.fastModeOverrides ?? {}) }
+  : {};
 
  const next = {
   ...global,
@@ -819,6 +853,9 @@ export async function refreshModels(
   reasoningEffort,
   modelOverrides,
   reasoningOverrides,
+  fastModels,
+  fastMode,
+  fastModeOverrides,
  };
  const sig = (c: import("../types").GlobalConfig) =>
   JSON.stringify([
@@ -830,6 +867,9 @@ export async function refreshModels(
    c.reasoningEffort,
    c.modelOverrides,
    c.reasoningOverrides,
+   c.fastModels,
+   c.fastMode,
+   c.fastModeOverrides,
   ]);
  if (sig(next) !== sig(global)) await save(next);
 }

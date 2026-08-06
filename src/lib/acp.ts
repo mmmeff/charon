@@ -1,5 +1,18 @@
-import { native, type AgentStreamEvent } from "./tauri";
+import {
+ native,
+ type AgentStreamEvent,
+ type ExecResult,
+} from "./tauri";
 import { uid } from "./template";
+import {
+ codexAcpModelCatalog,
+ codexBridgeArgs,
+ commonCodexReasoningLevels,
+ fastCodexModels,
+ isCodexBridge,
+ listedCodexModels,
+ mergeModelCatalogs,
+} from "./codexModels";
 
 /**
  * Agent Client Protocol (ACP) client — the host side of agentclientprotocol.com.
@@ -648,7 +661,64 @@ export interface HarnessProbe {
  currentId?: string;
  /** reasoning-effort options, if the harness exposes them (codex) */
  reasoning?: { options: AcpModel[]; currentId?: string };
+ /** model ids that support Codex's Fast service tier */
+ fastModels?: string[];
  modes: AcpMode[];
+}
+
+/**
+ * codex-acp 0.16.0 links an older Codex model manager. Its ACP picker can
+ * reject the installed CLI's newer catalog and lose model metadata. Persist
+ * a compatible copy for the bridge launch; use the same source for Charon's
+ * model, reasoning, and Fast controls.
+ */
+export async function prepareCodexBridgeCatalog(
+ command: string,
+ args: string[],
+ cwd: string,
+ models: AcpModel[] = [],
+): Promise<{
+ models: AcpModel[];
+ reasoning?: { options: AcpModel[] };
+ fastModels?: string[];
+ modelCatalogPath?: string;
+}> {
+ if (!isCodexBridge(command, args)) return { models };
+ let result: ExecResult;
+ try {
+  result = await native.runExec(
+   "codex",
+   ["debug", "models"],
+   cwd,
+  );
+ } catch {
+  return { models };
+ }
+ if (result.code !== 0) return { models };
+
+ const reasoning = commonCodexReasoningLevels(result.stdout);
+ const compatibleCatalog = codexAcpModelCatalog(result.stdout);
+ let modelCatalogPath: string | undefined;
+ if (compatibleCatalog) {
+  const relativePath = "harnesses/codex-acp-models.json";
+  await native.saveBlob(relativePath, compatibleCatalog);
+  const dataDir = (await native.appDataDir()).replace(/[\\/]+$/, "");
+  const separator = dataDir.includes("\\") ? "\\" : "/";
+  modelCatalogPath =
+   `${dataDir}${separator}${relativePath.replaceAll("/", separator)}`;
+ }
+ return {
+  models: mergeModelCatalogs(
+   models,
+   listedCodexModels(result.stdout),
+  ),
+  reasoning:
+   reasoning.length > 0
+    ? { options: reasoning }
+    : undefined,
+  fastModels: fastCodexModels(result.stdout),
+  modelCatalogPath,
+ };
 }
 
 /** Human-readable verify result. */
@@ -662,8 +732,9 @@ export function summarizeProbe(p: HarnessProbe): string {
 
 /**
  * One-shot connectivity check for a harness: spawn, initialize, open a session
- * in the given cwd, and report whether it speaks ACP plus any model list it
- * exposes. Used by onboarding's live verify and by the startup model refresh.
+ * in the given cwd, and report whether it speaks ACP plus its available model
+ * list. Codex bridge probes also merge the installed CLI's fresher catalog.
+ * Used by onboarding's live verify and by the startup model refresh.
  */
 export async function probeHarness(
  command: string,
@@ -678,10 +749,22 @@ export async function probeHarness(
  try {
   const result = await Promise.race([
    (async (): Promise<HarnessProbe> => {
-    await conn.spawn(command, args, cwd);
+    const catalog = await prepareCodexBridgeCatalog(
+     command,
+     args,
+     cwd,
+    );
+    const probeArgs = codexBridgeArgs(
+     command,
+     args,
+     "",
+     false,
+     catalog.modelCatalogPath,
+    );
+    await conn.spawn(command, probeArgs, cwd);
     await conn.initialize();
     const ns = await conn.newSession(cwd);
-    const { models, currentId } = sessionModels(ns);
+    const sessionModelList = sessionModels(ns);
     const rc = reasoningConfigOption(ns);
     const reasoning = rc
      ? {
@@ -691,12 +774,16 @@ export async function probeHarness(
       })),
       currentId: rc.currentValue,
      }
-     : undefined;
+     : catalog.reasoning;
     return {
      ok: true,
-     models,
-     currentId,
+     models: mergeModelCatalogs(
+      sessionModelList.models,
+      catalog.models,
+     ),
+     currentId: sessionModelList.currentId,
      reasoning,
+     fastModels: catalog.fastModels,
      modes: ns.modes?.availableModes ?? [],
     };
    })(),

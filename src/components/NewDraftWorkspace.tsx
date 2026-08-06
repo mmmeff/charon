@@ -4,7 +4,11 @@ import { startSwarm } from "../lib/swarm";
 import { useAgentStore, useSwarmStore, useUiStore } from "../lib/store";
 import { uid } from "../lib/template";
 import { Section, Spinner } from "./common";
-import { ModelPicker, ReasoningPicker } from "./ModelPicker";
+import {
+  FastPicker,
+  ModelPicker,
+  ReasoningPicker,
+} from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
 import { SwarmHost } from "./SwarmHost";
 import { useFlow } from "./flow";
@@ -144,6 +148,10 @@ export function NewDraftWorkspace({
               <div className="composer-footer">
                 <div className="composer-controls">
                   <ReasoningPicker flowKind="draft_create" />
+                  <FastPicker
+                    flowKind="draft_create"
+                    models={agents.map((agent) => agent.model)}
+                  />
                   <div className="composer-agents">
                     {agents.map((a) => (
                       <div key={a.id} className="composer-agent-row">

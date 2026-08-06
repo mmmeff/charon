@@ -15,6 +15,9 @@ export interface HarnessModelPrefs {
   reasoningLabels: Record<string, string>;
   reasoningEffort: string;
   reasoningOverrides: Record<string, string>;
+  fastModels: string[];
+  fastMode: boolean;
+  fastModeOverrides: Record<string, boolean>;
 }
 
 /** An ACP agent harness: a command that speaks Agent Client Protocol. */
@@ -67,6 +70,12 @@ export interface GlobalConfig {
   modelOverrides: Record<string, string>;
   /** Per-flow reasoning-effort overrides, keyed by AgentKind; "" = global default */
   reasoningOverrides: Record<string, string>;
+  /** Model ids that support Codex's Fast service tier */
+  fastModels: string[];
+  /** Global Fast default; false uses the provider's standard service tier */
+  fastMode: boolean;
+  /** Per-flow Fast overrides. Missing keys inherit the global default. */
+  fastModeOverrides: Record<string, boolean>;
   /** Per-harness saved model selections, keyed by harness id. The flat model
    *  fields above mirror modelPrefs[activeHarness]; switching harness swaps
    *  them so each agent remembers its own default / overrides / reasoning. */

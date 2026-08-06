@@ -11,7 +11,11 @@ import { AgentCard } from "./AgentCard";
 import { TypingIndicator } from "./amicro/typing-indicator";
 import { Badge, Spinner } from "./common";
 import { Markdown } from "./Markdown";
-import { ModelPicker, ReasoningPicker } from "./ModelPicker";
+import {
+  FastPicker,
+  ModelPicker,
+  ReasoningPicker,
+} from "./ModelPicker";
 import { PromptInput } from "./PromptInput";
 import { SwarmHost } from "./SwarmHost";
 import { useFlow } from "./flow";
@@ -246,6 +250,10 @@ export function Composer({
                 <>
                   <ReasoningPicker
                     flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+                  />
+                  <FastPicker
+                    flowKind={mode === "review" ? "review" : mode === "edit" ? "draft_edit" : "draft_question"}
+                    models={agents.map((agent) => agent.model)}
                   />
                   <div className="composer-agents">
                     {agents.map((a) => (
@@ -508,6 +516,7 @@ function FollowUpForm({ pr, rootRunId }: { pr: PrSummary; rootRunId: string }) {
         <div className="composer-controls">
           <ModelPicker value={model} onChange={setModel} flowKind="draft_question" />
           <ReasoningPicker flowKind="draft_question" />
+          <FastPicker flowKind="draft_question" models={[model]} />
         </div>
         <div className="composer-actions">
           <button className="small primary" disabled={!canSubmit} onClick={() => void submit()}>
