@@ -16,6 +16,8 @@ import { DiffCommentThread, PrActivityPanel, PrDescription, PrHeroRail, PrLabels
 import { ProposalCard } from "./ProposalCard";
 import { PrHeroSidePanel } from "./PrStackDrawer";
 import { useFlow } from "./flow";
+import { UltraReviewWorkspace } from "./UltraReviewWorkspace";
+import { ultraReviewModeForPullRequest } from "../lib/ultrareview-session";
 
 /**
  * Shared PR workspace for the user's own PRs (Drafts and Open). All agent
@@ -30,6 +32,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
   const proposals = useRepoStore((s) => s.proposals);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [diffErr, setDiffErr] = useState("");
+  const [ultraOpen, setUltraOpen] = useState(false);
   const mainRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   useScrolledPrTitle(mainRef, pr);
@@ -146,6 +149,26 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
       </span>
     </>
   );
+  const ultraMode = ultraReviewModeForPullRequest({
+    viewerLogin: ctx.gh.login,
+    authorLogin: pr.author,
+    repositoryFullName: ctx.repo,
+    headRepositoryFullName: pr.headRepoFullName,
+  });
+
+  if (ultraOpen) {
+    return (
+      <UltraReviewWorkspace
+        pr={pr}
+        mode={ultraMode}
+        files={files}
+        filesError={diffErr}
+        onRetryFiles={() => void loadDiff()}
+        viewedKey={`prc-viewed-${ctx.repo}-${pr.number}`}
+        onLeave={() => setUltraOpen(false)}
+      />
+    );
+  }
 
   return (
     <div className="workspace">
@@ -205,6 +228,35 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           </PrHeroSidePanel>
 
           {/* drive agents: ask / change / review + their output */}
+          <section className="ultra-entry-banner" data-mode={ultraMode}>
+            <div>
+              <span className="u-mark">
+                {ultraMode === "author"
+                  ? "AUTHOR READINESS"
+                  : "ULTRAREVIEW"}
+              </span>
+              <h3>
+                {ultraMode === "author"
+                  ? "Prepare this change for another engineer."
+                  : "Read this change in causal order."}
+              </h3>
+              <p>
+                {ultraMode === "author"
+                  ? "Intent, tests, complexity, rollout, cleanup."
+                  : "Chapters, focused evidence, explicit coverage."}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setUltraOpen(true)}
+            >
+              {ultraMode === "author"
+                ? "Begin author review"
+                : "Enter UltraReview"}
+            </button>
+          </section>
+
           <Section>
             <Composer pr={pr} modes={consoleModes} reviewKind="self" />
             <FindingsStrip pr={pr} />

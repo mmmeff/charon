@@ -22,6 +22,7 @@ import {
  resolveShortcutMap,
 } from "../lib/shortcuts";
 import { native } from "../lib/tauri";
+import { useUltraReviewStore } from "../lib/ultrareview-store";
 import { navigateToPr } from "../lib/nav";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { timeAgo, useNow } from "../lib/ui";
@@ -181,6 +182,7 @@ export function RepoApp({ repo }: { repo: string }) {
   // statuses and re-leases held worktrees accordingly (ADR-0003 hydrate order).
   void initAgentPersistence(repo).then((c) => cleanups.push(c));
   void initSwarmPersistence(repo).then((c) => cleanups.push(c));
+  void useUltraReviewStore.getState().init(repo);
   return () => cleanups.forEach((c) => c());
   // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [repo]);

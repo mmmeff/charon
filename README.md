@@ -68,6 +68,24 @@ confidence, and editable body. Toggle comments, rewrite, change verdict, submit 
 
 <img src="docs/review.png" alt="Review view: proposed inline comments with severity and confidence, anchored on the diff" width="100%"/>
 
+### Reviews a change as a story
+
+A file list is not an explanation.
+
+UltraReview turns a teammate pull request into an ordered review plan, then opens one persistent workbench.
+
+The chapter rail, focused evidence, notes, progress, and review controls stay in place.
+
+Review, Raw Diff, and Closing change the center canvas instead of sending you to different screens.
+
+The model organizes the evidence.
+
+You choose the verdict and inspect the exact GitHub payload before submission.
+
+Read the [UltraReview product contract](docs/ultrareview.md).
+
+Read the [implementation plan](docs/ultrareview-implementation-plan.md).
+
 ### Shows every run
 
 All of it, in the open: plan, tool calls, prompt, model, working directory, and streamed output in

@@ -25,11 +25,14 @@ import { BabysitView } from "../../src/components/views/BabysitView";
 import { DraftsView } from "../../src/components/views/DraftsView";
 import { ReviewView } from "../../src/components/views/ReviewView";
 import { SettingsView } from "../../src/components/views/SettingsView";
+import { UltraReviewWorkspace } from "../../src/components/UltraReviewWorkspace";
 import { parseUnifiedDiff } from "../../src/lib/diff";
 import { RepoPoller, usePrData } from "../../src/lib/events";
 import type { FlowContext } from "../../src/lib/flows";
 import { GitHubClient } from "../../src/lib/github";
 import { useAgentStore, useGlobalConfig, useRepoStore } from "../../src/lib/store";
+import { useUltraReviewStore } from "../../src/lib/ultrareview-store";
+import type { PrSummary, UltraReviewArtifact } from "../../src/types";
 import {
   checks,
   comments,
@@ -42,11 +45,20 @@ import {
   REPO,
   runs,
 } from "./fixtures";
+import {
+  ultraReviewPreviewArtifact,
+  type UltraReviewPreviewVariant,
+} from "./ultrareview-fixtures";
+
+let previewUltraArtifact: UltraReviewArtifact;
+let previewUltraPr: PrSummary;
+let previewUltraVariant: UltraReviewPreviewVariant = "ready";
 
 async function boot() {
   const global = await useGlobalConfig.getState().load();
   if (!global) throw new Error("preview: global config fixture did not load");
   await useRepoStore.getState().init(REPO);
+  await useUltraReviewStore.getState().init(REPO);
 
   const gh = new GitHubClient(global);
   const repoConfig = useRepoStore.getState().config;
@@ -74,6 +86,46 @@ async function boot() {
     runs: Object.fromEntries(allRuns.map((r) => [r.id, r])),
     order: allRuns.map((r) => r.id),
   });
+
+  const ultraVariants: Record<string, UltraReviewPreviewVariant> = {
+    ultra: "ready",
+    "ultra-loading": "loading",
+    "ultra-progressive": "progressive",
+    "ultra-invalid": "invalid",
+    "ultra-resumed": "resumed",
+    "ultra-plan": "complex",
+    "ultra-partial": "partial",
+    "ultra-author": "author",
+    "ultra-delta": "delta",
+    "ultra-review": "ready",
+    "ultra-raw": "ready",
+    "ultra-closing": "ready",
+    "ultra-merged": "ready",
+    "ultra-diff-error": "ready",
+  };
+  previewUltraVariant = ultraVariants[surface ?? ""] ?? "ready";
+  previewUltraPr = previewUltraVariant === "author"
+    ? prs[0]
+    : prs[3];
+  if (surface === "ultra-merged") {
+    previewUltraPr = {
+      ...previewUltraPr,
+      state: "closed",
+      merged: true,
+    };
+  }
+  previewUltraArtifact = ultraReviewPreviewArtifact(
+    previewUltraPr,
+    previewUltraVariant,
+  );
+  await useUltraReviewStore.getState().put(
+    previewUltraArtifact,
+  );
+  if (previewUltraVariant === "invalid") {
+    useUltraReviewStore.setState({
+      rejectedArtifactKeys: ["ultrareview:v99:quarantined"],
+    });
+  }
 
   const ctx: FlowContext = {
     gh,
@@ -169,6 +221,56 @@ function Diff() {
   );
 }
 
+function UltraReviewPreview() {
+  const requestedSurface =
+    new URLSearchParams(window.location.search).get("surface");
+  const initialSurface = requestedSurface === "ultra-review"
+    || requestedSurface === "ultra-merged"
+    ? "review" as const
+    : requestedSurface === "ultra-raw"
+      ? "raw" as const
+      : requestedSurface === "ultra-closing"
+        ? "ledger" as const
+        : previewUltraVariant === "loading"
+      ? "generation" as const
+      : previewUltraVariant === "resumed"
+          ? "review" as const
+          : previewUltraVariant === "author"
+            ? "ledger" as const
+            : "intro" as const;
+  return (
+    <UltraReviewWorkspace
+      pr={previewUltraPr}
+      mode={
+        previewUltraVariant === "author"
+          ? "author"
+          : "teammate"
+      }
+      files={
+        requestedSurface === "ultra-diff-error"
+          ? null
+          : parseUnifiedDiff(diffText)
+      }
+      filesError={
+        requestedSurface === "ultra-diff-error"
+          ? "Native diff proxy returned 502 for this pull request."
+          : undefined
+      }
+      onRetryFiles={
+        requestedSurface === "ultra-diff-error"
+          ? () => undefined
+          : undefined
+      }
+      remoteViewed={{
+        map: { "src/lib/worktree.ts": "VIEWED" },
+        toggle: () => undefined,
+      }}
+      initialSurface={initialSurface}
+      onLeave={() => undefined}
+    />
+  );
+}
+
 const SURFACES: Record<string, () => React.ReactElement> = {
   kitchen: () => <Kitchen />,
   agents: () => <Agents />,
@@ -183,6 +285,20 @@ const SURFACES: Record<string, () => React.ReactElement> = {
   pr: () => <PrWorkspace pr={prs[0]} variant="babysit" />,
   clean: () => <PrWorkspace pr={greenPr} variant="babysit" />,
   draft: () => <PrWorkspace pr={prs[2]} variant="draft" />,
+  ultra: () => <UltraReviewPreview />,
+  "ultra-loading": () => <UltraReviewPreview />,
+  "ultra-progressive": () => <UltraReviewPreview />,
+  "ultra-invalid": () => <UltraReviewPreview />,
+  "ultra-resumed": () => <UltraReviewPreview />,
+  "ultra-plan": () => <UltraReviewPreview />,
+  "ultra-partial": () => <UltraReviewPreview />,
+  "ultra-author": () => <UltraReviewPreview />,
+  "ultra-delta": () => <UltraReviewPreview />,
+  "ultra-review": () => <UltraReviewPreview />,
+  "ultra-raw": () => <UltraReviewPreview />,
+  "ultra-closing": () => <UltraReviewPreview />,
+  "ultra-merged": () => <UltraReviewPreview />,
+  "ultra-diff-error": () => <UltraReviewPreview />,
 };
 
 boot().then((value) => {

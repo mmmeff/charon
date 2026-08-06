@@ -347,6 +347,40 @@ export class GitHubClient {
     return resp.body;
   }
 
+  /** Commit metadata in pull-request order for narrative review context. */
+  async listPullCommits(repo: string, number: number): Promise<CommitInfo[]> {
+    const commits: any[] = [];
+    for (let page = 1; ; page++) {
+      const next = await this.json<any[]>(
+        "GET",
+        `/repos/${repo}/pulls/${number}/commits?per_page=100&page=${page}`,
+      );
+      commits.push(...next);
+      if (next.length < 100) break;
+    }
+    return commits.map((commit) => ({
+      sha: String(commit.sha ?? ""),
+      message: String(commit.commit?.message ?? ""),
+      author: String(
+        commit.author?.login ||
+        commit.commit?.author?.name ||
+        commit.committer?.login ||
+        commit.commit?.committer?.name ||
+        "",
+      ),
+      date:
+        Date.parse(
+          commit.commit?.author?.date ??
+          commit.commit?.committer?.date ??
+          "",
+        ) || 0,
+      additions: Number(commit.stats?.additions ?? 0),
+      deletions: Number(commit.stats?.deletions ?? 0),
+      filesChanged: Array.isArray(commit.files) ? commit.files.length : 0,
+      url: String(commit.html_url ?? ""),
+    }));
+  }
+
   async getFileText(repo: string, path: string, ref: string): Promise<string> {
     const encodedPath = path.split("/").map(encodeURIComponent).join("/");
     const resp = await this.raw("GET", `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`, {

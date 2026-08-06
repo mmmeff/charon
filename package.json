@@ -12,6 +12,7 @@
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "test": "node --test tests/unit/*.test.mjs",
     "integ": "node --test --test-force-exit tests/integration/acp-harnesses.test.mjs"
   },
   "dependencies": {

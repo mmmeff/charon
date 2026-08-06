@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { parseUnifiedDiff } from "../../lib/diff";
 import { usePrData } from "../../lib/events";
+import {
+  currentPrVersionValue,
+  prVersionKey,
+} from "../../lib/pr-version";
 import { stackedPrList, type PrStackRenderItem } from "../../lib/pr-stacks";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
@@ -19,6 +23,22 @@ import { InlineCommentEditor, ReviewStrip } from "../ProposalCard";
 import { PrHeroSidePanel } from "../PrStackDrawer";
 import { useFlow } from "../flow";
 import { PrStackCard } from "../PrStackList";
+import { UltraReviewWorkspace } from "../UltraReviewWorkspace";
+
+interface VersionedReviewValue<Value> {
+  key: string;
+  value: Value;
+}
+
+interface ReviewDiffValue {
+  files: FileDiff[] | null;
+  error: string;
+}
+
+interface ReviewViewedValue {
+  id: string;
+  states: Record<string, string>;
+}
 
 /**
  * Review: teammate PRs needing my attention. Runs the automated self-review
@@ -26,20 +46,140 @@ import { PrStackCard } from "../PrStackList";
  * tweaking, then submits the final review — only on explicit approval.
  */
 export function ReviewView() {
-  const { prStacks } = useFlow();
+  const { ctx, prStacks } = useFlow();
   const queue = usePrData((s) => s.reviewQueue);
   const lastPollAt = usePrData((s) => s.lastPollAt);
   const loading = lastPollAt === null;
   const selected = useUiStore((s) => s.focusedPr["review"] ?? null);
   const setSelected = (n: number) => useUiStore.getState().setFocusedPr("review", n);
   const [sort, setSort] = useState<SortKey>("updated");
+  const [loadedDiff, setLoadedDiff] =
+    useState<VersionedReviewValue<ReviewDiffValue> | null>(null);
+  const [diffReload, setDiffReload] = useState(0);
+  const [ultraOpen, setUltraOpen] = useState(false);
+  const [loadedViewedState, setLoadedViewedState] =
+    useState<VersionedReviewValue<ReviewViewedValue> | null>(null);
   const stacked = stackedPrList(queue, prStacks, sort);
   const pr = stacked.find((item) => item.pr.number === selected)?.pr ?? stacked[0]?.pr ?? null;
+  const activeDataKey = pr ? prVersionKey(pr) : null;
+  const diff = currentPrVersionValue(loadedDiff, pr);
+  const files = diff?.files ?? null;
+  const error = diff?.error ?? "";
+  const viewedState = currentPrVersionValue(
+    loadedViewedState,
+    pr
+  );
 
   useEffect(() => {
     useUiStore.getState().setVisiblePrWorkspace("review", pr?.number ?? null);
     return () => useUiStore.getState().setVisiblePrWorkspace("review", null);
   }, [pr?.number]);
+
+  useEffect(() => {
+    setUltraOpen(false);
+    if (!pr) {
+      setLoadedDiff(null);
+      setLoadedViewedState(null);
+      return;
+    }
+
+    let cancelled = false;
+    const key = prVersionKey(pr);
+    setLoadedDiff({
+      key,
+      value: {
+        files: null,
+        error: "",
+      },
+    });
+    setLoadedViewedState(null);
+    void ctx.gh
+      .getPullDiff(ctx.repo, pr.number)
+      .then((diff) => {
+        if (cancelled) return;
+        setLoadedDiff({
+          key,
+          value: {
+            files: parseUnifiedDiff(diff),
+            error: "",
+          },
+        });
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        setLoadedDiff({
+          key,
+          value: {
+            files: null,
+            error: String(caught),
+          },
+        });
+      });
+    void ctx.gh
+      .viewedFiles(ctx.repo, pr.number)
+      .then((next) => {
+        if (cancelled) return;
+        setLoadedViewedState({
+          key,
+          value: next,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setLoadedViewedState(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    ctx.gh,
+    ctx.repo,
+    diffReload,
+    pr?.headSha,
+    pr?.number,
+  ]);
+
+  const toggleFileViewed = (path: string, viewed: boolean) => {
+    if (
+      !activeDataKey ||
+      !viewedState ||
+      loadedViewedState?.key !== activeDataKey
+    ) {
+      return;
+    }
+    const previous = viewedState.states[path];
+    const viewedId = viewedState.id;
+    setLoadedViewedState((current) => {
+      if (current?.key !== activeDataKey) return current;
+      return {
+        ...current,
+        value: {
+          ...current.value,
+          states: {
+            ...current.value.states,
+            [path]: viewed ? "VIEWED" : "UNVIEWED",
+          },
+        },
+      };
+    });
+    void ctx.gh
+      .setFileViewed(viewedId, path, viewed)
+      .catch(() => {
+        setLoadedViewedState((current) => {
+          if (current?.key !== activeDataKey) return current;
+          return {
+            ...current,
+            value: {
+              ...current.value,
+              states: {
+                ...current.value.states,
+                [path]: previous,
+              },
+            },
+          };
+        });
+      });
+  };
 
   if (queue.length === 0) {
     return (
@@ -48,6 +188,28 @@ export function ReviewView() {
           Open pull requests by other people appear here when they match your To Review filters.
         </EmptyState>
       </div>
+    );
+  }
+
+  if (ultraOpen && pr) {
+    return (
+      <UltraReviewWorkspace
+        pr={pr}
+        mode="teammate"
+        files={files}
+        filesError={error}
+        onRetryFiles={() =>
+          setDiffReload((current) => current + 1)}
+        remoteViewed={
+          viewedState
+            ? {
+                map: viewedState.states,
+                toggle: toggleFileViewed,
+              }
+            : undefined
+        }
+        onLeave={() => setUltraOpen(false)}
+      />
     );
   }
 
@@ -113,25 +275,45 @@ export function ReviewView() {
         <Stagger>{repositoryPrs.map((item) => <StaggerItem key={item.pr.number}>{card(item)}</StaggerItem>)}</Stagger>
       </Sidebar>
       <FadeIn className="content" key={pr?.number ?? "none"} duration={0.35}>
-        {pr && <ReviewWorkspace key={pr.number} pr={pr} />}
+        {pr && (
+          <ReviewWorkspace
+            key={pr.number}
+            pr={pr}
+            files={files}
+            error={error}
+            viewedState={viewedState}
+            toggleFileViewed={toggleFileViewed}
+            onOpenUltraReview={() => setUltraOpen(true)}
+          />
+        )}
       </FadeIn>
     </div>
   );
 }
 
-function ReviewWorkspace({ pr }: { pr: PrSummary }) {
+function ReviewWorkspace({
+  pr,
+  files,
+  error,
+  viewedState,
+  toggleFileViewed,
+  onOpenUltraReview,
+}: {
+  pr: PrSummary;
+  files: FileDiff[] | null;
+  error: string;
+  viewedState: {
+    id: string;
+    states: Record<string, string>;
+  } | null;
+  toggleFileViewed: (path: string, viewed: boolean) => void;
+  onOpenUltraReview: () => void;
+}) {
   const { ctx, poller } = useFlow();
   const proposals = useRepoStore((s) => s.proposals);
   const upsert = useRepoStore((s) => s.upsertProposal);
   const comments = usePrData((s) => s.comments[pr.number]) ?? [];
   const checks = usePrData((s) => s.checks[pr.number]) ?? [];
-  const [files, setFiles] = useState<FileDiff[] | null>(null);
-  const [error, setError] = useState("");
-  // GitHub's per-file viewed state — shared with github.com's own UI, and
-  // GitHub flips files back to unviewed (DISMISSED) when they change
-  const [viewedState, setViewedState] = useState<{ id: string; states: Record<string, string> } | null>(
-    null
-  );
   const mainRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   useScrolledPrTitle(mainRef, pr);
@@ -158,28 +340,6 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
       const target = openPulls.find((p) => p.number === n);
       if (target) window.open(target.url, "_blank", "noreferrer");
     }
-  };
-
-  useEffect(() => {
-    ctx.gh
-      .getPullDiff(ctx.repo, pr.number)
-      .then((d) => setFiles(parseUnifiedDiff(d)))
-      .catch((e) => setError(String(e)));
-    ctx.gh
-      .viewedFiles(ctx.repo, pr.number)
-      .then(setViewedState)
-      .catch(() => setViewedState(null)); // older GHE: feature silently absent
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pr.number, pr.headSha]);
-
-  const toggleFileViewed = (path: string, viewed: boolean) => {
-    if (!viewedState) return;
-    const prev = viewedState.states[path];
-    // optimistic; revert on failure
-    setViewedState((s) => s && { ...s, states: { ...s.states, [path]: viewed ? "VIEWED" : "UNVIEWED" } });
-    ctx.gh.setFileViewed(viewedState.id, path, viewed).catch(() => {
-      setViewedState((s) => s && { ...s, states: { ...s.states, [path]: prev } });
-    });
   };
 
   const reviewProposal = proposals.find(
@@ -319,6 +479,23 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
           </PrHeroSidePanel>
 
           {/* drive the review agent */}
+          <section className="ultra-entry-banner">
+            <div>
+              <span className="u-mark">NEW REVIEW PATH</span>
+              <h3>Understand the change in causal order.</h3>
+              <p>
+                Chapters, focused evidence, explicit coverage, one human verdict.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="primary"
+              onClick={onOpenUltraReview}
+            >
+              Enter UltraReview
+            </button>
+          </section>
+
           <Section>
             <Composer pr={pr} modes={consoleModes} reviewKind="teammate" />
             <RunResults pr={pr} />

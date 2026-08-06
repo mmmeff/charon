@@ -747,6 +747,16 @@ export interface FileDiff {
   lines: DiffLine[];
 }
 
+export interface ContextGapExpansion {
+ head: number;
+ tail: number;
+}
+
+export interface DiffViewerViewState {
+ collapsed: Record<string, boolean>;
+ expandedContext: Record<string, ContextGapExpansion>;
+}
+
 export interface LineSelection {
   path: string;
   side: "LEFT" | "RIGHT";
@@ -764,4 +774,651 @@ export interface Skill {
   source: "command" | "skill" | "builtin" | "user" | "shipped";
   path: string;
   content: string;
+}
+
+// ---------------------------------------------------------------------------
+// UltraReview
+// ---------------------------------------------------------------------------
+
+export const ULTRA_REVIEW_ARTIFACT_VERSION = 1 as const;
+
+export type UltraReviewArtifactVersion =
+ typeof ULTRA_REVIEW_ARTIFACT_VERSION;
+
+export interface UltraReviewArtifactIdentity {
+ repo: string;
+ prNumber: number;
+ baseSha: string;
+ headSha: string;
+}
+
+export type UltraReviewMode = "teammate" | "author";
+
+export type UltraReviewRisk =
+ | "none"
+ | "low"
+ | "medium"
+ | "high";
+
+export type StoryRisk = UltraReviewRisk;
+
+export type StoryReviewState =
+ | "pending"
+ | "active"
+ | "reviewed"
+ | "stale"
+ | "failed";
+
+export type StoryScope = {
+ changedLines: number;
+ files?: number;
+};
+
+export type StorySignal = {
+ risk?: StoryRisk;
+ state?: StoryReviewState;
+ scope?: StoryScope;
+ confidence?: number;
+ unresolvedFeedback?: number;
+};
+
+export type StoryBeat = StorySignal & {
+ id: string;
+ title: string;
+ objective?: string;
+};
+
+export type StoryChapter = StorySignal & {
+ id: string;
+ title: string;
+ purpose?: string;
+ before?: string;
+ after?: string;
+ dependencyChapterIds?: readonly string[];
+ beats: readonly StoryBeat[];
+};
+
+export type StorySystem = StorySignal & {
+ id: string;
+ title: string;
+ thesis?: string;
+ chapters: readonly StoryChapter[];
+};
+
+export type StoryThesis = StorySignal & {
+ title: string;
+ summary?: string;
+};
+
+export type StorySelectionHandlers = {
+ onSelectSystem?: (systemId: string) => void;
+ onSelectChapter?: (
+  systemId: string,
+  chapterId: string,
+ ) => void;
+ onSelectBeat?: (
+  systemId: string,
+  chapterId: string,
+  beatId: string,
+ ) => void;
+};
+
+export interface UltraReviewAnalysisPullRequest {
+ repo: string;
+ number: number;
+ title: string;
+ body: string;
+ author: string;
+ baseRef: string;
+ headRef: string;
+ baseSha: string;
+ headSha: string;
+}
+
+export interface UltraReviewAnalysisCheck {
+ name: string;
+ status: string;
+ conclusion?: string;
+ summary?: string;
+}
+
+export interface UltraReviewAnalysisComment {
+ id: number;
+ author: string;
+ body: string;
+ path?: string;
+ line?: number;
+ side?: "LEFT" | "RIGHT";
+ resolved?: boolean;
+}
+
+export interface UltraReviewAnalysisReview {
+ id: number;
+ author: string;
+ state: string;
+ body?: string;
+}
+
+export interface UltraReviewAnalysisTimelineEvent {
+ id: string;
+ type: string;
+ actor?: string;
+ summary?: string;
+}
+
+export interface UltraReviewAnalysisCommit {
+ sha: string;
+ message: string;
+ author?: string;
+}
+
+export interface UltraReviewContextFailure {
+ source:
+  | "pull-request"
+  | "diff"
+  | "checkout"
+  | "checks"
+  | "comments"
+  | "reviews"
+  | "timeline"
+  | "commits";
+ message: string;
+ retryable: boolean;
+}
+
+export interface UltraReviewAnalysisEvidence {
+ id: string;
+ kind: UltraReviewEvidenceKind;
+ change: UltraReviewEvidenceChange;
+ location: UltraReviewEvidenceLocation;
+ fingerprint: string;
+ content: string;
+ supportingReason?: string;
+}
+
+export interface UltraReviewCheckoutContext {
+ available: boolean;
+ root?: string;
+}
+
+export interface UltraReviewAnalysisInput {
+ mode: UltraReviewMode;
+ pullRequest: UltraReviewAnalysisPullRequest;
+ diff: string;
+ evidenceInventory: UltraReviewAnalysisEvidence[];
+ checks: UltraReviewAnalysisCheck[];
+ comments: UltraReviewAnalysisComment[];
+ reviews: UltraReviewAnalysisReview[];
+ timeline: UltraReviewAnalysisTimelineEvent[];
+ commits: UltraReviewAnalysisCommit[];
+ contextFailures: UltraReviewContextFailure[];
+ checkout: UltraReviewCheckoutContext;
+}
+
+export type UltraReviewFollowUpAction =
+ | "trace_callers"
+ | "explain_dependency"
+ | "find_relevant_tests"
+ | "question";
+
+export type UltraReviewDiagnosticOutcome =
+ | "success"
+ | "failure";
+
+export type UltraReviewDiagnosticFailureCategory =
+ | "cancelled"
+ | "context"
+ | "generation"
+ | "harness"
+ | "parse"
+ | "persistence"
+ | "submission"
+ | "unknown";
+
+export interface UltraReviewDiagnosticEntry {
+ stageId: string;
+ elapsedMs: number;
+ retryCount: number;
+ outcome: UltraReviewDiagnosticOutcome;
+ failureCategory: UltraReviewDiagnosticFailureCategory | null;
+}
+
+export interface UltraReviewScope {
+ changedLines: number;
+ files: number;
+}
+
+export type UltraReviewSourceKind =
+ | "author_stated"
+ | "code_observed"
+ | "ci_observed"
+ | "existing_feedback"
+ | "commit_history"
+ | "timeline_event"
+ | "model_inference"
+ | "predicted_behavior";
+
+export interface UltraReviewSourceClaim {
+ id: string;
+ kind: UltraReviewSourceKind;
+ claim: string;
+ evidenceIds: string[];
+}
+
+export type UltraReviewEvidenceKind =
+ | "changed"
+ | "supporting";
+
+export type UltraReviewEvidenceChange =
+ | "addition"
+ | "deletion"
+ | "modification"
+ | "rename"
+ | "binary"
+ | "whitespace"
+ | "context";
+
+export type UltraReviewEvidenceSide = "LEFT" | "RIGHT";
+
+export interface UltraReviewEvidenceLocation {
+ path: string;
+ oldPath?: string;
+ side: UltraReviewEvidenceSide;
+ startLine: number | null;
+ endLine: number | null;
+}
+
+export interface UltraReviewEvidence {
+ id: string;
+ kind: UltraReviewEvidenceKind;
+ change: UltraReviewEvidenceChange;
+ location: UltraReviewEvidenceLocation;
+ /** A content fingerprint supplied by the trusted diff inventory. */
+ fingerprint: string;
+ sourceClaimIds: string[];
+ supportingReason?: string;
+}
+
+export type UltraReviewCoverageAssignment =
+ | {
+    kind: "beat";
+    beatId: string;
+   }
+ | {
+    kind: "mechanical";
+    mechanicalChangeId: string;
+   }
+ | {
+    kind: "unmapped";
+    reason: string;
+   };
+
+export interface UltraReviewCoverageEntry {
+ evidenceId: string;
+ assignment: UltraReviewCoverageAssignment;
+}
+
+export interface UltraReviewMechanicalChange {
+ id: string;
+ title: string;
+ reason: string;
+ evidenceIds: string[];
+}
+
+export interface UltraReviewConcern {
+ id: string;
+ beatId: string;
+ question: string;
+ evidenceIds: string[];
+ sourceClaimIds: string[];
+ severity: Severity;
+}
+
+export interface UltraReviewBeat {
+ id: string;
+ title: string;
+ claim: string;
+ objective: string;
+ question: string | null;
+ order: number;
+ risk: UltraReviewRisk;
+ /** Model confidence in this grouping, from 0 through 100. */
+ confidence?: number;
+ evidenceIds: string[];
+ /**
+  * Evidence from the preceding pull request version that no longer exists in
+  * the current diff. Delta beats expose these ids for explicit acknowledgement;
+  * they never count as current changed-line coverage.
+  */
+ removedEvidenceIds?: string[];
+ sourceClaimIds: string[];
+}
+
+export type UltraReviewChapterKind =
+ | "narrative"
+ | "mechanical"
+ | "delta"
+ | "unmapped";
+
+export interface UltraReviewChapter {
+ id: string;
+ title: string;
+ purpose: string;
+ before: string;
+ after: string;
+ order: number;
+ risk: UltraReviewRisk;
+ /** Model confidence in this grouping, from 0 through 100. */
+ confidence?: number;
+ sourceClaimIds: string[];
+ dependencyChapterIds: string[];
+ beats: UltraReviewBeat[];
+ kind?: UltraReviewChapterKind;
+}
+
+export interface UltraReviewSystem {
+ id: string;
+ title: string;
+ thesis: string;
+ order: number;
+ risk: UltraReviewRisk;
+ /** Model confidence in this grouping, from 0 through 100. */
+ confidence?: number;
+ sourceClaimIds: string[];
+ scope: UltraReviewScope;
+ chapters: UltraReviewChapter[];
+}
+
+export interface UltraReviewGalaxy {
+  id: string;
+  thesis: string;
+  sourceClaimIds: string[];
+  systems: UltraReviewSystem[];
+}
+
+export type UltraReviewGenerationStatus =
+ | "idle"
+ | "running"
+ | "partial"
+ | "complete"
+ | "failed";
+
+export type UltraReviewGenerationStageStatus =
+ | "pending"
+ | "running"
+ | "complete"
+ | "failed";
+
+export interface UltraReviewGenerationStage {
+ id: string;
+ label: string;
+ status: UltraReviewGenerationStageStatus;
+ systemId: string | null;
+ error: string | null;
+}
+
+export type UltraReviewFailureScope =
+ | "artifact"
+ | "system"
+ | "chapter";
+
+interface UltraReviewGenerationFailureBase {
+ id: string;
+ stageId: string;
+ message: string;
+ retryable: boolean;
+ evidenceIds: string[];
+}
+
+export type UltraReviewGenerationFailure =
+ | UltraReviewGenerationFailureBase & {
+    scope: "artifact";
+    systemId: null;
+    chapterId: null;
+   }
+ | UltraReviewGenerationFailureBase & {
+    scope: "system";
+    systemId: string;
+    chapterId: null;
+   }
+ | UltraReviewGenerationFailureBase & {
+    scope: "chapter";
+    systemId: string;
+    chapterId: string;
+   };
+
+export interface UltraReviewGeneration {
+ status: UltraReviewGenerationStatus;
+ stages: UltraReviewGenerationStage[];
+ failures: UltraReviewGenerationFailure[];
+}
+
+export type UltraReviewBeatState =
+ | "pending"
+ | "reviewed"
+ | "stale";
+
+export type UltraReviewConcernDisposition =
+ | "dismissed"
+ | "verified"
+ | "promoted";
+
+export type UltraReviewNoteAnchor =
+ | {
+    kind: "beat";
+    beatId: string;
+   }
+ | {
+    kind: "line";
+    evidenceId: string;
+    path: string;
+    side: UltraReviewEvidenceSide;
+    startLine: number;
+    endLine: number;
+    headSha: string;
+   };
+
+export interface UltraReviewNote {
+ id: string;
+ body: string;
+ anchor: UltraReviewNoteAnchor;
+ createdAt: number;
+ /** Set when the anchor belongs to an earlier pull request version. */
+ stale: boolean;
+}
+
+export type UltraReviewAnswerAction =
+ | "trace_callers"
+ | "explain_dependency"
+ | "find_relevant_tests"
+ | "question";
+
+export type UltraReviewAnswerStatus =
+ | "complete"
+ | "failed";
+
+export interface UltraReviewAnswer {
+ id: string;
+ beatId: string;
+ action: UltraReviewAnswerAction;
+ question: string;
+ text: string;
+ citationIds: string[];
+ insufficientEvidence: boolean;
+ status: UltraReviewAnswerStatus;
+ error?: string;
+ headSha: string;
+ createdAt: number;
+ /** The cited evidence or beat changed after this answer was recorded. */
+ stale: boolean;
+}
+
+export interface UltraReviewDraftProvenance {
+ noteIds: string[];
+ beatIds: string[];
+ evidenceIds: string[];
+ concernIds: string[];
+}
+
+export interface UltraReviewDraftSection {
+ id: string;
+ body: string;
+ provenance: UltraReviewDraftProvenance;
+}
+
+export interface UltraReviewDraftInlineComment {
+ id: string;
+ path: string;
+ side: UltraReviewEvidenceSide;
+ line: number;
+ startLine?: number;
+ body: string;
+ included: boolean;
+ provenance: UltraReviewDraftProvenance;
+}
+
+export interface UltraReviewDraft {
+ id: string;
+ body: string;
+ sections: UltraReviewDraftSection[];
+ inlineComments: UltraReviewDraftInlineComment[];
+ incorporatedNoteIds: string[];
+ combinedNoteIds: string[];
+ omittedNoteIds: string[];
+}
+
+export interface UltraReviewProgress {
+ reviewedBeats: number;
+ totalBeats: number;
+ acknowledgedMechanicalChanges: number;
+ totalMechanicalChanges: number;
+ coveredChangedEvidence: number;
+ totalChangedEvidence: number;
+ failedRegions: number;
+ unmappedEvidence: number;
+ fullyReviewed: boolean;
+}
+
+export interface UltraReviewSubmissionSnapshot {
+ id: string;
+ submittedAt: number;
+ headSha: string;
+ verdict: "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+ body: string;
+ inlineComments: UltraReviewDraftInlineComment[];
+ noteIds: string[];
+ progress: UltraReviewProgress;
+}
+
+export type UltraReviewSubmissionOutcome =
+ | {
+    status: "persisted";
+    url: string;
+   }
+ | {
+    status: "persistence_failed";
+    url: string;
+    snapshot: UltraReviewSubmissionSnapshot;
+    error: string;
+   };
+
+export interface UltraReviewResumePosition {
+ systemId: string | null;
+ chapterId: string | null;
+ beatId: string | null;
+ scrollTop: number;
+ expandedEvidenceIds: string[];
+ diffViewStates?: {
+  review?: DiffViewerViewState;
+  raw?: DiffViewerViewState;
+ };
+}
+
+export interface UltraReviewSession {
+ mode: UltraReviewMode;
+ beatStates: Record<string, UltraReviewBeatState>;
+ acknowledgedMechanicalChangeIds: string[];
+ creditedEvidenceIds: string[];
+ concernDispositions: Record<string, UltraReviewConcernDisposition>;
+  notes: UltraReviewNote[];
+  answers: UltraReviewAnswer[];
+  draft: UltraReviewDraft | null;
+  snapshots: UltraReviewSubmissionSnapshot[];
+  /** Author-only local readiness decision. Never posts by itself. */
+  authorOutcome?: "ready" | "continue";
+  authorCompletedAt?: number;
+  resume: UltraReviewResumePosition;
+}
+
+export type UltraReviewLifecycle =
+ | "active"
+ | "closed"
+ | "merged";
+
+export interface UltraReviewArtifact {
+ version: UltraReviewArtifactVersion;
+ identity: UltraReviewArtifactIdentity;
+ artifactKey: string;
+ galaxy: UltraReviewGalaxy;
+ evidence: UltraReviewEvidence[];
+ coverage: UltraReviewCoverageEntry[];
+ mechanicalChanges: UltraReviewMechanicalChange[];
+ sourceClaims: UltraReviewSourceClaim[];
+ concerns: UltraReviewConcern[];
+ generation: UltraReviewGeneration;
+ sessions: Record<UltraReviewMode, UltraReviewSession>;
+ lifecycle: UltraReviewLifecycle;
+}
+
+export interface UltraReviewBlobStorage {
+  loadBlob(path: string): Promise<string | null>;
+  saveBlob(path: string, value: string): Promise<void>;
+}
+
+export interface UltraReviewCoverageOverlap {
+ path: string;
+ side: UltraReviewEvidenceSide;
+ line: number;
+ evidenceIds: string[];
+}
+
+export interface UltraReviewCoverageAudit {
+  missingEvidenceIds: string[];
+  duplicateEvidenceIds: string[];
+  unknownEvidenceIds: string[];
+  unmappedEvidenceIds: string[];
+  mismatchedEvidenceIds: string[];
+  invalidBeatIds: string[];
+  invalidMechanicalChangeIds: string[];
+  supportingEvidenceIds: string[];
+  overlaps: UltraReviewCoverageOverlap[];
+  failedRegionIds: string[];
+  incompleteStageIds: string[];
+  generationComplete: boolean;
+  complete: boolean;
+}
+
+export interface UltraReviewChangedEvidencePair {
+ beforeEvidenceId: string;
+ afterEvidenceId: string;
+}
+
+export interface UltraReviewDelta {
+ fromBaseSha: string;
+ fromHeadSha: string;
+ toBaseSha: string;
+ toHeadSha: string;
+ baseChanged: boolean;
+ addedEvidenceIds: string[];
+ removedEvidenceIds: string[];
+  changedEvidence: UltraReviewChangedEvidencePair[];
+  reanchoredEvidence: UltraReviewChangedEvidencePair[];
+  unchangedEvidenceIds: string[];
+ invalidatedBeatIds: string[];
+  staleNoteIds: string[];
+}
+
+export interface UltraReviewContinuation {
+ artifact: UltraReviewArtifact;
+ delta: UltraReviewDelta;
 }

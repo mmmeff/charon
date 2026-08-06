@@ -3,7 +3,17 @@ import { hideWhitespaceChanges, snippetFor } from "../lib/diff";
 import type { SplitRow } from "../lib/diff";
 import { highlightFileLines, langForPath } from "../lib/highlight";
 import { useGlobalConfig, useUiStore } from "../lib/store";
-import type { DiffLine, FileDiff, LineSelection } from "../types";
+import type {
+  ContextGapExpansion,
+  DiffLine,
+  DiffViewerViewState,
+  FileDiff,
+  LineSelection,
+} from "../types";
+export type {
+  ContextGapExpansion,
+  DiffViewerViewState,
+} from "../types";
 import { Badge } from "./common";
 import { FileTree, type FileTreeMarkers } from "./FileTree";
 
@@ -37,9 +47,9 @@ type ExpandedEdge = "head" | "tail" | "both";
 
 const CONTEXT_BATCH_LINES = 10;
 
-interface ContextGapExpansion {
-  head: number;
-  tail: number;
+export interface RemoteViewedState {
+  map: Record<string, string>;
+  toggle?: (path: string, viewed: boolean) => void;
 }
 
 interface ContextControl {
@@ -62,6 +72,40 @@ const lineCount = (text: string) => {
   return lines;
 };
 
+const equalDiffLines = (left: DiffLine, right: DiffLine) =>
+  left.type === right.type
+  && left.oldNum === right.oldNum
+  && left.newNum === right.newNum
+  && left.text === right.text
+  && left.oldStart === right.oldStart
+  && left.oldLines === right.oldLines
+  && left.newStart === right.newStart
+  && left.newLines === right.newLines;
+
+const equalFileDiffs = (left: FileDiff, right: FileDiff) =>
+  left.oldPath === right.oldPath
+  && left.newPath === right.newPath
+  && left.isBinary === right.isBinary
+  && left.isNew === right.isNew
+  && left.isDeleted === right.isDeleted
+  && left.isRename === right.isRename
+  && left.lines.length === right.lines.length
+  && left.lines.every(
+    (line, index) => equalDiffLines(line, right.lines[index]),
+  );
+
+export const equalDiffInputs = (
+  left: FileDiff[],
+  right: FileDiff[],
+) =>
+  left === right
+  || (
+    left.length === right.length
+    && left.every(
+      (file, index) => equalFileDiffs(file, right[index]),
+    )
+  );
+
 /**
  * Native diff renderer with GitHub-style line selection: click a line number
  * to select a line, drag across numbers to select a range, then the parent
@@ -77,6 +121,8 @@ export function DiffViewer({
   remoteViewed,
   loadFileText,
   renderCommentForm,
+  initialViewState,
+  onViewStateChange,
 }: {
   files: FileDiff[];
   selectable?: boolean;
@@ -85,18 +131,30 @@ export function DiffViewer({
   /** local "viewed" checkboxes; state persists under this key (own drafts) */
   viewedKey?: string;
   /** GitHub-backed viewed state (teammate reviews) — syncs with github.com */
-  remoteViewed?: { map: Record<string, string>; toggle: (path: string, viewed: boolean) => void };
+  remoteViewed?: RemoteViewedState;
   loadFileText?: (path: string, side: SourceSide) => Promise<string | null>;
   renderCommentForm?: (sel: LineSelection, close: () => void) => ReactNode;
+  /** Restores per-beat evidence expansion from the persisted UltraReview session. */
+  initialViewState?: Partial<DiffViewerViewState>;
+  /** Persists reviewer-controlled collapse and context expansion state. */
+  onViewStateChange?: (state: DiffViewerViewState) => void;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [sel, setSel] = useState<LineSelection | null>(null);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [expandedContext, setExpandedContext] = useState<Record<string, ContextGapExpansion>>({});
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(
+    () => initialViewState?.collapsed ?? {},
+  );
+  const [expandedContext, setExpandedContext] = useState<Record<string, ContextGapExpansion>>(
+    () => initialViewState?.expandedContext ?? {},
+  );
   const [sourceLines, setSourceLines] = useState<Record<string, string[] | null>>({});
   const [loadingGaps, setLoadingGaps] = useState<Record<string, boolean>>({});
 
   const { config: global } = useGlobalConfig();
+
+  useEffect(() => {
+    onViewStateChange?.({ collapsed, expandedContext });
+  }, [collapsed, expandedContext, onViewStateChange]);
 
   // Glob-style filename patterns compiled once per mount/config change into a
   // matcher. `*` matches any characters in the name, `?` one char; rest escaped.
@@ -141,6 +199,9 @@ export function DiffViewer({
     });
   };
   const viewedEnabled = !!viewedKey || !!remoteViewed;
+  const viewedMutable = remoteViewed
+    ? remoteViewed.toggle !== undefined
+    : !!viewedKey;
   // remote mode: GitHub owns invalidation (DISMISSED on change); local mode:
   // the content hash plays that role
   const isViewedPath = (path: string) =>
@@ -148,8 +209,13 @@ export function DiffViewer({
       ? remoteViewed.map[path] === "VIEWED"
       : !!viewedKey && viewed[path] === fileHashes.get(path);
   const toggleViewed = (path: string, hash: string, next: boolean) => {
-    if (remoteViewed) remoteViewed.toggle(path, next);
-    else setFileViewed(path, next ? hash : null);
+    if (remoteViewed) {
+      if (!remoteViewed.toggle) return;
+      remoteViewed.toggle(path, next);
+    } else {
+      if (!viewedKey) return;
+      setFileViewed(path, next ? hash : null);
+    }
     setCollapsed((c) => ({ ...c, [path]: next }));
   };
   const [hideWs, setHideWsState] = useState(() => localStorage.getItem("prc-diff-ws") !== "off");
@@ -172,7 +238,16 @@ export function DiffViewer({
 
   const keyOf = (f: FileDiff) => f.newPath || f.oldPath;
 
+  const previousInput = useRef({ rawFiles, hideWs });
   useEffect(() => {
+    const previous = previousInput.current;
+    previousInput.current = { rawFiles, hideWs };
+    if (
+      previous.hideWs === hideWs
+      && equalDiffInputs(previous.rawFiles, rawFiles)
+    ) {
+      return;
+    }
     setExpandedContext({});
     setSourceLines({});
     setLoadingGaps({});
@@ -223,7 +298,6 @@ export function DiffViewer({
       map.set(keyOf(f), String(h >>> 0));
     }
     return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, viewedKey]);
 
   // ---- file tree + scroll spy ----
@@ -559,11 +633,23 @@ export function DiffViewer({
               {wsOnly && <Badge color="gray">whitespace-only changes</Badge>}
               {viewedEnabled && (
                 <button
+                  type="button"
                   className={`viewed-toggle-btn ${isViewed ? "on" : ""}`}
-                  title="Mark as read — collapses the file; re-expanding keeps it read"
+                  aria-pressed={isViewed}
+                  aria-label={
+                    viewedMutable
+                      ? `${isViewed ? "Mark as not viewed" : "Mark as viewed"}: ${path}`
+                      : `${path} is ${isViewed ? "viewed" : "not viewed"}. Read only.`
+                  }
+                  disabled={!viewedMutable}
+                  title={
+                    viewedMutable
+                      ? "Mark as read. This collapses the file. Re-expanding keeps it read."
+                      : "Viewed state is read only."
+                  }
                   onClick={() => toggleViewed(path, hash, !isViewed)}
                 >
-                  <input type="checkbox" checked={isViewed} readOnly tabIndex={-1} />
+                  <span aria-hidden>{isViewed ? "✓" : "○"}</span>
                   viewed
                 </button>
               )}
