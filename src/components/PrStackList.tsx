@@ -26,7 +26,8 @@ export function PrStackCard({
       style={{ "--stack-depth": Math.min(item.depth, 6) } as CSSProperties}
       onClick={onClick}
     >
-      {selected ? <AetherField seed={item.pr.number} /> : null}
+      <span className="pr-stack-selection" aria-hidden />
+      <AetherField seed={item.pr.number} active={selected} />
       {children}
     </div>
   );

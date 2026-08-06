@@ -142,8 +142,17 @@ function renderField(field: FieldState, time: number, seed: number): void {
   context.putImageData(image, 0, 0);
 }
 
-export function AetherField({ seed = 0 }: { seed?: number }) {
+export function AetherField({
+  seed = 0,
+  active = true,
+}: {
+  seed?: number;
+  active?: boolean;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const activeRef = useRef(active);
+  const scheduleRef = useRef<() => void>(() => undefined);
+  const stopRef = useRef<() => void>(() => undefined);
   const reducedMotion = useReducedMotion() ?? false;
 
   useEffect(() => {
@@ -198,6 +207,7 @@ export function AetherField({ seed = 0 }: { seed?: number }) {
       if (
         animationFrame
         || reducedMotion
+        || !activeRef.current
         || !field
         || !inViewport
         || document.hidden
@@ -209,13 +219,24 @@ export function AetherField({ seed = 0 }: { seed?: number }) {
 
     const animate = (now: number) => {
       animationFrame = 0;
-      if (reducedMotion || !inViewport || document.hidden) return;
+      if (
+        reducedMotion
+        || !activeRef.current
+        || !inViewport
+        || document.hidden
+      ) {
+        return;
+      }
 
       if (now - lastFrameAt >= TARGET_FRAME_MS) {
         lastFrameAt = now;
         draw(now / 1000);
       }
       schedule();
+    };
+    const stop = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
     };
 
     const visibilityObserver = new IntersectionObserver(([entry]) => {
@@ -228,13 +249,14 @@ export function AetherField({ seed = 0 }: { seed?: number }) {
     });
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        cancelAnimationFrame(animationFrame);
-        animationFrame = 0;
+        stop();
         return;
       }
       schedule();
     };
 
+    scheduleRef.current = schedule;
+    stopRef.current = stop;
     const bounds = canvas.getBoundingClientRect();
     resize(bounds.width, bounds.height);
     visibilityObserver.observe(canvas);
@@ -243,19 +265,30 @@ export function AetherField({ seed = 0 }: { seed?: number }) {
     schedule();
 
     return () => {
-      cancelAnimationFrame(animationFrame);
+      stop();
       visibilityObserver.disconnect();
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      scheduleRef.current = () => undefined;
+      stopRef.current = () => undefined;
     };
   }, [reducedMotion, seed]);
+
+  useEffect(() => {
+    activeRef.current = active;
+    if (active) {
+      scheduleRef.current();
+      return;
+    }
+    stopRef.current();
+  }, [active]);
 
   return (
     <div className="aether-field" aria-hidden>
       <canvas
         ref={canvasRef}
         className="aether-field-canvas"
-        data-motion={reducedMotion ? "still" : "live"}
+        data-motion={reducedMotion || !active ? "still" : "live"}
       />
     </div>
   );
