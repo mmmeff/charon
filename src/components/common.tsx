@@ -108,7 +108,7 @@ export function EmptyState({
 }) {
   return (
     <div className="empty-stage">
-      <BrandField />
+      <BrandField showMoon={!loading} />
       <div className="empty-stage-scrim" aria-hidden />
       <FadeUp className="empty" duration={0.5} yOffset={14}>
         <h3>{loading ? <span className="empty-loading-title"><Spinner /> Loading…</span> : title}</h3>

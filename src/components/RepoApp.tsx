@@ -359,7 +359,7 @@ export function RepoApp({ repo }: { repo: string }) {
  if (!repoStore.loaded || !ctxRef.current) {
   return (
    <div className="empty-stage">
-    <BrandField variant="coral" />
+    <BrandField variant="coral" showMoon={false} />
     <div className="empty-stage-scrim" aria-hidden />
     <div className="empty">
      <Spinner size={12} /> Loading {repo}…
