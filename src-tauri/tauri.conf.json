@@ -35,7 +35,13 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "files": {
+        "Resources/charon-brand-2026.icns": "icons/icon.icns"
+      },
+      "infoPlist": "Info.plist"
+    }
   },
   "plugins": {
     "updater": {
