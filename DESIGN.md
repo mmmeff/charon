@@ -134,7 +134,9 @@ State badges may use pills because their compact silhouette distinguishes status
 
 The rail and top strip may carry low-contrast raster grain.
 Reading surfaces remain flat and sharp.
-Do not use CSS dot grids, fuzzy tracking bands, ASCII backdrops, or decorative ambient motion in the product.
+Do not use CSS dot grids, fuzzy tracking bands, or ASCII backdrops.
+Ambient motion is limited to the ordered-dither aether behind PR identity, selected PR rows, and branded pauses.
+It freezes under reduced motion and never sits behind diffs, logs, comments, controls, or form labels.
 
 Neutral lines describe structure.
 Do not trace panels, cards, or rows with brand colors.
@@ -148,7 +150,20 @@ Hard cobalt registration belongs to the launcher image and primary action, not e
 Each working view gets one dominant anchor.
 PR views use an oversized warm-paper identity slab.
 Launch views use the moon and coral field at poster scale.
-Selection may use a stronger cobalt field, but surrounding panels stay neutral so the field remains singular.
+Selected PRs remain ink.
+A living coral-cobalt aether field breaks in from the trailing edge instead of filling the card with flat cobalt.
+Active navigation may use a stronger cobalt field, but surrounding panels stay neutral so the field remains singular.
+
+Major application color fields are optically printed, not digitally flat.
+`docs/signal-texture.webp` carries the shared halftone breakup, stochastic dithering, scratched emulsion, dust, and coral-cobalt misregistration.
+Use it on static launcher color, the PR identity slab, active navigation, primary action, and running-agent header.
+Do not place it behind diffs, logs, comments, settings forms, or long prose.
+
+Animated aether fields are low-resolution canvases.
+They quantize coherent energy ribbons through a fixed Bayer matrix into ink, cobalt, electric blue, coral, and signal yellow.
+The field moves.
+The dither matrix does not.
+This keeps the shimmer atmospheric without turning it into crawling scanline noise.
 
 Application type uses a fixed scale.
 Body text starts at 14px.

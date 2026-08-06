@@ -41,6 +41,8 @@
   --orange: #ff574d;
   --orange-bg: rgb(var(--rgb-orange) / 0.12);
   --cobalt: #216dff;
+  --cobalt-fill: #164cc2;
+  --on-cobalt: var(--fg);
   --cobalt-bg: rgb(var(--rgb-cobalt) / 0.14);
   --cobalt-strong-bg: rgb(var(--rgb-cobalt) / 0.28);
   --electric: #75b6ff;
@@ -104,6 +106,7 @@
 
   /* ---- textures. Raster grain belongs to branded fields, never reading surfaces. */
   --film-grain: url("../docs/film-grain.png");
+  --signal-texture: url("../docs/signal-texture.webp");
   --ember-wash: linear-gradient(180deg, rgb(var(--rgb-cobalt) / 0.08), rgb(var(--rgb-cobalt) / 0.025));
   --hatch-orange: repeating-linear-gradient(
     45deg,
@@ -195,14 +198,19 @@ button {
 button:hover:not(:disabled) { border-color: var(--fg-subtle); background: var(--bg-overlay); }
 button:disabled { opacity: 0.45; cursor: default; }
 button.primary {
-  background: var(--orange);
+  background-color: var(--orange);
+  background-image: var(--signal-texture);
+  background-position: 48% 18%;
+  background-size: 360px 360px;
+  background-blend-mode: soft-light;
   border-color: transparent;
   color: var(--bg);
   border-radius: 999px;
   box-shadow: 2px 2px 0 var(--cobalt);
 }
 button.primary:hover:not(:disabled) {
-  background: #ff7168;
+  background-color: #ff7168;
+  background-image: var(--signal-texture);
   border-color: transparent;
   box-shadow: none;
   transform: translate(2px, 2px);
@@ -285,17 +293,27 @@ h3, h4 {
 }
 
 /* ---- app chrome: icon rail + top strip ---- */
-.app { display: flex; flex-direction: row; height: 100%; }
+.app {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  background:
+    radial-gradient(ellipse at 22% -14%, rgb(var(--rgb-orange) / 0.15), transparent 36%),
+    radial-gradient(ellipse at 88% 108%, rgb(var(--rgb-cobalt) / 0.2), transparent 44%),
+    var(--bg);
+}
 .app-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
 .rail {
   width: 52px; flex-shrink: 0;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 12px 0;
-  background: var(--bg-inset);
-  background-image: var(--film-grain);
-  background-size: 320px 320px;
-  background-blend-mode: soft-light;
+  background-color: var(--bg-inset);
+  background-image:
+    linear-gradient(180deg, rgb(var(--rgb-orange) / 0.1), transparent 28%),
+    var(--film-grain);
+  background-size: 100% 100%, 260px 260px;
+  background-blend-mode: normal, soft-light;
   border-right: 1px solid var(--border);
   box-shadow: none;
   user-select: none;
@@ -321,8 +339,12 @@ h3, h4 {
   border: none;
 }
 .rail-btn.active {
-  color: var(--bg);
-  background: var(--cobalt);
+  color: var(--on-cobalt);
+  background-color: var(--cobalt-fill);
+  background-image: var(--signal-texture);
+  background-position: 58% 42%;
+  background-size: 180px 180px;
+  background-blend-mode: soft-light;
   box-shadow: none;
 }
 .rail-count {
@@ -370,10 +392,12 @@ h3, h4 {
 .topstrip {
   display: flex; align-items: center; gap: 8px;
   min-height: 40px; padding: 0 12px;
-  background: var(--bg-inset);
-  background-image: var(--film-grain);
-  background-size: 420px 420px;
-  background-blend-mode: soft-light;
+  background-color: var(--bg-inset);
+  background-image:
+    linear-gradient(90deg, rgb(var(--rgb-cobalt) / 0.13), transparent 34%, rgb(var(--rgb-orange) / 0.08)),
+    var(--film-grain);
+  background-size: 100% 100%, 340px 340px;
+  background-blend-mode: normal, soft-light;
   border-bottom: 1px solid var(--border);
   box-shadow: none;
   user-select: none;
@@ -482,31 +506,70 @@ h3, h4 {
 .empty { color: var(--fg-muted); text-align: center; padding: 40px 24px; max-width: 720px; margin: 0 auto; }
 .empty-loading-title { display: inline-flex; align-items: center; gap: 10px; }
 
-/* Raster Charon field. Branded pauses get the image; working surfaces do not. */
+/* Low-resolution color fields are quantized through an ordered Bayer matrix.
+   Their pixels stay hard. The motion belongs behind identity, never evidence. */
+.aether-field {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout paint size;
+}
+.aether-field-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* Charon field. Branded pauses get the image; working surfaces do not. */
 .brand-field {
   position: absolute;
   inset: 0;
+  z-index: 0;
+  isolation: isolate;
   overflow: hidden;
   pointer-events: none;
   background: var(--bg);
 }
-.brand-field-coral { background: var(--orange); }
+.brand-field-coral {
+  background-color: var(--orange);
+  background-image: var(--signal-texture);
+  background-position: 64% 38%;
+  background-size: 720px 720px;
+  background-blend-mode: soft-light;
+}
+.brand-field-ink {
+  background-color: var(--bg);
+  background-image: var(--signal-texture);
+  background-position: 52% 54%;
+  background-size: 860px 860px;
+  background-blend-mode: soft-light;
+}
 .brand-field::after {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 3;
   background: var(--film-grain) center / 420px 420px repeat;
   mix-blend-mode: soft-light;
-  opacity: 0.22;
+  opacity: 0.34;
+}
+.brand-field > .aether-field {
+  z-index: 2;
+  opacity: 0.78;
+  mix-blend-mode: screen;
 }
 .brand-field-moon {
   position: absolute;
+  z-index: 1;
   top: -24%;
   left: -12%;
   width: 72%;
   height: 148%;
   background: url("../docs/charon-contact-moon.jpg") 46% 50% / cover no-repeat;
-  filter: saturate(1.45) contrast(1.18);
+  filter: saturate(1.75) contrast(1.28);
 }
 .brand-field-ink .brand-field-moon {
   width: 60%;
@@ -514,6 +577,7 @@ h3, h4 {
 }
 .brand-field-star {
   position: absolute;
+  z-index: 4;
   top: 8%;
   right: 4%;
   width: clamp(72px, 13vw, 164px);
@@ -692,11 +756,39 @@ h3, h4 {
 .card.selected,
 .card.selected:hover {
   border-color: var(--border-strong);
-  background: var(--cobalt-strong-bg);
+  background-color: var(--bg-raised);
+  background-image:
+    linear-gradient(
+      90deg,
+      var(--bg-raised) 0 34%,
+      rgb(var(--rgb-bg) / 0.86) 58%,
+      rgb(var(--rgb-bg) / 0.18) 100%
+    ),
+    var(--signal-texture);
+  background-position: center, 36% 82%;
+  background-size: 100% 100%, 390px 390px;
+  background-repeat: no-repeat;
+  background-blend-mode: normal;
   box-shadow: none;
+  color: var(--fg);
 }
-.card.selected h4 { color: var(--fg); font-size: var(--t-lead); font-weight: 700; }
-.card.selected .meta { color: var(--fg); opacity: 0.88; }
+.card.selected h4 {
+  color: var(--fg);
+  font-size: var(--t-lead);
+  font-weight: 800;
+  text-shadow: 1px 1px 0 var(--bg);
+}
+.card.selected .meta {
+  color: var(--fg);
+  opacity: 0.9;
+  text-shadow: 1px 1px 0 var(--bg);
+}
+.card.selected .subtle { color: var(--fg-muted); }
+.card.selected .badge {
+  background: var(--bg);
+  border-color: transparent;
+  text-shadow: none;
+}
 .card h4 { margin: 0 0 5px; font-size: var(--t-body); font-weight: 600; }
 .card .meta {
   color: var(--fg-muted); font-size: var(--t-label); display: flex; gap: 8px; flex-wrap: wrap;
@@ -706,6 +798,34 @@ h3, h4 {
   --stack-depth: 0;
   position: relative;
   margin-left: calc(var(--stack-depth) * 18px);
+}
+.pr-stack-card.selected,
+.pr-stack-card.selected:hover {
+  isolation: isolate;
+  border-color: rgb(var(--rgb-ink) / 0.42);
+  background-color: var(--bg-raised);
+  background-image: none;
+}
+.pr-stack-card.selected > .aether-field {
+  inset: 1px;
+  opacity: 0.94;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0 12%, rgb(0 0 0 / 0.34) 30%, #000 54%);
+  mask-image: linear-gradient(90deg, transparent 0 12%, rgb(0 0 0 / 0.34) 30%, #000 54%);
+}
+.pr-stack-card.selected > .aether-field::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--rgb-bg) / 0.9) 0 48%,
+    rgb(var(--rgb-bg) / 0.76) 74%,
+    rgb(var(--rgb-bg) / 0.62) 100%
+  );
+}
+.pr-stack-card > :not(.aether-field) {
+  position: relative;
+  z-index: 1;
 }
 .pr-stack-card.stack-child::before {
   content: "";
@@ -745,11 +865,27 @@ h3, h4 {
 .card.agent-running .agent-head {
   margin: -4px -6px 8px;
   padding: 9px 10px;
-  background: var(--cobalt-strong-bg);
+  background-color: var(--cobalt-fill);
+  background-image: var(--signal-texture);
+  background-position: 62% 40%;
+  background-size: 560px 560px;
+  background-blend-mode: soft-light;
+  color: var(--on-cobalt);
 }
 .card.agent-running .badge.blue {
-  background: var(--cobalt);
-  color: var(--bg);
+  background: var(--bg);
+  color: var(--fg);
+}
+.card.agent-running .agent-head strong,
+.card.agent-running .agent-head .link,
+.card.agent-running .agent-head .subtle,
+.card.agent-running .agent-head .agent-caret,
+.card.agent-running .agent-head > .row > a {
+  color: var(--on-cobalt);
+}
+.card.agent-running .agent-head .link:hover {
+  background: none;
+  color: var(--on-cobalt);
 }
 
 /* ---- badges: compact state pills ---- */
@@ -902,9 +1038,13 @@ td.cell-sel { background: var(--diff-select-bg) !important; }
 .seg button + button { border-left: none; }
 .seg button.primary,
 .seg button.primary:hover:not(:disabled) {
-  background: var(--cobalt);
+  background-color: var(--cobalt-fill);
+  background-image: var(--signal-texture);
+  background-position: 58% 46%;
+  background-size: 360px 360px;
+  background-blend-mode: soft-light;
   border-color: transparent;
-  color: var(--bg);
+  color: var(--on-cobalt);
   box-shadow: none;
   transform: none;
 }
@@ -1946,7 +2086,14 @@ button.draft-create-row:focus-visible {
   color: var(--fg-subtle); border-left: 0;
 }
 .settings-nav-item:hover { color: var(--fg); background: var(--bg-overlay); }
-.settings-nav-item.active { color: var(--bg); background: var(--cobalt); }
+.settings-nav-item.active {
+  color: var(--on-cobalt);
+  background-color: var(--cobalt-fill);
+  background-image: var(--signal-texture);
+  background-position: 44% 64%;
+  background-size: 420px 420px;
+  background-blend-mode: soft-light;
+}
 .settings-nav-item.sub {
   padding-left: 22px; font-size: var(--t-micro); font-weight: 500; letter-spacing: var(--tr-label);
 }
@@ -2121,7 +2268,13 @@ input[type="checkbox"] { accent-color: var(--orange); }
   flex-direction: column;
   justify-content: flex-end;
   padding: 38px 34px;
-  background: var(--orange);
+  background-color: var(--orange);
+  background-image:
+    var(--signal-texture),
+    var(--film-grain);
+  background-position: 58% 28%, center;
+  background-size: 640px 640px, 260px 260px;
+  background-blend-mode: soft-light;
   color: var(--bg);
   pointer-events: none;
 }
@@ -2264,10 +2417,51 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
    still staying darker than the cards floating on it */
 .pr-hero {
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: 18px 20px 22px;
-  background: var(--hero-ground);
+  background-color: var(--hero-ground);
+  background-image:
+    radial-gradient(ellipse at 4% -10%, rgb(var(--rgb-cobalt) / 0.22), transparent 36%),
+    radial-gradient(ellipse at 94% 118%, rgb(var(--rgb-orange) / 0.14), transparent 40%),
+    var(--film-grain);
+  background-size: 100% 100%, 100% 100%, 460px 460px;
+  background-blend-mode: normal, normal, soft-light;
   box-shadow: none;
   border-bottom: 1px solid var(--border);
+}
+.pr-hero > .aether-field {
+  opacity: 0.74;
+  mix-blend-mode: screen;
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0 56%,
+    rgb(0 0 0 / 0.48) 78%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    #000 0 56%,
+    rgb(0 0 0 / 0.48) 78%,
+    transparent 100%
+  );
+}
+.pr-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--rgb-bg) / 0.58) 0 46%,
+    rgb(var(--rgb-bg) / 0.36) 76%,
+    rgb(var(--rgb-bg) / 0.5) 100%
+  );
+  pointer-events: none;
+}
+.pr-hero > :not(.aether-field) {
+  position: relative;
+  z-index: 2;
 }
 /* A single neutral rule separates the evidence header from the diff canvas. */
 .pr-hero::after {
@@ -2277,6 +2471,7 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
   bottom: -1px;
   left: 0;
   height: 1px;
+  z-index: 3;
   background: var(--border-strong);
   pointer-events: none;
 }
@@ -2293,7 +2488,11 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
   display: block;
   padding: 14px 20px 16px 16px;
   border: 0;
-  background: var(--fg);
+  background-color: var(--fg);
+  background-image: var(--signal-texture);
+  background-position: 22% 16%;
+  background-size: 440px 440px;
+  background-blend-mode: soft-light;
   font-size: var(--t-hero);
   font-stretch: var(--w-wide);
   font-weight: 800;
@@ -2305,7 +2504,13 @@ h2.viewtitle a:hover .ext { color: var(--orange); }
   box-shadow: 5px 5px 0 var(--cobalt);
   text-decoration: none;
 }
-.pr-hero-num:hover { color: var(--bg); background: var(--orange); text-decoration: none; text-shadow: none; }
+.pr-hero-num:hover {
+  color: var(--bg);
+  background-color: var(--orange);
+  background-image: var(--signal-texture);
+  text-decoration: none;
+  text-shadow: none;
+}
 .pr-hero-num-hash {
   font-size: 0.4em;
   font-weight: 700;
@@ -2697,13 +2902,17 @@ a.act-event-detail:hover { color: var(--orange); }
   color: var(--fg);
 }
 .hero-tab.active {
-  background: var(--cobalt);
-  color: var(--bg);
+  background-color: var(--cobalt-fill);
+  background-image: var(--signal-texture);
+  background-position: 58% 54%;
+  background-size: 420px 420px;
+  background-blend-mode: soft-light;
+  color: var(--on-cobalt);
   border-bottom: 0;
   margin-bottom: 0;
 }
 .hero-tab.active .hero-tab-ci-status span,
-.hero-tab.active .hero-tab-stack-count { color: var(--bg); }
+.hero-tab.active .hero-tab-stack-count { color: var(--on-cobalt); }
 .hero-tab-label {
   font-size: var(--t-micro); font-weight: 800; letter-spacing: var(--tr-label);
   text-transform: uppercase;
@@ -2884,10 +3093,24 @@ a.act-event-detail:hover { color: var(--orange); }
   transition: background-color 80ms ease;
 }
 .palette-item.selected {
-  background: var(--cobalt-bg);
-  color: var(--fg);
+  background-color: var(--cobalt-fill);
+  background-image: var(--signal-texture);
+  background-position: 46% 64%;
+  background-size: 560px 560px;
+  background-blend-mode: soft-light;
+  color: var(--on-cobalt);
 }
 .palette-item:hover { background: var(--orange-bg); }
+.palette-item.selected:hover {
+  background-color: var(--cobalt-fill);
+  background-image: var(--signal-texture);
+  background-position: 46% 64%;
+  background-size: 560px 560px;
+  background-blend-mode: soft-light;
+  color: var(--on-cobalt);
+}
+.palette-item.selected .subtle,
+.palette-item.selected .palette-item-hint { color: var(--on-cobalt); }
 .palette-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .palette-item-label .subtle { color: var(--fg-subtle); font-weight: 400; }
 .palette-item-hint {

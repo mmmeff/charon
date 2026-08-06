@@ -4,6 +4,7 @@ import type { AgentRun, AgentToolCall, CheckInfo, CommentInfo, PrSummary } from 
 
 export const REPO = "acme/charon";
 const KEY = "acme__charon";
+const NOW = Date.now();
 
 const basePr: PrSummary = {
   number: 4821,
@@ -36,7 +37,7 @@ const basePr: PrSummary = {
   reviewers: ["kwatanabe"],
   requestedFromMe: false,
   reviewDecision: "CHANGES_REQUESTED",
-  updatedAt: new Date(1785283036798 - 1000 * 60 * 47).toISOString(),
+  updatedAt: new Date(NOW - 1000 * 60 * 47).toISOString(),
   additions: 142,
   deletions: 38,
   changedFiles: 7,
@@ -58,7 +59,7 @@ export const prs: PrSummary[] = [
     deletions: 4,
     changedFiles: 2,
     headRef: "dependabot/cargo/rustls-0.23.14",
-    updatedAt: new Date(1785283036798 - 1000 * 60 * 60 * 5).toISOString(),
+    updatedAt: new Date(NOW - 1000 * 60 * 60 * 5).toISOString(),
   },
   {
     ...basePr,
@@ -72,7 +73,7 @@ export const prs: PrSummary[] = [
     deletions: 402,
     changedFiles: 31,
     headRef: "mfrey/acp-stall-diagnostic",
-    updatedAt: new Date(1785283036798 - 1000 * 60 * 60 * 26).toISOString(),
+    updatedAt: new Date(NOW - 1000 * 60 * 60 * 26).toISOString(),
   },
   {
     ...basePr,
@@ -87,7 +88,7 @@ export const prs: PrSummary[] = [
     deletions: 3,
     changedFiles: 1,
     headRef: "kwatanabe/tooltip-clip",
-    updatedAt: new Date(1785283036798 - 1000 * 60 * 60 * 3).toISOString(),
+    updatedAt: new Date(NOW - 1000 * 60 * 60 * 3).toISOString(),
   },
 ];
 
@@ -118,7 +119,7 @@ export const greenChecks: CheckInfo[] = [
 
 export const checks: CheckInfo[] = [
   { name: "typecheck", status: "completed", conclusion: "success", url: "#", id: 1,
-    startedAt: new Date(1785283036798 - 1000 * 60 * 22).toISOString(), completedAt: new Date(1785283036798 - 1000 * 60 * 20).toISOString() },
+    startedAt: new Date(NOW - 1000 * 60 * 22).toISOString(), completedAt: new Date(NOW - 1000 * 60 * 20).toISOString() },
   { name: "lint", status: "completed", conclusion: "success", url: "#", id: 2 },
   { name: "cargo check (aarch64-apple-darwin)", status: "completed", conclusion: "failure", url: "#", id: 3,
     outputTitle: "1 error",
@@ -133,10 +134,10 @@ export const checks: CheckInfo[] = [
 export const comments: CommentInfo[] = [
   { id: 9001, kind: "issue", author: "kwatanabe", authorIsBot: false,
     body: "Does the rescue branch get pruned anywhere, or do these accumulate per failed run?",
-    createdAt: new Date(1785283036798 - 1000 * 60 * 90).toISOString(), url: "#" },
+    createdAt: new Date(NOW - 1000 * 60 * 90).toISOString(), url: "#" },
   { id: 9002, kind: "review_comment", author: "dsato", authorIsBot: false,
     body: "This probe runs on every lease. Worth caching per clone path for the poll window.",
-    createdAt: new Date(1785283036798 - 1000 * 60 * 55).toISOString(), url: "#",
+    createdAt: new Date(NOW - 1000 * 60 * 55).toISOString(), url: "#",
     path: "src/lib/worktree.ts", line: 84, side: "RIGHT" },
 ];
 
@@ -187,16 +188,16 @@ const baseRun: AgentRun = {
   model: "claude-opus-4",
   cwd: "/preview/worktrees/charon-4821",
   status: "running",
-  startedAt: 1785283036798 - 1000 * 190,
+  startedAt: NOW - 1000 * 190,
   endedAt: null,
   exitCode: null,
   entries: [
-    { type: "thought", at: 1785283036798 - 1000 * 188, text: "The failure is at src/lib.rs:412. resolve() takes &Path but the caller hands it a PathBuf." },
-    { type: "tool", at: 1785283036798 - 1000 * 180, toolCallId: "t1" },
-    { type: "message", at: 1785283036798 - 1000 * 170, text: "`resolve` borrows, so the call site needs `&path` rather than moving the `PathBuf`.\n\nI will also probe the clone root first so a moved clone fails before any commit lands." },
-    { type: "tool", at: 1785283036798 - 1000 * 150, toolCallId: "t2" },
-    { type: "tool", at: 1785283036798 - 1000 * 120, toolCallId: "t3" },
-    { type: "tool", at: 1785283036798 - 1000 * 40, toolCallId: "t4" },
+    { type: "thought", at: NOW - 1000 * 188, text: "The failure is at src/lib.rs:412. resolve() takes &Path but the caller hands it a PathBuf." },
+    { type: "tool", at: NOW - 1000 * 180, toolCallId: "t1" },
+    { type: "message", at: NOW - 1000 * 170, text: "`resolve` borrows, so the call site needs `&path` rather than moving the `PathBuf`.\n\nI will also probe the clone root first so a moved clone fails before any commit lands." },
+    { type: "tool", at: NOW - 1000 * 150, toolCallId: "t2" },
+    { type: "tool", at: NOW - 1000 * 120, toolCallId: "t3" },
+    { type: "tool", at: NOW - 1000 * 40, toolCallId: "t4" },
   ],
   tools: toolset,
   plan: [
@@ -219,12 +220,12 @@ export const runs: AgentRun[] = [
     relation: "review",
     status: "done",
     steerable: false,
-    startedAt: 1785283036798 - 1000 * 60 * 22,
-    endedAt: 1785283036798 - 1000 * 60 * 19,
+    startedAt: NOW - 1000 * 60 * 22,
+    endedAt: NOW - 1000 * 60 * 19,
     exitCode: 0,
     plan: [],
     entries: [
-      { type: "message", at: 1785283036798 - 1000 * 60 * 19, text: "Two findings.\n\n1. `validateAndPush` still reports success on an empty tree — check `git diff --quiet` before pushing.\n2. The rescue branch name collides when a run is retried with the same id." },
+      { type: "message", at: NOW - 1000 * 60 * 19, text: "Two findings.\n\n1. `validateAndPush` still reports success on an empty tree — check `git diff --quiet` before pushing.\n2. The rescue branch name collides when a run is retried with the same id." },
     ],
     resultText: "Two findings.",
   },
@@ -235,11 +236,11 @@ export const runs: AgentRun[] = [
     relation: "CI fix",
     status: "error",
     steerable: false,
-    startedAt: 1785283036798 - 1000 * 60 * 61,
-    endedAt: 1785283036798 - 1000 * 60 * 60,
+    startedAt: NOW - 1000 * 60 * 61,
+    endedAt: NOW - 1000 * 60 * 60,
     exitCode: 1,
     plan: [],
-    entries: [{ type: "thought", at: 1785283036798 - 1000 * 60 * 61, text: "Opening the worktree." }],
+    entries: [{ type: "thought", at: NOW - 1000 * 60 * 61, text: "Opening the worktree." }],
     error: "opencode: provider returned 429 (rate limit)",
     errorDetail: "code: -32000\ndata: { provider: 'anthropic', status: 429 }\nstderr: stream error: rate_limit_exceeded — retry after 41s",
     resultText: "",
@@ -251,11 +252,11 @@ export const runs: AgentRun[] = [
     relation: "comment fix",
     status: "killed",
     steerable: false,
-    startedAt: 1785283036798 - 1000 * 60 * 140,
-    endedAt: 1785283036798 - 1000 * 60 * 138,
+    startedAt: NOW - 1000 * 60 * 140,
+    endedAt: NOW - 1000 * 60 * 138,
     exitCode: null,
     plan: [],
-    entries: [{ type: "message", at: 1785283036798 - 1000 * 60 * 139, text: "Stopped before the first edit." }],
+    entries: [{ type: "message", at: NOW - 1000 * 60 * 139, text: "Stopped before the first edit." }],
     resultText: "",
   },
 ];

@@ -4,6 +4,7 @@ import { usePrData } from "../lib/events";
 import { useRepoStore, useUiStore } from "../lib/store";
 import type { FileDiff, PrSummary } from "../types";
 import { timeAgo, usePastHero, useScrollMemory, useScrolledPrTitle } from "../lib/ui";
+import { AetherField } from "./AetherField";
 import { Badge, BranchBadge, LoadingField, Section } from "./common";
 import { ApprovalsMenu, ReviewersMenu } from "./ReviewerMenus";
 import { ChecksPanel } from "./ChecksPanel";
@@ -160,6 +161,7 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
 
         {/* ── hero: the textured header well — identity, description, CI, agent ── */}
         <header className="pr-hero" ref={heroRef}>
+          <AetherField seed={pr.number + 101} />
           {/* the PR itself: title + state */}
           <div className="pr-hero-id">
             <a className="pr-hero-num" href={pr.url} title="Open on GitHub">

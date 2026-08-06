@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { PrStackRenderItem } from "../lib/pr-stacks";
+import { AetherField } from "./AetherField";
 
 export function PrStackCard({
   item,
@@ -25,6 +26,7 @@ export function PrStackCard({
       style={{ "--stack-depth": Math.min(item.depth, 6) } as CSSProperties}
       onClick={onClick}
     >
+      {selected ? <AetherField seed={item.pr.number} /> : null}
       {children}
     </div>
   );

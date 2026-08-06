@@ -5,6 +5,7 @@ import { stackedPrList, type PrStackRenderItem } from "../../lib/pr-stacks";
 import { useRepoStore, useUiStore } from "../../lib/store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { age, usePastHero, useScrollMemory, useScrolledPrTitle, type SortKey } from "../../lib/ui";
+import { AetherField } from "../AetherField";
 import { FadeIn } from "../amicro/fade-in";
 import { Stagger, StaggerItem } from "../amicro/stagger";
 import { Badge, BranchBadge, CiBadge, EmptyState, LoadingField, RunningAgentsChip, Section, SortPicker, Spinner } from "../common";
@@ -270,6 +271,7 @@ function ReviewWorkspace({ pr }: { pr: PrSummary }) {
 
         {/* ── hero: the textured header well — identity, description, CI, agent ── */}
         <header className="pr-hero" ref={heroRef}>
+          <AetherField seed={pr.number + 211} />
           {/* the PR itself: title + state */}
           <div className="pr-hero-id">
             <a className="pr-hero-num" href={pr.url} title="Open on GitHub">
