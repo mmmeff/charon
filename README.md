@@ -22,10 +22,6 @@ should land.
 a decision surface: diff, CI, comments, context, agent log, proposed fix. You approve what touches
 GitHub.
 
-<p align="center">
-  <img src="docs/tour.gif" alt="Charon tour: babysitting PRs, reviewing a teammate's diff, watching agents stream" width="100%"/>
-</p>
-
 ## Review first
 
 Context engineering is the old software problem: define the work well enough to judge it. Bigger
