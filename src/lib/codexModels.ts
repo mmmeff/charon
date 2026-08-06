@@ -24,6 +24,61 @@ const CODEX_ACP_REASONING_LEVELS = new Set([
  "xhigh",
 ]);
 
+export const MAINTAINED_CODEX_ACP_PACKAGE =
+ "@agentclientprotocol/codex-acp@1.1.10";
+export const LEGACY_CODEX_ACP_PACKAGE =
+ "@zed-industries/codex-acp";
+export const CODEX_HARNESS_NOTE =
+ "Uses your existing Codex login. Charon never installs or updates Codex.";
+
+interface CodexHarnessConfig {
+ id: string;
+ command: string;
+ args: string[];
+ codexPath?: string;
+ note?: string;
+ verified?: boolean;
+}
+
+export function migrateCodexHarness<T extends CodexHarnessConfig>(
+ harness: T,
+): T {
+ if (harness.id !== "codex") return harness;
+
+ const packageName = harness.args[1] ?? "";
+ const stockLegacyAdapter =
+  harness.command === "npx" &&
+  harness.args.length === 2 &&
+  harness.args[0] === "-y" &&
+  (packageName === LEGACY_CODEX_ACP_PACKAGE ||
+   packageName.startsWith(`${LEGACY_CODEX_ACP_PACKAGE}@`));
+ if (stockLegacyAdapter) {
+  return {
+   ...harness,
+   args: ["-y", MAINTAINED_CODEX_ACP_PACKAGE],
+   codexPath: harness.codexPath?.trim() || "codex",
+   note: CODEX_HARNESS_NOTE,
+   verified: true,
+  };
+ }
+
+ const maintainedAdapter = harness.args.some((arg) =>
+  /^@agentclientprotocol\/codex-acp(?:@|$)/.test(arg),
+ );
+ return maintainedAdapter && !harness.codexPath?.trim()
+  ? { ...harness, codexPath: "codex" }
+  : harness;
+}
+
+export function harnessEnvironment(
+ harness: CodexHarnessConfig,
+): Record<string, string> | undefined {
+ const codexPath = harness.codexPath?.trim();
+ return harness.id === "codex" && codexPath
+  ? { CODEX_PATH: codexPath }
+  : undefined;
+}
+
 function debugPayload(
  stdout: string,
 ): { models: CodexDebugModel[] } | undefined {
@@ -194,8 +249,19 @@ export function isCodexBridge(
  return (
   executable === "codex-acp" ||
   args.some((arg) =>
-   /^@zed-industries\/codex-acp(?:@|$)/.test(arg),
+   /^@(zed-industries|agentclientprotocol)\/codex-acp(?:@|$)/.test(
+    arg,
+   ),
   )
+ );
+}
+
+export function isLegacyCodexBridge(
+ command: string,
+ args: string[],
+): boolean {
+ return args.some((arg) =>
+  /^@zed-industries\/codex-acp(?:@|$)/.test(arg),
  );
 }
 
@@ -211,7 +277,7 @@ export function codexBridgeArgs(
  fast: boolean,
  modelCatalogPath?: string,
 ): string[] {
- if (!isCodexBridge(command, args)) return args;
+ if (!isLegacyCodexBridge(command, args)) return args;
  const overrides: string[] = [];
  if (modelCatalogPath) {
   overrides.push(
@@ -230,6 +296,15 @@ export function codexBridgeArgs(
   `service_tier=${JSON.stringify(fast ? "priority" : "default")}`,
  );
  return overrides.length > 0 ? [...args, ...overrides] : args;
+}
+
+export function codexRuntimeErrorSummary(
+ detail: string,
+): string | undefined {
+ if (!/requires a newer version of Codex/i.test(detail)) {
+  return undefined;
+ }
+ return "This model rejected the Codex runtime Charon launched. Choose your current Codex executable under Settings > Agent harness, then Verify. Updating Charon does not update that executable.";
 }
 
 /**

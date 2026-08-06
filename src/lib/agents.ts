@@ -1,6 +1,7 @@
 import {
  AcpConnection,
  AcpRpcError,
+ fastModeConfigOption,
  isMethodNotFound,
  labeledModels,
  modelConfigOption,
@@ -13,7 +14,12 @@ import {
  type AcpSessionUpdate,
 } from "./acp";
 import { isHiddenAgentRun, isVisibleAgentRun } from "./agent-runs";
-import { codexBridgeArgs } from "./codexModels";
+import {
+ codexBridgeArgs,
+ harnessEnvironment,
+ isCodexBridge,
+ isLegacyCodexBridge,
+} from "./codexModels";
 import { activeHarness } from "./defaults";
 import { native } from "./tauri";
 import { notify } from "./notify";
@@ -397,6 +403,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
    const harness = activeHarness(useGlobalConfig.getState().config!);
    const command = harness?.command || opts.binary;
    const args = harness?.args ?? ["acp"];
+   const env = harness ? harnessEnvironment(harness) : undefined;
    const cfg = useGlobalConfig.getState().config;
    const reasoning =
     cfg?.reasoningOverrides?.[opts.kind] || cfg?.reasoningEffort || "";
@@ -416,6 +423,8 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     command,
     args,
     sessionCwd,
+    [],
+    harness?.codexPath || "codex",
    );
    const launchArgs = codexBridgeArgs(
     command,
@@ -428,7 +437,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
    // diagnostic that tails its own log for a matching `stream error`.
    const isOpencode = harness?.id === "opencode" || command === "opencode";
          
-   await conn.spawn(command, launchArgs, opts.cwd);
+   await conn.spawn(command, launchArgs, opts.cwd, env);
    await conn.initialize();
    const ns = await conn.newSession(sessionCwd);
    const sessionId = ns.sessionId;
@@ -465,11 +474,10 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
    if (targetMode && modes?.currentModeId !== targetMode) {
     await conn.setMode(sessionId, targetMode);
    }
-   // set model — first via the harness's native `session/set_model` method,
-   // available on harnesses that expose a model list via ACP
-   // `models.availableModels` (cursor). Harnesses may also expose models as
-   // a `model` config option (opencode, codex, oh-my-pi); `sessionModels()`
-   // unifies both shapes for picker validation.
+   // set model — maintained Codex uses its base-model config option because
+   // its native model list contains composite `model[effort]` ids. Other
+   // harnesses first use native `session/set_model`; `sessionModels()` unifies
+   // native lists and config options for picker validation.
    //
    //   opencode 1.15.13's `session/set_config_option("model", …)` corrupted
    //   the session (SQLite NOT NULL on session_message.seq), so pr-copilot
@@ -492,17 +500,28 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
    //   therefore fall back to the config-option path; opencode never reaches
    //   that fallback because its native `set_model` succeeds, preserving the
    //   1.15.13 corruption avoidance above.
-   const sm = sessionModels(ns);
+   const maintainedCodex =
+    isCodexBridge(command, args) &&
+    !isLegacyCodexBridge(command, args);
+   const sm = sessionModels(ns, maintainedCodex);
    if (opts.model && opts.model !== "auto" && sm.models.length) {
-    try {
-     await conn.setModel(sessionId, opts.model);
-    } catch (err) {
-     const modelOpt = modelConfigOption(ns);
-     if (isMethodNotFound(err) && modelOpt && !isOpencode) {
-           await conn.setConfigOption(sessionId, modelOpt.id, opts.model);
-          } else {
-           throw err;
-          }
+    const modelOpt = modelConfigOption(ns);
+    if (maintainedCodex && modelOpt) {
+     await conn.setConfigOption(sessionId, modelOpt.id, opts.model);
+    } else {
+     try {
+      await conn.setModel(sessionId, opts.model);
+     } catch (err) {
+      if (isMethodNotFound(err) && modelOpt && !isOpencode) {
+       await conn.setConfigOption(
+        sessionId,
+        modelOpt.id,
+        opts.model,
+       );
+      } else {
+       throw err;
+      }
+     }
     }
    }
    // reasoning effort — a separate config-option axis where the harness
@@ -510,6 +529,11 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
    const rc = reasoningConfigOption(ns);
    if (reasoning && rc && rc.options!.some((o) => o.value === reasoning)) {
     await conn.setConfigOption(sessionId, rc.id, reasoning);
+   }
+   const fastOption = fastModeConfigOption(ns);
+   const fastValue = fast ? "on" : "off";
+   if (fastOption && fastOption.currentValue !== fastValue) {
+    await conn.setConfigOption(sessionId, fastOption.id, fastValue);
    }
 
    // prompt turn loop — steering re-prompts the same session
@@ -790,7 +814,13 @@ export async function refreshModels(
  const harness = activeHarness(global);
  if (!harness) return;
  const cwd = await native.appDataDir();
- const probe = await probeHarness(harness.command, harness.args, cwd);
+ const probe = await probeHarness(
+  harness.command,
+  harness.args,
+  cwd,
+  undefined,
+  harnessEnvironment(harness),
+ );
  if (!probe.ok || probe.models.length === 0) return; // harness exposes no model list
  // Clean display labels (Cursor bracket params -> "(level, context)",
  // `default` -> "Auto"), sorted alphabetically by label. No synthetic "auto"

@@ -9,6 +9,10 @@ import type {
  PrReviewFilters,
  RepoConfig,
 } from "../types";
+import {
+ CODEX_HARNESS_NOTE,
+ MAINTAINED_CODEX_ACP_PACKAGE,
+} from "./codexModels";
 
 // ---------------------------------------------------------------------------
 // Event catalog. Forward-compatible by design: detectors fire event ids and
@@ -619,9 +623,8 @@ export function notificationEnabled(
 /**
  * Built-in harness templates (ACP servers). `cursor`, `opencode`, and `omp`
  * are verified firsthand (`cursor-agent acp`, `opencode acp`, `omp acp`);
- * claude-code uses Zed's documented adapter; codex has no native ACP server
- * and needs a bridge — onboarding's live verify is the source of truth for
- * the unverified ones.
+ * claude-code uses Zed's documented adapter. Codex runs through the maintained
+ * ACP adapter, which starts the user-selected Codex App Server.
  */
 export function harnessTemplates(cursorBinary = "cursor-agent"): Harness[] {
  return [
@@ -645,13 +648,13 @@ export function harnessTemplates(cursorBinary = "cursor-agent"): Harness[] {
    reasoningCollapsed: true,
    note: "Adapter via npx; needs ANTHROPIC_API_KEY in the environment."
   },
-  // Codex has no native ACP server, so it runs through Zed's codex-acp
-  // bridge (a Rust binary shipped via npx). `codex acp` would just open the
-  // interactive REPL and fail on piped stdin. Verified firsthand.
+  // Pin the adapter to the Charon release. CODEX_PATH selects the user's
+  // runtime, so the adapter's bundled Codex dependency is never the default.
   {
-   id: "codex", name: "Codex CLI", command: "npx", args: ["-y", "@zed-industries/codex-acp"], verified: true,
+   id: "codex", name: "Codex CLI", command: "npx", args: ["-y", MAINTAINED_CODEX_ACP_PACKAGE], verified: true,
+   codexPath: "codex",
    reasoningCollapsed: true,
-   note: "ACP bridge via npx (@zed-industries/codex-acp); uses your Codex login / OPENAI_API_KEY."
+   note: CODEX_HARNESS_NOTE,
   },
  ];
 }

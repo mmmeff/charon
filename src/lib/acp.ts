@@ -8,8 +8,10 @@ import {
  codexAcpModelCatalog,
  codexBridgeArgs,
  commonCodexReasoningLevels,
+ codexRuntimeErrorSummary,
  fastCodexModels,
  isCodexBridge,
+ isLegacyCodexBridge,
  listedCodexModels,
  mergeModelCatalogs,
 } from "./codexModels";
@@ -175,22 +177,46 @@ export function reasoningConfigOption(
  );
 }
 
+export function fastModeConfigOption(
+ ns: NewSessionResult,
+): AcpConfigOption | undefined {
+ return ns.configOptions?.find(
+  (option) =>
+   option.id === "fast-mode" &&
+   option.type === "select" &&
+   option.options?.some((value) => value.value === "on") &&
+   option.options.some((value) => value.value === "off"),
+ );
+}
+
 /**
  * The model list + current id for a session, sourced from whichever mechanism
  * the harness uses: native ACP models (cursor) or a `model` config option
  * (codex). Empty when the harness manages its own model (opencode).
  */
-export function sessionModels(ns: NewSessionResult): {
+export function sessionModels(
+ ns: NewSessionResult,
+ preferConfigOption = false,
+): {
  models: AcpModel[];
  currentId?: string;
 } {
+ const opt = modelConfigOption(ns);
+ if (preferConfigOption && opt) {
+  return {
+   models: opt.options!.map((option) => ({
+    modelId: option.value,
+    name: option.name ?? option.value,
+   })),
+   currentId: opt.currentValue,
+  };
+ }
  if (ns.models?.availableModels?.length) {
   return {
    models: ns.models.availableModels,
    currentId: ns.models.currentModelId,
   };
  }
- const opt = modelConfigOption(ns);
  if (opt) {
   return {
    models: opt.options!.map((o) => ({
@@ -322,6 +348,15 @@ export function isMethodNotFound(e: unknown): boolean {
  * `AcpRpcError.toDetail()`.
  */
 export function summarizeAcpError(e: AcpRpcError): string {
+ const remediation = codexRuntimeErrorSummary(
+  [
+   e.message,
+   e.rpcData === undefined ? "" : JSON.stringify(e.rpcData),
+   e.stderr ?? "",
+  ].join("\n"),
+ );
+ if (remediation) return remediation;
+
  let summary = e.message || "ACP error";
  if (e.method) summary = `${e.method}: ${summary}`;
  if (e.rpcCode !== undefined) summary += ` (rpc ${e.rpcCode})`;
@@ -663,20 +698,21 @@ export interface HarnessProbe {
  reasoning?: { options: AcpModel[]; currentId?: string };
  /** model ids that support Codex's Fast service tier */
  fastModels?: string[];
+ runtime?: { command: string; version: string };
  modes: AcpMode[];
 }
 
 /**
- * codex-acp 0.16.0 links an older Codex model manager. Its ACP picker can
- * reject the installed CLI's newer catalog and lose model metadata. Persist
- * a compatible copy for the bridge launch; use the same source for Charon's
- * model, reasoning, and Fast controls.
+ * Read model metadata from the same Codex executable the adapter will launch.
+ * The archived bridge also needs a downgraded catalog. The maintained bridge
+ * owns its catalog through Codex App Server and never receives that shim.
  */
 export async function prepareCodexBridgeCatalog(
  command: string,
  args: string[],
  cwd: string,
  models: AcpModel[] = [],
+ codexPath = "codex",
 ): Promise<{
  models: AcpModel[];
  reasoning?: { options: AcpModel[] };
@@ -687,7 +723,7 @@ export async function prepareCodexBridgeCatalog(
  let result: ExecResult;
  try {
   result = await native.runExec(
-   "codex",
+   codexPath,
    ["debug", "models"],
    cwd,
   );
@@ -697,7 +733,9 @@ export async function prepareCodexBridgeCatalog(
  if (result.code !== 0) return { models };
 
  const reasoning = commonCodexReasoningLevels(result.stdout);
- const compatibleCatalog = codexAcpModelCatalog(result.stdout);
+ const compatibleCatalog = isLegacyCodexBridge(command, args)
+  ? codexAcpModelCatalog(result.stdout)
+  : undefined;
  let modelCatalogPath: string | undefined;
  if (compatibleCatalog) {
   const relativePath = "harnesses/codex-acp-models.json";
@@ -724,10 +762,15 @@ export async function prepareCodexBridgeCatalog(
 /** Human-readable verify result. */
 export function summarizeProbe(p: HarnessProbe): string {
  if (!p.ok) return p.error ?? "could not connect";
- if (p.models.length === 0)
-  return "Connected — this agent manages its own model";
- const m = `${p.models.length} model${p.models.length === 1 ? "" : "s"}`;
- return `Connected — ${m}${p.modes.length ? `, ${p.modes.length} modes` : ""}`;
+ const runtime = p.runtime
+  ? ` · ${p.runtime.version} via ${p.runtime.command}`
+  : "";
+ if (p.models.length === 0) {
+  return `Connected — this agent manages its own model${runtime}`;
+ }
+ const models =
+  `${p.models.length} model${p.models.length === 1 ? "" : "s"}`;
+ return `Connected — ${models}${p.modes.length ? `, ${p.modes.length} modes` : ""}${runtime}`;
 }
 
 /**
@@ -741,18 +784,49 @@ export async function probeHarness(
  args: string[],
  cwd: string,
  timeoutMs = 15000,
+ env?: Record<string, string>,
 ): Promise<HarnessProbe> {
  const conn = new AcpConnection(uid("probe-"), {
   onUpdate: () => { },
   choosePermission: () => null,
  });
  try {
+  let runtime: HarnessProbe["runtime"];
+  const codexPath = env?.CODEX_PATH;
+  if (isCodexBridge(command, args) && codexPath) {
+   let version: ExecResult;
+   try {
+    version = await native.runExec(codexPath, ["--version"], cwd);
+   } catch (error) {
+    return {
+     ok: false,
+     error: `Codex executable ${JSON.stringify(codexPath)} could not start: ${error instanceof Error ? error.message : String(error)}`,
+     models: [],
+     modes: [],
+    };
+   }
+   if (version.code !== 0) {
+    const detail = version.stderr.trim() || version.stdout.trim();
+    return {
+     ok: false,
+     error: `Codex executable ${JSON.stringify(codexPath)} failed${detail ? `: ${detail}` : ""}`,
+     models: [],
+     modes: [],
+    };
+   }
+   runtime = {
+    command: codexPath,
+    version: version.stdout.trim() || version.stderr.trim(),
+   };
+  }
   const result = await Promise.race([
    (async (): Promise<HarnessProbe> => {
     const catalog = await prepareCodexBridgeCatalog(
      command,
      args,
      cwd,
+     [],
+     codexPath,
     );
     const probeArgs = codexBridgeArgs(
      command,
@@ -761,10 +835,13 @@ export async function probeHarness(
      false,
      catalog.modelCatalogPath,
     );
-    await conn.spawn(command, probeArgs, cwd);
+    await conn.spawn(command, probeArgs, cwd, env);
     await conn.initialize();
     const ns = await conn.newSession(cwd);
-    const sessionModelList = sessionModels(ns);
+    const maintainedCodex =
+     isCodexBridge(command, args) &&
+     !isLegacyCodexBridge(command, args);
+    const sessionModelList = sessionModels(ns, maintainedCodex);
     const rc = reasoningConfigOption(ns);
     const reasoning = rc
      ? {
@@ -784,6 +861,7 @@ export async function probeHarness(
      currentId: sessionModelList.currentId,
      reasoning,
      fastModels: catalog.fastModels,
+     runtime,
      modes: ns.modes?.availableModes ?? [],
     };
    })(),

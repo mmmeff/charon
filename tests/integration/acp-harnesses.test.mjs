@@ -142,6 +142,30 @@ class AcpClient {
       }
       return;
     }
+    if (msg.id != null && msg.method === "session/request_permission") {
+      const options = msg.params?.options ?? [];
+      const selected =
+        options.find((option) => option.kind === "allow_once") ??
+        options.find((option) => option.kind === "allow_always") ??
+        options.find((option) => option.kind?.startsWith("allow"));
+      const outcome = selected
+        ? { outcome: "selected", optionId: selected.optionId }
+        : { outcome: "cancelled" };
+      this.proc.stdin.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: msg.id,
+        result: { outcome },
+      }) + "\n");
+      return;
+    }
+    if (msg.id != null && msg.method) {
+      this.proc.stdin.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: msg.id,
+        error: { code: -32601, message: `method not handled: ${msg.method}` },
+      }) + "\n");
+      return;
+    }
     if (msg.method === "session/update" && msg.params?.update) {
       const u = msg.params.update;
       if (u.sessionUpdate === "agent_message_chunk" && u.content?.text) {
@@ -166,7 +190,25 @@ class AcpClient {
     if (this.dead) return Promise.reject(new AcpRpcError("agent connection closed", { method }));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, method });
+      const timeoutMs = Number(process.env.ACP_REQUEST_TIMEOUT_MS ?? 30_000);
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new AcpRpcError(
+          `${method} timed out after ${timeoutMs}ms`,
+          { stderr: this.stderr, method },
+        ));
+      }, timeoutMs);
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+        method,
+      });
       this.proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
     });
   }
@@ -237,7 +279,18 @@ const HARNESS = [
   // rather than failing the suite on a setup issue.
   { id: "claude-code", command: "npx", args: ["-y", "@zed-industries/claude-code-acp"],
     requiresEnv: ["ANTHROPIC_API_KEY"] },
-  { id: "codex", command: "npx", args: ["-y", "@zed-industries/codex-acp"] },
+  {
+    id: "codex",
+    command: "npx",
+    args: [
+      "-y",
+      process.env.ACP_CODEX_PACKAGE ??
+        "@agentclientprotocol/codex-acp@1.1.10",
+      ...(process.env.ACP_CODEX_CATALOG
+        ? ["-c", `model_catalog_json=${JSON.stringify(process.env.ACP_CODEX_CATALOG)}`]
+        : []),
+    ],
+  },
 ];
 
 // Probe: spawn the harness, send initialize, resolve true if ACP response
@@ -308,31 +361,50 @@ async function isAvailable(h, probeMs = 30_000) {
 
 // --- model/mode selection — mirrors src/lib/agents.ts:301ff (post-fix) ---
 function chooseModelStrategy(ns, harnessId) {
+  const requestedModel =
+    harnessId === "codex" ? process.env.ACP_CODEX_MODEL : undefined;
+  const opt = ns.configOptions?.find(
+    (o) => (o.id === "model" || o.category === "model") && o.type === "select" && o.options?.length
+  );
+  if (
+    opt &&
+    harnessId === "codex" &&
+    (process.env.ACP_CODEX_PACKAGE ?? "@agentclientprotocol/codex-acp@1.1.10")
+      .startsWith("@agentclientprotocol/codex-acp")
+  ) {
+    return {
+      kind: "config-option-direct",
+      optionId: opt.id,
+      currentValue: requestedModel ?? opt.currentValue,
+      apply: (c, sid, modelId) =>
+        c.setConfigOption(sid, opt.id, modelId),
+    };
+  }
   if (ns.models?.availableModels?.length) {
-    const modelId = ns.models.currentModelId ?? ns.models.availableModels[0].modelId;
+    const modelId =
+      requestedModel ??
+      ns.models.currentModelId ??
+      ns.models.availableModels[0].modelId;
     return {
       kind: "native-set_model",
       modelId,
       apply: (c, sid) => c.setModel(sid, modelId),
     };
   }
-  const opt = ns.configOptions?.find(
-    (o) => (o.id === "model" || o.category === "model") && o.type === "select" && o.options?.length
-  );
   if (opt) {
     const optionId = opt.id;
     if (harnessId === "opencode") {
       return {
         kind: "config-option-set_model-only",
         optionId,
-        currentValue: opt.currentValue,
+        currentValue: requestedModel ?? opt.currentValue,
         apply: (c, sid, modelId) => c.setModel(sid, modelId),
       };
     }
     return {
       kind: "config-option-with-fallback",
       optionId,
-      currentValue: opt.currentValue,
+      currentValue: requestedModel ?? opt.currentValue,
       apply: async (c, sid, modelId) => {
         try {
           await c.setModel(sid, modelId);
@@ -396,6 +468,7 @@ describe("ACP harnesses — integration", SUITE_OPTS, () => {
         const s = chooseModelStrategy(ns, h.id);
         assert.ok(
           s.kind === "native-set_model" ||
+            s.kind === "config-option-direct" ||
             s.kind === "config-option-with-fallback" ||
             s.kind === "config-option-set_model-only" ||
             s.kind === "self-managed"
@@ -404,7 +477,11 @@ describe("ACP harnesses — integration", SUITE_OPTS, () => {
           assert.ok(ns.models.availableModels.length > 0);
           assert.ok(s.modelId);
         }
-        if (s.kind === "config-option-with-fallback" || s.kind === "config-option-set_model-only") {
+        if (
+          s.kind === "config-option-direct" ||
+          s.kind === "config-option-with-fallback" ||
+          s.kind === "config-option-set_model-only"
+        ) {
           assert.ok(s.optionId != null);
           assert.ok(s.currentValue, "config-option picker but no currentValue");
         }
@@ -421,10 +498,15 @@ describe("ACP harnesses — integration", SUITE_OPTS, () => {
 
       it("baseline prompt reaches end_turn and the model replies with pong", async () => {
         const s = chooseModelStrategy(ns, h.id);
-        // pr-copilot's actual selection path: native -> set_model; config-option -> set_model, with
-        // config-option fallback only for non-opencode harnesses whose set_model method is missing.
+        // pr-copilot's actual selection path: maintained Codex uses its config
+        // option directly; native lists use set_model; older config-option
+        // harnesses fall back only when set_model is missing.
         if (s.kind === "native-set_model") await s.apply(client, ns.sessionId);
-        if (s.kind === "config-option-with-fallback" || s.kind === "config-option-set_model-only") {
+        if (
+          s.kind === "config-option-direct" ||
+          s.kind === "config-option-with-fallback" ||
+          s.kind === "config-option-set_model-only"
+        ) {
           await s.apply(client, ns.sessionId, s.currentValue);
         }
         const result = await client.prompt(ns.sessionId, BASELINE_PROMPT);

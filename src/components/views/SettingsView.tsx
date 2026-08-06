@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { refreshModels } from "../../lib/agents";
 import { probeHarness, summarizeProbe } from "../../lib/acp";
+import { harnessEnvironment } from "../../lib/codexModels";
 import {
  activeHarness,
  EVENT_CATALOG,
@@ -959,6 +960,7 @@ function HarnessSettings({
  const [id, setId] = useState(cur.id);
  const [command, setCommand] = useState(cur.command);
  const [args, setArgs] = useState(cur.args.join(" "));
+ const [codexPath, setCodexPath] = useState(cur.codexPath ?? "codex");
  const [state, setState] = useState<null | "verifying" | "saving" | { ok: boolean; msg: string }>(null);
  const picked = templates.find((t) => t.id === id);
 
@@ -968,6 +970,7 @@ function HarnessSettings({
   if (t) {
    setCommand(t.command);
    setArgs(t.args.join(" "));
+   setCodexPath(t.codexPath ?? "codex");
   }
   setState(null);
  };
@@ -976,13 +979,20 @@ function HarnessSettings({
   name: picked?.name ?? id,
   command: command.trim(),
   args: args.trim() ? args.trim().split(/\s+/) : [],
+  codexPath: id === "codex" ? codexPath.trim() || "codex" : undefined,
   note: picked?.note,
  });
 
  const verify = async () => {
   setState("verifying");
   const h = harness();
-  const r = await probeHarness(h.command, h.args, await native.appDataDir());
+  const r = await probeHarness(
+   h.command,
+   h.args,
+   await native.appDataDir(),
+   undefined,
+   harnessEnvironment(h),
+  );
   setState({ ok: r.ok, msg: summarizeProbe(r) });
  };
  const apply = async () => {
@@ -1027,6 +1037,21 @@ function HarnessSettings({
      style={{ flex: 1 }}
     />
    </div>
+   {id === "codex" && (
+    <div style={{ marginTop: 6 }}>
+     <input
+      type="text"
+      value={codexPath}
+      onChange={(e) => { setCodexPath(e.target.value); setState(null); }}
+      placeholder="codex or /absolute/path/to/codex"
+      aria-label="Codex executable"
+      style={{ width: "100%" }}
+     />
+     <small style={{ display: "block", color: "var(--fg-subtle)", marginTop: 5 }}>
+      The adapter is plumbing. Charon runs this Codex executable and never updates it.
+     </small>
+    </div>
+   )}
    {picked?.note && <small style={{ display: "block", color: "var(--fg-subtle)", marginTop: 5 }}>{picked.note}</small>}
    <div className="row" style={{ marginTop: 8 }}>
     <button className="small" disabled={state === "verifying" || !command.trim()} onClick={() => void verify()}>

@@ -4,10 +4,16 @@ import test from "node:test";
 import {
   codexAcpModelCatalog,
   codexBridgeArgs,
+  codexRuntimeErrorSummary,
   commonCodexReasoningLevels,
   fastCodexModels,
+  harnessEnvironment,
+  isCodexBridge,
+  isLegacyCodexBridge,
   listedCodexModels,
+  MAINTAINED_CODEX_ACP_PACKAGE,
   mergeModelCatalogs,
+  migrateCodexHarness,
 } from "../../src/lib/codexModels.ts";
 
 test("listedCodexModels keeps visible models and hides internal entries", () => {
@@ -121,10 +127,17 @@ test("codexBridgeArgs adds a supported ephemeral reasoning override", () => {
       "",
       true,
     ),
-    [
-      "-c",
-      "service_tier=\"priority\"",
-    ],
+    [],
+  );
+  assert.deepEqual(
+    codexBridgeArgs(
+      "npx",
+      ["-y", MAINTAINED_CODEX_ACP_PACKAGE],
+      "xhigh",
+      true,
+      "/tmp/stale-catalog.json",
+    ),
+    ["-y", MAINTAINED_CODEX_ACP_PACKAGE],
   );
   assert.deepEqual(
     codexBridgeArgs(
@@ -134,6 +147,72 @@ test("codexBridgeArgs adds a supported ephemeral reasoning override", () => {
       true,
     ),
     ["acp"],
+  );
+});
+
+test("Codex bridge detection separates the archived adapter shim", () => {
+  assert.equal(
+    isCodexBridge("npx", ["-y", MAINTAINED_CODEX_ACP_PACKAGE]),
+    true,
+  );
+  assert.equal(
+    isLegacyCodexBridge("npx", ["-y", MAINTAINED_CODEX_ACP_PACKAGE]),
+    false,
+  );
+  assert.equal(
+    isLegacyCodexBridge("npx", ["-y", "@zed-industries/codex-acp"]),
+    true,
+  );
+});
+
+test("Codex runtime version failures become plain remediation copy", () => {
+  assert.equal(
+    codexRuntimeErrorSummary(
+      "The 'gpt-5.6-sol' model requires a newer version of Codex.",
+    ),
+    "This model rejected the Codex runtime Charon launched. Choose your current Codex executable under Settings > Agent harness, then Verify. Updating Charon does not update that executable.",
+  );
+  assert.equal(codexRuntimeErrorSummary("rate limited"), undefined);
+});
+
+test("the stock archived adapter migrates to the selected Codex runtime", () => {
+  const migrated = migrateCodexHarness({
+    id: "codex",
+    name: "Codex CLI",
+    command: "npx",
+    args: ["-y", "@zed-industries/codex-acp"],
+  });
+  const custom = {
+    id: "codex",
+    name: "Custom Codex",
+    command: "/opt/tools/codex-acp",
+    args: ["--custom"],
+  };
+
+  assert.deepEqual(migrated.args, ["-y", MAINTAINED_CODEX_ACP_PACKAGE]);
+  assert.equal(migrated.codexPath, "codex");
+  assert.deepEqual(harnessEnvironment(migrated), { CODEX_PATH: "codex" });
+  assert.deepEqual(migrateCodexHarness(custom), custom);
+});
+
+test("CODEX_PATH belongs only to the Codex harness", () => {
+  assert.deepEqual(
+    harnessEnvironment({
+      id: "codex",
+      command: "codex-acp",
+      args: [],
+      codexPath: "/opt/codex/bin/codex",
+    }),
+    { CODEX_PATH: "/opt/codex/bin/codex" },
+  );
+  assert.equal(
+    harnessEnvironment({
+      id: "cursor",
+      command: "cursor-agent",
+      args: ["acp"],
+      codexPath: "/opt/codex/bin/codex",
+    }),
+    undefined,
   );
 });
 

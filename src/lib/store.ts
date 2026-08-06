@@ -16,6 +16,7 @@ import type {
   Swarm,
 } from "../types";
 import { defaultGlobalConfig, defaultRepoConfig, syncActiveModelPrefs, DEFAULT_FIX_POLICY, LEGACY_FIX_POLICY } from "./defaults";
+import { migrateCodexHarness } from "./codexModels";
 import { reLeaseWorktree, removeWorktree } from "./worktree";
 import { native } from "./tauri";
 
@@ -42,6 +43,7 @@ function migrateGlobal(cfg: GlobalConfig): GlobalConfig {
     ];
     cfg.activeHarness = "cursor";
   }
+  cfg.harnesses = cfg.harnesses.map(migrateCodexHarness);
   return cfg;
 }
 
@@ -50,7 +52,17 @@ export const useGlobalConfig = create<GlobalState>((set) => ({
   loaded: false,
   async load() {
     const raw = await native.loadBlob("global.json");
-    const config = raw ? migrateGlobal({ ...defaultGlobalConfig(), ...JSON.parse(raw) }) : null;
+    const loaded = raw ? { ...defaultGlobalConfig(), ...JSON.parse(raw) } : null;
+    const previousHarnesses = loaded
+      ? JSON.stringify(loaded.harnesses)
+      : null;
+    const config = loaded ? migrateGlobal(loaded) : null;
+    if (
+      config &&
+      previousHarnesses !== JSON.stringify(config.harnesses)
+    ) {
+      await native.saveBlob("global.json", JSON.stringify(config, null, 2));
+    }
     set({ config, loaded: true });
     return config;
   },
@@ -66,7 +78,11 @@ export const useGlobalConfig = create<GlobalState>((set) => ({
   async setLastRepo(repo) {
     const raw = await native.loadBlob("global.json");
     if (!raw) return;
-    const cfg: GlobalConfig = { ...defaultGlobalConfig(), ...JSON.parse(raw), lastRepo: repo };
+    const cfg = migrateGlobal({
+      ...defaultGlobalConfig(),
+      ...JSON.parse(raw),
+      lastRepo: repo,
+    });
     set({ config: cfg });
     await native.saveBlob("global.json", JSON.stringify(cfg, null, 2));
   },

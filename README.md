@@ -94,7 +94,7 @@ connection live. Supported out of the box:
 | --- | --- | --- |
 | **[Cursor](https://cursor.com/cli)** | `cursor-agent acp` | Native ACP server. Run `cursor-agent login` first. |
 | **[Claude Code](https://github.com/anthropics/claude-code)** | `npx -y @zed-industries/claude-code-acp` | Adapter; needs `ANTHROPIC_API_KEY`. |
-| **[Codex CLI](https://github.com/openai/codex)** | `npx -y @zed-industries/codex-acp` | ACP bridge; uses your Codex login / `OPENAI_API_KEY`. |
+| **[Codex CLI](https://github.com/openai/codex)** | `npx -y @agentclientprotocol/codex-acp@1.1.10` | Maintained ACP adapter; `CODEX_PATH` selects your Codex executable. Charon never updates it. |
 | **[opencode](https://opencode.ai)** | `opencode acp` | Native ACP server. Configure a provider/API key first. |
 
 Switch harnesses any time from Settings — each keeps its own model and reasoning preferences. Got

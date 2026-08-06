@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { refreshModels } from "../lib/agents";
 import { labeledModels, probeHarness, summarizeProbe } from "../lib/acp";
+import { harnessEnvironment } from "../lib/codexModels";
 import { BrandField } from "./BrandField";
 import { Stagger, StaggerItem } from "./amicro/stagger";
 import {
@@ -48,6 +49,11 @@ function Onboarding({
   const picked = templates.find((t) => t.id === harnessId) ?? templates[0];
   const [command, setCommand] = useState(picked.command);
   const [args, setArgs] = useState(picked.args.join(" "));
+  const [codexPath, setCodexPath] = useState(
+    existing?.harnesses.find((item) => item.id === "codex")?.codexPath ??
+      picked.codexPath ??
+      "codex",
+  );
   const [verify, setVerify] = useState<
     null | { busy: true } | { busy: false; ok: boolean; msg: string; models: number }
   >(null);
@@ -57,6 +63,7 @@ function Onboarding({
     if (t) {
       setCommand(t.command);
       setArgs(t.args.join(" "));
+      setCodexPath(t.codexPath ?? "codex");
     }
     setVerify(null);
   };
@@ -65,6 +72,8 @@ function Onboarding({
     name: picked.name,
     command: command.trim(),
     args: args.trim() ? args.trim().split(/\s+/) : [],
+    codexPath:
+      harnessId === "codex" ? codexPath.trim() || "codex" : undefined,
     note: picked.note,
   });
 
@@ -72,7 +81,13 @@ function Onboarding({
     setVerify({ busy: true });
     const h = harness();
     const cwd = await native.appDataDir();
-    const r = await probeHarness(h.command, h.args, cwd);
+    const r = await probeHarness(
+      h.command,
+      h.args,
+      cwd,
+      undefined,
+      harnessEnvironment(h),
+    );
     setVerify({ busy: false, ok: r.ok, msg: summarizeProbe(r), models: r.models.length });
   };
 
@@ -101,7 +116,13 @@ function Onboarding({
       // apply that harness's hardcoded defaults reconciled against what it
       // actually exposes (best-effort: a failed probe keeps the "auto" seed)
       const cwd = await native.appDataDir();
-      const probe = await probeHarness(h.command, h.args, cwd).catch(() => null);
+      const probe = await probeHarness(
+        h.command,
+        h.args,
+        cwd,
+        undefined,
+        harnessEnvironment(h),
+      ).catch(() => null);
       let models: string[] = [];
       let modelLabels: Record<string, string> = {};
       let reasoningOptions: string[] = [];
@@ -244,6 +265,24 @@ function Onboarding({
             style={{ flex: 1 }}
           />
         </div>
+        {harnessId === "codex" && (
+          <div style={{ marginTop: 6 }}>
+            <input
+              type="text"
+              value={codexPath}
+              onChange={(e) => {
+                setCodexPath(e.target.value);
+                setVerify(null);
+              }}
+              placeholder="codex or /absolute/path/to/codex"
+              aria-label="Codex executable"
+              style={{ width: "100%" }}
+            />
+            <small>
+              The adapter is plumbing. Charon runs this Codex executable and never updates it.
+            </small>
+          </div>
+        )}
         <small>
           The ACP agent Charon drives — spawned as <code>{command || "…"} {args}</code>. {picked.note}{" "}
           Other harnesses are configurable later in Settings.

@@ -29,6 +29,10 @@ export interface Harness {
   command: string;
   /** args that start the ACP server (e.g. ["acp"] or ["-y","@…/claude-code-acp"]) */
   args: string[];
+  /** Codex executable selected by the user. Passed to maintained Codex ACP
+   *  adapters as CODEX_PATH so the adapter cannot silently use its bundled
+   *  fallback runtime. */
+  codexPath?: string;
   /** confirmed working firsthand (vs. an unverified template) */
   verified?: boolean;
   /** auth / setup hint shown when a connection probe fails */
