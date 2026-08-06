@@ -107,7 +107,7 @@ export function DraftsView() {
   return (
     <div className="main split">
       <Sidebar>
-        <div className="row between" style={{ marginBottom: 8 }}>
+        <div className="row between pr-list-toolbar" style={{ marginBottom: 8 }}>
           <span className="subtle">
             {drafts.length} draft{drafts.length === 1 ? "" : "s"}
             {pendingItems.length > 0 ? ` · ${pendingItems.length} building` : ""}
@@ -148,21 +148,26 @@ export function DraftsView() {
               selected={!creating && pr?.number === p.number}
               onClick={() => setSelected(p.number)}
             >
-              <h4>
+              <h4 title={`#${p.number} ${p.title}`}>
                 #{p.number} {p.title}
               </h4>
-              <div className="meta">
-                <RunningAgentsChip prNumber={p.number} />
-                <Badge color="gray">draft</Badge>
-                <CiBadge checks={checks[p.number] ?? []} />
-                <ApprovalsBadge prNumber={p.number} />
-                <span>{p.headRef}</span>
-                <span>
-                  +{p.additions} −{p.deletions}
-                </span>
-                <Badge color="gray" title={`updated ${p.updatedAt}`}>
-                  {age(p.updatedAt)}
-                </Badge>
+              <div className="meta pr-card-meta">
+                <div className="pr-card-status">
+                  <RunningAgentsChip prNumber={p.number} variant="inline" />
+                  <CiBadge checks={checks[p.number] ?? []} variant="inline" />
+                  <ApprovalsBadge prNumber={p.number} variant="inline" />
+                </div>
+                <div className="pr-card-context" title={p.headRef}>
+                  {p.headRef}
+                </div>
+                <div className="pr-card-footer">
+                  <span className="pr-card-change">
+                    +{p.additions} −{p.deletions}
+                  </span>
+                  <span className="pr-card-age" title={`updated ${p.updatedAt}`}>
+                    {age(p.updatedAt)}
+                  </span>
+                </div>
               </div>
             </PrStackCard>
             </StaggerItem>

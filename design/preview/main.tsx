@@ -21,6 +21,7 @@ import { DiffViewer } from "../../src/components/DiffViewer";
 import { FlowCtx } from "../../src/components/flow";
 import { Launcher } from "../../src/components/Launcher";
 import { PrWorkspace } from "../../src/components/PrWorkspace";
+import { BabysitView } from "../../src/components/views/BabysitView";
 import { DraftsView } from "../../src/components/views/DraftsView";
 import { ReviewView } from "../../src/components/views/ReviewView";
 import { SettingsView } from "../../src/components/views/SettingsView";
@@ -29,7 +30,18 @@ import { RepoPoller, usePrData } from "../../src/lib/events";
 import type { FlowContext } from "../../src/lib/flows";
 import { GitHubClient } from "../../src/lib/github";
 import { useAgentStore, useGlobalConfig, useRepoStore } from "../../src/lib/store";
-import { checks, comments, diffText, greenChecks, greenPr, pendingDraftRun, prs, REPO, runs } from "./fixtures";
+import {
+  checks,
+  comments,
+  deepStackPrs,
+  diffText,
+  greenChecks,
+  greenPr,
+  pendingDraftRun,
+  prs,
+  REPO,
+  runs,
+} from "./fixtures";
 
 async function boot() {
   const global = await useGlobalConfig.getState().load();
@@ -38,14 +50,16 @@ async function boot() {
 
   const gh = new GitHubClient(global);
   const repoConfig = useRepoStore.getState().config;
+  const surface = new URLSearchParams(window.location.search).get("surface");
+  const previewPrs = surface === "stacks" ? deepStackPrs : prs;
 
   usePrData.getState().patch({
-    openPulls: prs,
-    myDrafts: prs.filter((p) => p.draft),
-    myOpen: [...prs.filter((p) => !p.draft && p.author === "mfrey"), greenPr],
-    reviewQueue: prs.filter((p) => p.author !== "mfrey"),
-    checks: { ...Object.fromEntries(prs.map((p) => [p.number, checks])), [greenPr.number]: greenChecks },
-    comments: Object.fromEntries(prs.map((p) => [p.number, comments])),
+    openPulls: previewPrs,
+    myDrafts: previewPrs.filter((p) => p.draft),
+    myOpen: surface === "stacks" ? [] : [...prs.filter((p) => !p.draft && p.author === "mfrey"), greenPr],
+    reviewQueue: surface === "stacks" ? [] : prs.filter((p) => p.author !== "mfrey"),
+    checks: { ...Object.fromEntries(previewPrs.map((p) => [p.number, checks])), [greenPr.number]: greenChecks },
+    comments: Object.fromEntries(previewPrs.map((p) => [p.number, comments])),
     lastPollAt: Date.now(),
   });
 
@@ -163,7 +177,9 @@ const SURFACES: Record<string, () => React.ReactElement> = {
   onboarding: () => <Launcher />,
   settings: () => <SettingsView />,
   review: () => <ReviewView />,
+  open: () => <BabysitView />,
   drafts: () => <DraftsView />,
+  stacks: () => <DraftsView />,
   pr: () => <PrWorkspace pr={prs[0]} variant="babysit" />,
   clean: () => <PrWorkspace pr={greenPr} variant="babysit" />,
   draft: () => <PrWorkspace pr={prs[2]} variant="draft" />,

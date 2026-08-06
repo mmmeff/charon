@@ -71,18 +71,24 @@ export function ReviewView() {
         selected={pr?.number === p.number}
         onClick={() => setSelected(p.number)}
       >
-        <h4>
+        <h4 title={`#${p.number} ${p.title}`}>
           #{p.number} {p.title}
         </h4>
-        <div className="meta">
-          <RunningAgentsChip prNumber={p.number} />
-          <span>by {p.author}</span>
-          <span>
-            +{p.additions} −{p.deletions}
-          </span>
-          <Badge color="gray" title={`updated ${p.updatedAt}`}>
-            {age(p.updatedAt)}
-          </Badge>
+        <div className="meta pr-card-meta">
+          <div className="pr-card-status">
+            <RunningAgentsChip prNumber={p.number} variant="inline" />
+          </div>
+          <div className="pr-card-context" title={`by ${p.author}`}>
+            by {p.author}
+          </div>
+          <div className="pr-card-footer">
+            <span className="pr-card-change">
+              +{p.additions} −{p.deletions}
+            </span>
+            <span className="pr-card-age" title={`updated ${p.updatedAt}`}>
+              {age(p.updatedAt)}
+            </span>
+          </div>
         </div>
       </PrStackCard>
     );
@@ -91,7 +97,7 @@ export function ReviewView() {
   return (
     <div className="main split">
       <Sidebar>
-        <div className="row between" style={{ marginBottom: 8 }}>
+        <div className="row between pr-list-toolbar" style={{ marginBottom: 8 }}>
           <span className="subtle">{needsAttention.length} waiting on you</span>
           <SortPicker value={sort} onChange={setSort} />
         </div>

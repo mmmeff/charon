@@ -13,7 +13,13 @@ import { FadeUp } from "./amicro/fade-up";
 // src/lib/ui.ts — mixed exports here break Vite Fast Refresh in dev.
 
 /** Live indicator: how many agents are currently executing against a PR. */
-export function RunningAgentsChip({ prNumber }: { prNumber: number }) {
+export function RunningAgentsChip({
+  prNumber,
+  variant = "solid",
+}: {
+  prNumber: number;
+  variant?: "solid" | "inline";
+}) {
   const count = useAgentStore(
     (s) =>
       s.order.filter((id) => {
@@ -23,7 +29,10 @@ export function RunningAgentsChip({ prNumber }: { prNumber: number }) {
   );
   if (count === 0) return null;
   return (
-    <span className="badge green agents-live" title={`${count} agent${count > 1 ? "s" : ""} working on this PR — see the Agents tab`}>
+    <span
+      className={`badge green agents-live ${variant}`}
+      title={`${count} agent${count > 1 ? "s" : ""} working on this PR — see the Agents tab`}
+    >
       <span className="livedot" />
       {count} agent{count > 1 ? "s" : ""}
     </span>
@@ -78,14 +87,24 @@ export function BranchBadge({ head, base }: { head: string; base: string }) {
   );
 }
 
-/** "n/m approvals" badge for PR list cards — green once requirements met. */
-export function ApprovalsBadge({ prNumber }: { prNumber: number }) {
+/** Approval state, with an inline variant for constrained PR list cards. */
+export function ApprovalsBadge({
+  prNumber,
+  variant = "solid",
+}: {
+  prNumber: number;
+  variant?: "solid" | "inline";
+}) {
   const { ctx } = useFlow();
   const reviews = usePrData((s) => s.reviews[prNumber]) ?? [];
   const n = new Set(reviews.filter((r) => r.state === "APPROVED").map((r) => r.author)).size;
   const req = ctx.config.requiredApprovals;
   return (
-    <Badge color={n >= req ? "green" : "gray"} title={`${n} of ${req} required approvals`}>
+    <Badge
+      color={n >= req ? "green" : "gray"}
+      title={`${n} of ${req} required approvals`}
+      variant={variant}
+    >
       {n}/{req} approvals
     </Badge>
   );
@@ -194,13 +213,15 @@ export function Badge({
   color,
   children,
   title,
+  variant = "solid",
 }: {
   color: "gray" | "green" | "red" | "yellow" | "blue" | "purple" | "orange";
   children: ReactNode;
   title?: string;
+  variant?: "solid" | "inline";
 }) {
   return (
-    <span className={`badge ${color}`} title={title}>
+    <span className={`badge ${color} ${variant}`} title={title}>
       {children}
     </span>
   );
@@ -221,22 +242,56 @@ export function ConfidenceBadge({ confidence }: { confidence: number }) {
   );
 }
 
-export function CiBadge({ checks }: { checks: { conclusion: string | null; status: string }[] }) {
-  if (checks.length === 0) return <Badge color="gray">no checks</Badge>;
+export function CiBadge({
+  checks,
+  variant = "solid",
+}: {
+  checks: { conclusion: string | null; status: string }[];
+  variant?: "solid" | "inline";
+}) {
+  if (checks.length === 0)
+    return (
+      <Badge color="gray" variant={variant}>
+        no checks
+      </Badge>
+    );
   if (checks.some((c) => c.conclusion === "failure" || c.conclusion === "error"))
-    return <Badge color="red">CI failing</Badge>;
-  if (checks.some((c) => !c.conclusion)) return <Badge color="yellow">CI running</Badge>;
+    return (
+      <Badge color="red" variant={variant}>
+        CI failing
+      </Badge>
+    );
+  if (checks.some((c) => !c.conclusion))
+    return (
+      <Badge color="yellow" variant={variant}>
+        CI running
+      </Badge>
+    );
   if (checks.every((c) => c.conclusion === "success" || c.conclusion === "skipped" || c.conclusion === "neutral"))
-    return <Badge color="green">CI green</Badge>;
-  return <Badge color="yellow">CI mixed</Badge>;
+    return (
+      <Badge color="green" variant={variant}>
+        CI green
+      </Badge>
+    );
+  return (
+    <Badge color="yellow" variant={variant}>
+      CI mixed
+    </Badge>
+  );
 }
 
-export function MergeBadge({ state }: { state: string }) {
-  if (state === "dirty") return <Badge color="red">conflicts</Badge>;
-  if (state === "behind") return <Badge color="yellow">behind base</Badge>;
-  if (state === "clean") return <Badge color="green">mergeable</Badge>;
-  if (state === "blocked") return <Badge color="yellow">blocked</Badge>;
-  return <Badge color="gray">{state || "unknown"}</Badge>;
+export function MergeBadge({
+  state,
+  variant = "solid",
+}: {
+  state: string;
+  variant?: "solid" | "inline";
+}) {
+  if (state === "dirty") return <Badge color="red" variant={variant}>conflicts</Badge>;
+  if (state === "behind") return <Badge color="yellow" variant={variant}>behind base</Badge>;
+  if (state === "clean") return <Badge color="green" variant={variant}>mergeable</Badge>;
+  if (state === "blocked") return <Badge color="yellow" variant={variant}>blocked</Badge>;
+  return <Badge color="gray" variant={variant}>{state || "unknown"}</Badge>;
 }
 
 /** Inline loading indicator — amicro dot spinner, inherits text color. */
@@ -247,10 +302,10 @@ export function Spinner({ size = 10 }: { size?: number }) {
 export function SortPicker({ value, onChange }: { value: SortKey; onChange: (k: SortKey) => void }) {
   return (
     <select
+      className="sort-picker"
       value={value}
       onChange={(e) => onChange(e.target.value as SortKey)}
       title="Sort order"
-      style={{ fontSize: 12, padding: "3px 6px" }}
     >
       <option value="updated">recently updated</option>
       <option value="oldest">least recently updated</option>

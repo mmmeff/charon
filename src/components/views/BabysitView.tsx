@@ -48,7 +48,7 @@ export function BabysitView() {
   return (
     <div className="main split">
       <Sidebar>
-        <div className="row between" style={{ marginBottom: 8 }}>
+        <div className="row between pr-list-toolbar" style={{ marginBottom: 8 }}>
           <span className="subtle">
             {myOpen.length} open PR{myOpen.length > 1 ? "s" : ""}
           </span>
@@ -67,21 +67,25 @@ export function BabysitView() {
               selected={pr?.number === p.number}
               onClick={() => setSelected(p.number)}
             >
-              <h4>
+              <h4 title={`#${p.number} ${p.title}`}>
                 #{p.number} {p.title}
               </h4>
-              <div className="meta">
-                <RunningAgentsChip prNumber={p.number} />
-                <CiBadge checks={checks[p.number] ?? []} />
-                <MergeBadge state={p.mergeableState} />
-                <ApprovalsBadge prNumber={p.number} />
-                <span>
-                  +{p.additions} −{p.deletions}
-                </span>
-                <Badge color="gray" title={`updated ${p.updatedAt}`}>
-                  {age(p.updatedAt)}
-                </Badge>
-                {pending > 0 && <Badge color="yellow">{pending} pending</Badge>}
+              <div className="meta pr-card-meta">
+                <div className="pr-card-status">
+                  <RunningAgentsChip prNumber={p.number} variant="inline" />
+                  <CiBadge checks={checks[p.number] ?? []} variant="inline" />
+                  <MergeBadge state={p.mergeableState} variant="inline" />
+                  <ApprovalsBadge prNumber={p.number} variant="inline" />
+                  {pending > 0 && <Badge color="yellow" variant="inline">{pending} pending</Badge>}
+                </div>
+                <div className="pr-card-footer">
+                  <span className="pr-card-change">
+                    +{p.additions} −{p.deletions}
+                  </span>
+                  <span className="pr-card-age" title={`updated ${p.updatedAt}`}>
+                    {age(p.updatedAt)}
+                  </span>
+                </div>
               </div>
             </PrStackCard>
             </StaggerItem>

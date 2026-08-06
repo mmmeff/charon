@@ -92,6 +92,26 @@ export const prs: PrSummary[] = [
   },
 ];
 
+export const deepStackPrs: PrSummary[] = Array.from({ length: 7 }, (_, index) => {
+  const number = 4900 + index;
+  const headRef = `mfrey/stack-layer-${index + 1}-with-a-deliberately-long-branch-name`;
+  const baseRef = index === 0 ? "main" : `mfrey/stack-layer-${index}-with-a-deliberately-long-branch-name`;
+  return {
+    ...basePr,
+    number,
+    title: `[STACK-${index + 1}] Carry the review context through a deeply nested pull request`,
+    draft: true,
+    headRef,
+    baseRef,
+    url: `https://github.com/acme/charon/pull/${number}`,
+    mergeableState: index % 2 === 0 ? "dirty" : "clean",
+    additions: 180 * (index + 1),
+    deletions: 37 * (index + 1),
+    changedFiles: index + 2,
+    updatedAt: new Date(NOW - 1000 * 60 * 60 * (index + 1)).toISOString(),
+  };
+});
+
 export const greenPr: PrSummary = {
   ...prs[0],
   number: 4830,
