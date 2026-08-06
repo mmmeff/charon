@@ -9,6 +9,7 @@ interface CodexDebugModel {
  visibility?: unknown;
  default_reasoning_level?: unknown;
  supported_reasoning_levels?: unknown;
+ supports_reasoning_summaries?: unknown;
  additional_speed_tiers?: unknown;
 }
 
@@ -72,6 +73,13 @@ export function codexAcpModelCatalog(
        (level as CodexReasoningLevel).effort as string,
       ),
     );
+  }
+  // Codex 0.146 dropped this field. codex-acp 0.16.0 still requires it
+  // and gates reasoning effort on it.
+  if (typeof model.supports_reasoning_summaries !== "boolean") {
+   model.supports_reasoning_summaries =
+    Array.isArray(model.supported_reasoning_levels) &&
+    model.supported_reasoning_levels.length > 0;
   }
   if (
    typeof model.default_reasoning_level === "string" &&
