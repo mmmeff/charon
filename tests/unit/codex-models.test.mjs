@@ -137,7 +137,7 @@ test("codexBridgeArgs adds a supported ephemeral reasoning override", () => {
   );
 });
 
-test("codexAcpModelCatalog removes reasoning levels the old bridge cannot parse", () => {
+test("codexAcpModelCatalog normalizes current metadata for the old bridge", () => {
   const catalog = codexAcpModelCatalog(JSON.stringify({
     models: [
       {
@@ -161,6 +161,7 @@ test("codexAcpModelCatalog removes reasoning levels the old bridge cannot parse"
       {
         slug: "gpt-5.6-sol",
         default_reasoning_level: "xhigh",
+        supports_reasoning_summaries: true,
         supported_reasoning_levels: [
           { effort: "low", description: "Low" },
           { effort: "xhigh", description: "Extra high" },
