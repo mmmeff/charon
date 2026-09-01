@@ -371,11 +371,23 @@ export function ultraReviewEvidenceIsInDiff(
   files: FileDiff[],
   evidence: UltraReviewEvidence,
 ): boolean {
-  if (evidence.kind !== "changed") return false;
-  return changesInEvidenceRange(
-    evidence,
-    enumerateUltraReviewDiffChanges(files),
-  ).failure === null;
+  return ultraReviewEvidenceAreInDiff(files, [evidence]);
+}
+
+export function ultraReviewEvidenceAreInDiff(
+  files: FileDiff[],
+  evidence: UltraReviewEvidence[],
+): boolean {
+  if (evidence.length === 0) return true;
+  const changes = enumerateUltraReviewDiffChanges(files);
+  return evidence.every(
+    (reference) =>
+      reference.kind === "changed"
+      && changesInEvidenceRange(
+        reference,
+        changes,
+      ).failure === null,
+  );
 }
 
 export function auditUltraReviewDiff(

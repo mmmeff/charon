@@ -21,6 +21,7 @@ const {
   buildUltraReviewFocusedRetryInstruction,
   mergeUltraReviewProgressArtifact,
   mergeFocusedRetry,
+  resolveUltraReviewGenerationModel,
   ultraReviewCandidatePreservesPublishedChapters,
   ultraReviewProgressArtifactIsSafe,
 } = await server.ssrLoadModule(
@@ -32,26 +33,90 @@ const {
   "/src/lib/ultrareview-diff-audit.ts",
 );
 const {
+  FLOW_MODEL_CATALOG,
+  resolveFlowFastMode,
+  resolveFlowReasoning,
+} = await server.ssrLoadModule(
+  "/src/lib/defaults.ts",
+);
+const {
   createUltraReviewArtifact,
   parseUltraReviewAnalysisJson,
 } = await server.ssrLoadModule(
   "/src/lib/ultraReview.ts",
+);
+const {
+  appendUltraReviewChapterPublication,
+  assembleUltraReviewPlanPublication,
+} = await server.ssrLoadModule(
+  "/src/lib/ultrareview-publication-artifact.ts",
 );
 
 after(async () => {
   await server.close();
 });
 
+test("UltraReview generation has a dedicated model default", () => {
+  const ctx = {
+    global: {
+      models: ["global-model", "review-model", "ultra-model"],
+      defaultModel: "global-model",
+      modelOverrides: {
+        review: "review-model",
+      },
+    },
+  };
+
+  assert.equal(
+    resolveUltraReviewGenerationModel(ctx),
+    "review-model",
+  );
+  ctx.global.modelOverrides.ultrareview = "ultra-model";
+  assert.equal(
+    resolveUltraReviewGenerationModel(ctx),
+    "ultra-model",
+  );
+  ctx.global.modelOverrides.ultrareview = "missing-model";
+  assert.equal(
+    resolveUltraReviewGenerationModel(ctx),
+    "review-model",
+  );
+});
+
+test("Settings exposes the UltraReview generation model route", () => {
+  const route = FLOW_MODEL_CATALOG.find(
+    (entry) => entry.kind === "ultrareview",
+  );
+
+  assert.deepEqual(route, {
+    kind: "ultrareview",
+    label: "UltraReview generation",
+    capability: "automatic · model + reasoning + speed defaults",
+    inheritsFrom: "review",
+  });
+});
+
+test("UltraReview generation can override inherited reasoning and speed", () => {
+  const config = {
+    reasoningEffort: "medium",
+    reasoningOverrides: { review: "xhigh" },
+    fastMode: false,
+    fastModeOverrides: { review: true },
+  };
+
+  assert.equal(resolveFlowReasoning(config, "ultrareview"), "xhigh");
+  assert.equal(resolveFlowFastMode(config, "ultrareview"), true);
+
+  config.reasoningOverrides.ultrareview = "high";
+  config.fastModeOverrides.ultrareview = false;
+  assert.equal(resolveFlowReasoning(config, "ultrareview"), "high");
+  assert.equal(resolveFlowFastMode(config, "ultrareview"), false);
+});
+
 function session(mode) {
   return {
     mode,
-    beatStates: {
-      "beat:stable": "reviewed",
-      "beat:failed": "pending",
-      "beat:other": "reviewed",
-    },
     acknowledgedMechanicalChangeIds: [],
-    creditedEvidenceIds: ["evidence:stable"],
     concernDispositions: {},
     notes: [],
     answers: [],
@@ -504,20 +569,22 @@ test("validated progress becomes usable before the terminal artifact", () => {
     ultraReviewProgressArtifactIsSafe(PROGRESS_DIFF, first),
     true,
   );
-  const merged = mergeUltraReviewProgressArtifact(
+  const result = mergeUltraReviewProgressArtifact(
     PROGRESS_DIFF,
     current,
     first,
     [],
   );
+  assert.equal(result.accepted, true);
+  const merged = result.artifact;
   assert.equal(merged.generation.status, "running");
   assert.equal(
     merged.galaxy.systems[0].chapters[0].id,
     "chapter:progress:0",
   );
   assert.equal(
-    merged.sessions.teammate.beatStates["beat:progress:0"],
-    "pending",
+    merged.sessions.teammate.reviewCompletedAt,
+    undefined,
   );
 
   const forged = progressArtifact(1);
@@ -525,6 +592,17 @@ test("validated progress becomes usable before the terminal artifact", () => {
   assert.equal(
     ultraReviewProgressArtifactIsSafe(PROGRESS_DIFF, forged),
     false,
+  );
+  const unsafe = mergeUltraReviewProgressArtifact(
+    PROGRESS_DIFF,
+    current,
+    forged,
+    [],
+  );
+  assert.equal(unsafe.accepted, false);
+  assert.equal(
+    unsafe.issue.code,
+    "PROGRESS_ARTIFACT_UNSAFE",
   );
 
   const mismatched = progressArtifact(2);
@@ -538,6 +616,140 @@ test("validated progress becomes usable before the terminal artifact", () => {
       mismatched,
     ),
     false,
+  );
+});
+
+test("a validated system plan becomes visible before its first chapter", () => {
+  const current = createUltraReviewArtifact(PROGRESS_IDENTITY);
+  const plan = progressArtifact(0);
+
+  assert.equal(
+    ultraReviewProgressArtifactIsSafe(PROGRESS_DIFF, plan),
+    true,
+  );
+  const result = mergeUltraReviewProgressArtifact(
+    PROGRESS_DIFF,
+    current,
+    plan,
+    [],
+  );
+  assert.equal(result.accepted, true);
+  const merged = result.artifact;
+  assert.equal(merged.galaxy.systems.length, 1);
+  assert.equal(merged.galaxy.systems[0].chapters.length, 0);
+  assert.equal(merged.generation.status, "running");
+});
+
+test("normalized chapters append to their published plan", async () => {
+  const trustedEvidence = progressArtifact(2).evidence;
+  const planned = assembleUltraReviewPlanPublication(
+    PROGRESS_IDENTITY,
+    {
+      thesis: "Publish complete chapters while analysis continues.",
+      grounding: [{
+        kind: "author_stated",
+        claim: "Completed chapters should open before analysis finishes.",
+      }],
+      systems: [{
+        key: "progress",
+        title: "Progressive review",
+        thesis: "Completed chapters open before later work.",
+        risk: "medium",
+        chapters: [
+          {
+            key: "first",
+            title: "Ready first chapter",
+          },
+          {
+            key: "second",
+            title: "Ready second chapter",
+          },
+        ],
+      }],
+    },
+    trustedEvidence,
+  );
+  const planResult = mergeUltraReviewProgressArtifact(
+    PROGRESS_DIFF,
+    createUltraReviewArtifact(PROGRESS_IDENTITY),
+    planned.artifact,
+    [],
+  );
+  assert.equal(planResult.accepted, true);
+  const publishedPlan = planResult.artifact;
+
+  const first = await appendUltraReviewChapterPublication(
+    publishedPlan,
+    {
+      chapterKey: "first",
+      purpose: "Expose validated review work.",
+      before: "The reviewer waited for the complete artifact.",
+      after: "The first completed chapter opens immediately.",
+      risk: "medium",
+      beats: [{
+        title: "Explain the first change",
+        claim: "The first line enables progressive review.",
+        why: "This chapter starts the pull request story.",
+        risk: "medium",
+        changedEvidenceIds: [trustedEvidence[0].id],
+        context: [],
+      }],
+    },
+    trustedEvidence,
+    async () => {
+      throw new Error("This chapter has no supporting context.");
+    },
+  );
+  const result = mergeUltraReviewProgressArtifact(
+    PROGRESS_DIFF,
+    publishedPlan,
+    first.artifact,
+    [],
+  );
+
+  assert.equal(result.accepted, true);
+  const merged = result.artifact;
+  assert.equal(
+    merged.galaxy.systems[0].chapters[0].id,
+    "chapter:first",
+  );
+
+  const second = await appendUltraReviewChapterPublication(
+    merged,
+    {
+      chapterKey: "second",
+      purpose: "Continue the validated review story.",
+      before: "Only the first chapter is visible.",
+      after: "Both completed chapters are visible.",
+      risk: "medium",
+      dependencyChapterKeys: ["first"],
+      beats: [{
+        title: "Explain the second change",
+        claim: "The second line continues progressive review.",
+        why: "This chapter completes the pull request story.",
+        risk: "medium",
+        changedEvidenceIds: [trustedEvidence[1].id],
+        context: [],
+      }],
+    },
+    trustedEvidence,
+    async () => {
+      throw new Error("This chapter has no supporting context.");
+    },
+  );
+  const secondResult = mergeUltraReviewProgressArtifact(
+    PROGRESS_DIFF,
+    merged,
+    second.artifact,
+    [],
+  );
+
+  assert.equal(secondResult.accepted, true);
+  assert.deepEqual(
+    secondResult.artifact.galaxy.systems[0].chapters.map(
+      (chapter) => chapter.id,
+    ),
+    ["chapter:first", "chapter:second"],
   );
 });
 
@@ -582,6 +794,17 @@ test("later analysis may append work but cannot rewrite published chapters", () 
       second,
     ),
     false,
+  );
+  const rejected = mergeUltraReviewProgressArtifact(
+    PROGRESS_DIFF,
+    first,
+    second,
+    [],
+  );
+  assert.equal(rejected.accepted, false);
+  assert.equal(
+    rejected.issue.code,
+    "PUBLISHED_WORK_CHANGED",
   );
 });
 

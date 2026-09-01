@@ -47,6 +47,7 @@ import {
 } from "./fixtures";
 import {
   ultraReviewPreviewArtifact,
+  ultraReviewPreviewFiles,
   type UltraReviewPreviewVariant,
 } from "./ultrareview-fixtures";
 
@@ -92,21 +93,74 @@ async function boot() {
     "ultra-loading": "loading",
     "ultra-progressive": "progressive",
     "ultra-invalid": "invalid",
+    "ultra-failed": "failed",
     "ultra-resumed": "resumed",
     "ultra-plan": "complex",
     "ultra-partial": "partial",
     "ultra-author": "author",
     "ultra-delta": "delta",
     "ultra-review": "ready",
+    "ultra-large": "large",
     "ultra-raw": "ready",
     "ultra-closing": "ready",
     "ultra-merged": "ready",
     "ultra-diff-error": "ready",
+    "pr-building": "loading",
+    "review-building": "loading",
   };
   previewUltraVariant = ultraVariants[surface ?? ""] ?? "ready";
-  previewUltraPr = previewUltraVariant === "author"
+  previewUltraPr = surface === "pr-building"
+    ? prs[0]
+    : previewUltraVariant === "author"
     ? prs[0]
     : prs[3];
+  if (
+    previewUltraVariant === "loading"
+    || previewUltraVariant === "progressive"
+  ) {
+    const analysisRun = {
+      ...runs[0],
+      id: "run-ultrareview-analysis",
+      kind: "ultrareview" as const,
+      relation: "build UltraReview",
+      prNumber: previewUltraPr.number,
+      prTitle: previewUltraPr.title,
+      prompt: "Build UltraReview from trusted pull request evidence.",
+      startedAt: Date.now() - 41_000,
+      entries: [
+        {
+          type: "thought" as const,
+          at: Date.now() - 8_000,
+          text:
+            previewUltraVariant === "progressive"
+              ? "The review plan is published.\n\nTracing the rescue path and its tests into the next review chapter."
+              : "The pull request evidence is indexed.\n\nMapping the chapter relationships and assigning each diff to one beat.",
+        },
+      ],
+      tools: {},
+      plan: [
+        {
+          content: "Index pull request evidence",
+          status: "completed" as const,
+        },
+        {
+          content: "Build causal chapters",
+          status: "in_progress" as const,
+        },
+        {
+          content: "Check changed-line coverage",
+          status: "pending" as const,
+        },
+      ],
+    };
+    useAgentStore.setState((state) => ({
+      runs: {
+        ...state.runs,
+        [analysisRun.id]: analysisRun,
+      },
+      order: [analysisRun.id, ...state.order],
+    }));
+  }
   if (surface === "ultra-merged") {
     previewUltraPr = {
       ...previewUltraPr,
@@ -225,6 +279,7 @@ function UltraReviewPreview() {
   const requestedSurface =
     new URLSearchParams(window.location.search).get("surface");
   const initialSurface = requestedSurface === "ultra-review"
+    || requestedSurface === "ultra-large"
     || requestedSurface === "ultra-merged"
     ? "review" as const
     : requestedSurface === "ultra-raw"
@@ -249,7 +304,7 @@ function UltraReviewPreview() {
       files={
         requestedSurface === "ultra-diff-error"
           ? null
-          : parseUnifiedDiff(diffText)
+          : ultraReviewPreviewFiles(previewUltraVariant)
       }
       filesError={
         requestedSurface === "ultra-diff-error"
@@ -279,22 +334,28 @@ const SURFACES: Record<string, () => React.ReactElement> = {
   onboarding: () => <Launcher />,
   settings: () => <SettingsView />,
   review: () => <ReviewView />,
+  "review-building": () => <ReviewView />,
   open: () => <BabysitView />,
   drafts: () => <DraftsView />,
   stacks: () => <DraftsView />,
   pr: () => <PrWorkspace pr={prs[0]} variant="babysit" />,
+  "pr-building": () => (
+    <PrWorkspace pr={prs[0]} variant="babysit" />
+  ),
   clean: () => <PrWorkspace pr={greenPr} variant="babysit" />,
   draft: () => <PrWorkspace pr={prs[2]} variant="draft" />,
   ultra: () => <UltraReviewPreview />,
   "ultra-loading": () => <UltraReviewPreview />,
   "ultra-progressive": () => <UltraReviewPreview />,
   "ultra-invalid": () => <UltraReviewPreview />,
+  "ultra-failed": () => <UltraReviewPreview />,
   "ultra-resumed": () => <UltraReviewPreview />,
   "ultra-plan": () => <UltraReviewPreview />,
   "ultra-partial": () => <UltraReviewPreview />,
   "ultra-author": () => <UltraReviewPreview />,
   "ultra-delta": () => <UltraReviewPreview />,
   "ultra-review": () => <UltraReviewPreview />,
+  "ultra-large": () => <UltraReviewPreview />,
   "ultra-raw": () => <UltraReviewPreview />,
   "ultra-closing": () => <UltraReviewPreview />,
   "ultra-merged": () => <UltraReviewPreview />,

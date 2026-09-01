@@ -8,18 +8,19 @@ import type {
   LineSelection,
   PrSummary,
   UltraReviewArtifact,
+  UltraReviewNoteKind,
   UltraReviewSession,
 } from "../../types";
 import {
   DiffViewer,
   type DiffAnchor,
-  type RemoteViewedState,
 } from "../DiffViewer";
 import { useFlow } from "../flow";
 import {
   EMPTY_DIFF_VIEW_STATE,
+  GitHubCommentBody,
   NoteComposer,
-  lineNoteEvidenceId,
+  lineNoteEvidenceIds,
 } from "./review-shared";
 
 export function RawDiffWorkspace({
@@ -29,8 +30,6 @@ export function RawDiffWorkspace({
   comments,
   onMutate,
   pr,
-  remoteViewed,
-  viewedKey,
   readOnly,
 }: {
   artifact: UltraReviewArtifact;
@@ -41,8 +40,6 @@ export function RawDiffWorkspace({
     updater: (artifact: UltraReviewArtifact) => UltraReviewArtifact,
   ) => void;
   pr: PrSummary;
-  remoteViewed?: RemoteViewedState;
-  viewedKey?: string;
   readOnly: boolean;
 }) {
   const { ctx } = useFlow();
@@ -78,7 +75,7 @@ export function RawDiffWorkspace({
       node: (
         <article className="ultra-inline-note">
           <span>
-            Human note · {note.stale ? "prior head" : "local"}
+            {note.kind} · {note.stale ? "prior head" : "local"}
           </span>
           <p>{note.body}</p>
         </article>
@@ -103,39 +100,22 @@ export function RawDiffWorkspace({
           <span>
             Existing GitHub feedback · @{comment.author}
           </span>
-          <p>{comment.body}</p>
+          <GitHubCommentBody comment={comment} />
         </article>
       ),
     }];
   });
   const anchors = [...noteAnchors, ...commentAnchors];
-  const credit = (evidenceId: string) => {
-    if (!evidenceId) return;
-    onMutate((current) => ({
-      ...current,
-      sessions: {
-        ...current.sessions,
-        [session.mode]: {
-          ...current.sessions[session.mode],
-          creditedEvidenceIds: [
-            ...new Set([
-              ...current.sessions[session.mode].creditedEvidenceIds,
-              evidenceId,
-            ]),
-          ],
-        },
-      },
-    }));
-  };
   const addLineNote = (
     selection: LineSelection,
     body: string,
+    kind: UltraReviewNoteKind,
   ) => {
-    const evidenceId = lineNoteEvidenceId(
+    const evidenceIds = lineNoteEvidenceIds(
       artifact,
       selection,
     );
-    if (!evidenceId) {
+    if (!evidenceIds) {
       setNoteError(
         "That range is not mapped changed evidence. It cannot receive a durable UltraReview line note.",
       );
@@ -151,8 +131,9 @@ export function RawDiffWorkspace({
           current,
           {
             id: uid("ultra-note-"),
-            evidenceId,
+            evidenceIds,
             body,
+            kind,
             startLine: selection.startLine,
             endLine: selection.endLine,
             createdAt: Date.now(),
@@ -179,8 +160,8 @@ export function RawDiffWorkspace({
           ?? EMPTY_DIFF_VIEW_STATE
         }
         onViewStateChange={persistViewState}
-        remoteViewed={remoteViewed}
-        viewedKey={viewedKey}
+        trackViewed
+        disablePatternAutoCollapse
         loadFileText={(path, side) =>
           ctx.gh.getFileText(
             side === "RIGHT"
@@ -188,44 +169,20 @@ export function RawDiffWorkspace({
               : ctx.repo,
             path,
             side === "RIGHT" ? pr.headSha : pr.baseSha,
-          )}
+        )}
         renderCommentForm={readOnly ? undefined : (next, close) => (
-          <div className="ultra-raw-credit">
-            <p>
-              {lineNoteEvidenceId(artifact, next)
-                ? "Explicitly credit this mapped evidence after inspection."
-                : "Select a changed line to credit mapped evidence."}
-            </p>
-            <div className="row">
-              <button
-                type="button"
-                className="primary small"
-                disabled={!lineNoteEvidenceId(artifact, next)}
-                onClick={() => {
-                  const evidenceId =
-                    lineNoteEvidenceId(artifact, next);
-                  if (evidenceId) credit(evidenceId);
-                  close();
-                }}
-              >
-                Credit inspected evidence
-              </button>
-              <button
-                type="button"
-                className="small"
-                onClick={close}
-              >
-                Cancel
-              </button>
-            </div>
+          <div className="ultra-raw-note">
             <NoteComposer
               label={`Shared ledger note · ${next.path}:${next.startLine}–${next.endLine}`}
-              onSave={(body) => addLineNote(next, body)}
+              onSave={(body, kind) =>
+                addLineNote(next, body, kind)}
               onSaved={close}
+              onCancel={() => {
+                setNoteError("");
+                close();
+              }}
+              error={noteError}
             />
-            {noteError && (
-              <p className="ultra-form-error">{noteError}</p>
-            )}
           </div>
         )}
       />

@@ -68,7 +68,7 @@ export interface GlobalConfig {
   reasoningEffort: string;
   /** Per-flow default model overrides, keyed by AgentKind; empty = global default */
   modelOverrides: Record<string, string>;
-  /** Per-flow reasoning-effort overrides, keyed by AgentKind; "" = global default */
+  /** Per-flow reasoning-effort overrides, keyed by AgentKind; "" = inherited default */
   reasoningOverrides: Record<string, string>;
   /** Model ids that support Codex's Fast service tier */
   fastModels: string[];
@@ -211,6 +211,8 @@ export interface RepoConfig {
   pollIntervalSec: number;
   /** default instructions prefilled in the composer's Review mode */
   reviewPrompt: string;
+  /** repo-specific instructions for the UltraReview closing assessment */
+  ultraReviewFinalAssessmentPrompt: string;
   /** dependency/validation policy injected into every fix-flow prompt */
   fixPolicy: string;
  /** shell command Charon runs in the worktree before pushing a fix flow's
@@ -419,6 +421,7 @@ export type AgentKind =
   | "draft_edit"
   | "draft_question"
   | "rewrite"
+  | "ultrareview"
   | "event"
   | "custom";
 
@@ -755,6 +758,7 @@ export interface ContextGapExpansion {
 export interface DiffViewerViewState {
  collapsed: Record<string, boolean>;
  expandedContext: Record<string, ContextGapExpansion>;
+ viewed?: Record<string, string>;
 }
 
 export interface LineSelection {
@@ -802,13 +806,6 @@ export type UltraReviewRisk =
 
 export type StoryRisk = UltraReviewRisk;
 
-export type StoryReviewState =
- | "pending"
- | "active"
- | "reviewed"
- | "stale"
- | "failed";
-
 export type StoryScope = {
  changedLines: number;
  files?: number;
@@ -816,7 +813,6 @@ export type StoryScope = {
 
 export type StorySignal = {
  risk?: StoryRisk;
- state?: StoryReviewState;
  scope?: StoryScope;
  confidence?: number;
  unresolvedFeedback?: number;
@@ -825,7 +821,6 @@ export type StorySignal = {
 export type StoryBeat = StorySignal & {
  id: string;
  title: string;
- objective?: string;
 };
 
 export type StoryChapter = StorySignal & {
@@ -867,49 +862,11 @@ export interface UltraReviewAnalysisPullRequest {
  repo: string;
  number: number;
  title: string;
- body: string;
  author: string;
  baseRef: string;
  headRef: string;
  baseSha: string;
  headSha: string;
-}
-
-export interface UltraReviewAnalysisCheck {
- name: string;
- status: string;
- conclusion?: string;
- summary?: string;
-}
-
-export interface UltraReviewAnalysisComment {
- id: number;
- author: string;
- body: string;
- path?: string;
- line?: number;
- side?: "LEFT" | "RIGHT";
- resolved?: boolean;
-}
-
-export interface UltraReviewAnalysisReview {
- id: number;
- author: string;
- state: string;
- body?: string;
-}
-
-export interface UltraReviewAnalysisTimelineEvent {
- id: string;
- type: string;
- actor?: string;
- summary?: string;
-}
-
-export interface UltraReviewAnalysisCommit {
- sha: string;
- message: string;
- author?: string;
 }
 
 export interface UltraReviewContextFailure {
@@ -932,8 +889,6 @@ export interface UltraReviewAnalysisEvidence {
  change: UltraReviewEvidenceChange;
  location: UltraReviewEvidenceLocation;
  fingerprint: string;
- content: string;
- supportingReason?: string;
 }
 
 export interface UltraReviewCheckoutContext {
@@ -941,18 +896,21 @@ export interface UltraReviewCheckoutContext {
  root?: string;
 }
 
+export interface UltraReviewArtifactValidation {
+ candidatePath: string;
+ contextPath: string;
+ command: string;
+}
+
 export interface UltraReviewAnalysisInput {
  mode: UltraReviewMode;
+ githubHost: string;
  pullRequest: UltraReviewAnalysisPullRequest;
- diff: string;
  evidenceInventory: UltraReviewAnalysisEvidence[];
- checks: UltraReviewAnalysisCheck[];
- comments: UltraReviewAnalysisComment[];
- reviews: UltraReviewAnalysisReview[];
- timeline: UltraReviewAnalysisTimelineEvent[];
- commits: UltraReviewAnalysisCommit[];
  contextFailures: UltraReviewContextFailure[];
  checkout: UltraReviewCheckoutContext;
+ artifactValidation: UltraReviewArtifactValidation;
+ fallbackDiff?: string;
 }
 
 export type UltraReviewFollowUpAction =
@@ -1193,15 +1151,22 @@ export interface UltraReviewGeneration {
  failures: UltraReviewGenerationFailure[];
 }
 
-export type UltraReviewBeatState =
- | "pending"
- | "reviewed"
- | "stale";
-
 export type UltraReviewConcernDisposition =
  | "dismissed"
  | "verified"
  | "promoted";
+
+export type UltraReviewNoteKind =
+ | "note"
+ | "nitpick"
+ | "request"
+ | "suggestion"
+ | "praise";
+
+export type UltraReviewVerdict =
+ | "COMMENT"
+ | "APPROVE"
+ | "REQUEST_CHANGES";
 
 export type UltraReviewNoteAnchor =
  | {
@@ -1210,7 +1175,7 @@ export type UltraReviewNoteAnchor =
    }
  | {
     kind: "line";
-    evidenceId: string;
+    evidenceIds: string[];
     path: string;
     side: UltraReviewEvidenceSide;
     startLine: number;
@@ -1221,6 +1186,9 @@ export type UltraReviewNoteAnchor =
 export interface UltraReviewNote {
  id: string;
  body: string;
+ kind: UltraReviewNoteKind;
+ /** Whether this line note should ship as an inline GitHub comment. */
+ submitAsComment: boolean;
  anchor: UltraReviewNoteAnchor;
  createdAt: number;
  /** Set when the anchor belongs to an earlier pull request version. */
@@ -1280,6 +1248,9 @@ export interface UltraReviewDraftInlineComment {
 export interface UltraReviewDraft {
  id: string;
  body: string;
+ recommendedVerdict: UltraReviewVerdict;
+ /** Stable digest of the notes used to create this assessment. */
+ sourceNotesFingerprint: string;
  sections: UltraReviewDraftSection[];
  inlineComments: UltraReviewDraftInlineComment[];
  incorporatedNoteIds: string[];
@@ -1288,8 +1259,7 @@ export interface UltraReviewDraft {
 }
 
 export interface UltraReviewProgress {
- reviewedBeats: number;
- totalBeats: number;
+ documentReviewed: boolean;
  acknowledgedMechanicalChanges: number;
  totalMechanicalChanges: number;
  coveredChangedEvidence: number;
@@ -1303,7 +1273,7 @@ export interface UltraReviewSubmissionSnapshot {
  id: string;
  submittedAt: number;
  headSha: string;
- verdict: "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+ verdict: UltraReviewVerdict;
  body: string;
  inlineComments: UltraReviewDraftInlineComment[];
  noteIds: string[];
@@ -1329,16 +1299,15 @@ export interface UltraReviewResumePosition {
  scrollTop: number;
  expandedEvidenceIds: string[];
  diffViewStates?: {
-  review?: DiffViewerViewState;
+  beats?: Record<string, DiffViewerViewState>;
   raw?: DiffViewerViewState;
  };
 }
 
 export interface UltraReviewSession {
  mode: UltraReviewMode;
- beatStates: Record<string, UltraReviewBeatState>;
+ reviewCompletedAt?: number;
  acknowledgedMechanicalChangeIds: string[];
- creditedEvidenceIds: string[];
  concernDispositions: Record<string, UltraReviewConcernDisposition>;
   notes: UltraReviewNote[];
   answers: UltraReviewAnswer[];

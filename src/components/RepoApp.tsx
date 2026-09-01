@@ -22,7 +22,10 @@ import {
  resolveShortcutMap,
 } from "../lib/shortcuts";
 import { native } from "../lib/tauri";
-import { useUltraReviewStore } from "../lib/ultrareview-store";
+import {
+ reconcileInterruptedUltraReviews,
+ useUltraReviewStore,
+} from "../lib/ultrareview-store";
 import { navigateToPr } from "../lib/nav";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { timeAgo, useNow } from "../lib/ui";
@@ -176,14 +179,39 @@ export function RepoApp({ repo }: { repo: string }) {
   // remember this repo so the next app boot reopens it directly
   void useGlobalConfig.getState().setLastRepo(repo);
   // restore agent history and keep persisting it across restarts
-  let cleanups: Array<() => void> = [];
+  const cleanups: Array<() => void> = [];
+  let disposed = false;
+  const rememberCleanup = (cleanup: () => void) => {
+   if (disposed) {
+    cleanup();
+   } else {
+    cleanups.push(cleanup);
+   }
+  };
   // initAgentPersistence first — it marks in-flight runs as killed on restart.
   // initSwarmPersistence runs after so it sees the post-restart contender
   // statuses and re-leases held worktrees accordingly (ADR-0003 hydrate order).
-  void initAgentPersistence(repo).then((c) => cleanups.push(c));
-  void initSwarmPersistence(repo).then((c) => cleanups.push(c));
-  void useUltraReviewStore.getState().init(repo);
-  return () => cleanups.forEach((c) => c());
+  void (async () => {
+   await Promise.all([
+    useUltraReviewStore.getState().init(repo),
+    (async () => {
+     const agentCleanup = await initAgentPersistence(repo);
+     rememberCleanup(agentCleanup);
+     if (disposed) return;
+     const swarmCleanup = await initSwarmPersistence(repo);
+     rememberCleanup(swarmCleanup);
+    })(),
+   ]);
+   if (!disposed) {
+    await reconcileInterruptedUltraReviews(repo);
+   }
+  })().catch(
+   (error) => console.error("persistence initialization failed", error),
+  );
+  return () => {
+   disposed = true;
+   cleanups.forEach((cleanup) => cleanup());
+  };
   // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [repo]);
 

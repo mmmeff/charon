@@ -304,6 +304,17 @@ export const DEFAULT_REVIEW_FILTERS: PrReviewFilters = {
 export const DEFAULT_REVIEW_PROMPT =
  "Run the thermonuclear code quality review on PR {pr-number} and propose inline comments with severity and confidence.";
 
+export const DEFAULT_ULTRAREVIEW_FINAL_ASSESSMENT_PROMPT = `Write a concise, direct final review assessment from all reviewer notes.
+- Summarize the overall state of the change. Do not restate each note in order.
+- Distinguish merge-blocking requests from suggestions, nitpicks, praise, and context.
+- Explain the rolled-up decision in plain English.
+- Recommend COMMENT when the notes are informational, APPROVE when no note identifies a required change, or REQUEST_CHANGES when at least one note identifies a change required before merge.
+
+Example assessment:
+"The change closes the stale-worktree failure path and preserves rejected work for recovery. The remaining notes are naming nitpicks and optional test coverage; neither changes the safety of the implementation. This is ready to merge."
+
+Example recommendation: APPROVE`;
+
 /** Pre-gate default policy. Kept verbatim so loading an old config can detect
  *  "user never customized this" and upgrade it to the current default. */
 export const LEGACY_FIX_POLICY = `- Do NOT install dependencies (npm/pnpm/yarn install, pip, cargo fetch, bundle install, …) and do NOT run
@@ -340,6 +351,8 @@ export function defaultRepoConfig(): RepoConfig {
   localClonePath: "",
   pollIntervalSec: 60,
   reviewPrompt: DEFAULT_REVIEW_PROMPT,
+  ultraReviewFinalAssessmentPrompt:
+   DEFAULT_ULTRAREVIEW_FINAL_ASSESSMENT_PROMPT,
   fixPolicy: DEFAULT_FIX_POLICY,
   validationCommand: "",
   babysitFilters: { ...DEFAULT_BABYSIT_FILTERS },
@@ -379,7 +392,7 @@ export interface HarnessModelDefaults {
  modelOverrides: Record<string, string>;
  /** global default reasoning effort ("" = no axis / harness default) */
  reasoningEffort: string;
- /** per-flow reasoning-effort overrides, keyed by AgentKind */
+ /** per-flow reasoning-effort overrides, keyed by AgentKind; missing values inherit */
  reasoningOverrides: Record<string, string>;
 }
 
@@ -520,16 +533,84 @@ function seedPrefsFromDefaults(d: HarnessModelDefaults): HarnessModelPrefs {
  };
 }
 
+export const MODEL_OVERRIDE_FALLBACKS:
+ Readonly<Record<string, string>> = {
+ ultrareview: "review",
+};
+
+export function resolveFlowReasoning(
+ config: Pick<
+  GlobalConfig,
+  "reasoningEffort" | "reasoningOverrides"
+ >,
+ kind?: string,
+): string {
+ const fallbackKind = kind
+  ? MODEL_OVERRIDE_FALLBACKS[kind]
+  : undefined;
+ return (
+  (kind ? config.reasoningOverrides?.[kind] : "")
+  || (fallbackKind
+   ? config.reasoningOverrides?.[fallbackKind]
+   : "")
+  || config.reasoningEffort
+  || ""
+ );
+}
+
+export function resolveFlowFastMode(
+ config: Pick<
+  GlobalConfig,
+  "fastMode" | "fastModeOverrides"
+ >,
+ kind?: string,
+): boolean {
+ if (
+  kind
+  && Object.prototype.hasOwnProperty.call(
+   config.fastModeOverrides ?? {},
+   kind,
+  )
+ ) {
+  return config.fastModeOverrides[kind];
+ }
+ const fallbackKind = kind
+  ? MODEL_OVERRIDE_FALLBACKS[kind]
+  : undefined;
+ if (
+  fallbackKind
+  && Object.prototype.hasOwnProperty.call(
+   config.fastModeOverrides ?? {},
+   fallbackKind,
+  )
+ ) {
+  return config.fastModeOverrides[fallbackKind];
+ }
+ return config.fastMode ?? false;
+}
+
+interface FlowModelCatalogEntry {
+ kind: string;
+ label: string;
+ capability: string;
+ inheritsFrom?: string;
+}
+
 /**
- * Every AI-prompt-driven flow, keyed by its AgentKind, with what the user can
- * steer at launch time. Drives the Default-models settings table; overrides
- * land in GlobalConfig.modelOverrides.
+ * Every AI-prompt-driven model route. Drives the Default-models settings
+ * table; overrides land in GlobalConfig.modelOverrides.
  */
-export const FLOW_MODEL_CATALOG: { kind: string; label: string; capability: string }[] = [
+export const FLOW_MODEL_CATALOG: FlowModelCatalogEntry[] = [
  { kind: "draft_create", label: "Create draft PR", capability: "prompt ✓ · model picker ✓" },
  { kind: "draft_question", label: "Ask / Q&A", capability: "prompt ✓ · model picker ✓" },
  { kind: "draft_edit", label: "Edit (composer Change mode)", capability: "prompt ✓ · model picker ✓" },
  { kind: "review", label: "Review (self-review & teammate review)", capability: "prompt ✓ · model picker ✓" },
+ {
+ kind: "ultrareview",
+ label: "UltraReview generation",
+  capability: "automatic · model + reasoning + speed defaults",
+ inheritsFrom: MODEL_OVERRIDE_FALLBACKS.ultrareview,
+ },
  {
   kind: "feedback_fix",
   label: "Apply findings / address comments",

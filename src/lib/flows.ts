@@ -13,6 +13,7 @@ import type {
  Skill,
 } from "../types";
 import { cleanResultText, extractProposalJson, startAgent } from "./agents";
+import { MODEL_OVERRIDE_FALLBACKS } from "./defaults";
 import { lineInDiff, lineTextAt, nearestDiffLine, parseUnifiedDiff } from "./diff";
 import type { GitHubClient } from "./github";
 import { applySkills } from "./skills";
@@ -78,9 +79,17 @@ export const MAX_DIFF_CHARS = 90_000;
 export function resolveModel(ctx: FlowContext, explicit?: string, kind?: string): string {
  const known = (m?: string) =>
   m && (ctx.global.models.length === 0 || ctx.global.models.includes(m)) ? m : "";
+ const fallbackKind = kind
+  ? MODEL_OVERRIDE_FALLBACKS[kind]
+  : undefined;
  return (
   explicit ||
   known(kind ? ctx.global.modelOverrides?.[kind] : "") ||
+  known(
+   fallbackKind
+    ? ctx.global.modelOverrides?.[fallbackKind]
+    : "",
+  ) ||
   known(ctx.global.defaultModel) ||
   "auto"
  );

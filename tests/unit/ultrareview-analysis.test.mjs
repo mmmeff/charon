@@ -3,31 +3,53 @@ import test from "node:test";
 
 import {
   advanceUltraReviewGeneration,
+  buildUltraReviewAnalysisContext,
   buildUltraReviewAnalysisPrompt,
+  buildUltraReviewPublicationPrompt,
   buildUltraReviewClosingSynthesisPrompt,
   buildUltraReviewFollowUpPrompt,
   createUltraReviewGenerationState,
+  parseUltraReviewArtifactCandidate,
   parseUltraReviewArtifactResponse,
   parseUltraReviewFollowUpAnswer,
   parseUltraReviewProgressResponses,
   ultraReviewSourceLabel,
 } from "../../src/lib/ultrareview-analysis.ts";
 
-test("analysis prompt carries every evidence source through a read-only contract", () => {
-  const prompt = buildUltraReviewAnalysisPrompt({
+test("staged publication uses bounded deltas instead of terminal artifacts", () => {
+  const prompt = buildUltraReviewPublicationPrompt();
+
+  assert.match(prompt, /publish_plan/);
+  assert.match(prompt, /publish_chapter/);
+  assert.match(prompt, /finish_review/);
+  assert.match(prompt, /as soon as it is complete/);
+  assert.match(prompt, /JSON Schemas are the source of truth/);
+  assert.match(prompt, /Charon assigns stored ids/);
+  assert.match(prompt, /head-commit path, inclusive line range, and reason/);
+  assert.match(prompt, /descriptive plain English/);
+  assert.match(prompt, /repository-root-relative/);
+  assert.match(prompt, /tests? in the same beat/i);
+  assert.match(prompt, /Do not create a separate test-only beat/i);
+  assert.doesNotMatch(prompt, /supportingEvidence/);
+  assert.doesNotMatch(prompt, /sourceClaimIds.*source claim id/);
+  assert.doesNotMatch(prompt, /cumulative/i);
+  assert.doesNotMatch(prompt, /complete terminal artifact/i);
+});
+
+test("analysis prompt points to evidence instead of embedding bulky PR data", () => {
+  const input = {
     mode: "teammate",
+    githubHost: "github.example.com",
     pullRequest: {
       repo: "acme/charon",
       number: 42,
       title: "Persist review progress",
-      body: "Keep the review position after restart.",
       author: "octavia",
       baseRef: "main",
       headRef: "octavia/review-progress",
       baseSha: "base-123",
       headSha: "head-456",
     },
-    diff: "diff --git a/src/store.ts b/src/store.ts\n+save(position)",
     evidenceInventory: [
       {
         id: "changed-store",
@@ -40,63 +62,6 @@ test("analysis prompt carries every evidence source through a read-only contract
           endLine: 18,
         },
         fingerprint: "sha256:store-line",
-        content: "save(position)",
-      },
-      {
-        id: "support-1",
-        kind: "supporting",
-        change: "context",
-        location: {
-          path: "src/store.ts",
-          side: "RIGHT",
-          startLine: 1,
-          endLine: 30,
-        },
-        fingerprint: "sha256:store-context",
-        content: "export function restore() {}",
-        supportingReason: "state consumer",
-      },
-    ],
-    checks: [
-      {
-        name: "typecheck",
-        status: "completed",
-        conclusion: "failure",
-        summary: "One type error",
-      },
-    ],
-    comments: [
-      {
-        id: 11,
-        author: "lin",
-        body: "Does this survive a force-push?",
-        path: "src/store.ts",
-        line: 18,
-        side: "RIGHT",
-        resolved: false,
-      },
-    ],
-    reviews: [
-      {
-        id: 12,
-        author: "mira",
-        state: "CHANGES_REQUESTED",
-        body: "Restore state by head SHA.",
-      },
-    ],
-    timeline: [
-      {
-        id: "event-13",
-        type: "head_ref_force_pushed",
-        actor: "octavia",
-        summary: "The branch was force-pushed.",
-      },
-    ],
-    commits: [
-      {
-        sha: "head-456",
-        message: "Persist exact review position",
-        author: "octavia",
       },
     ],
     contextFailures: [
@@ -110,25 +75,108 @@ test("analysis prompt carries every evidence source through a read-only contract
       available: true,
       root: "/tmp/readonly-review",
     },
-  });
+    artifactValidation: {
+      candidatePath:
+        "/tmp/Charon/ultrareview-candidates/validation-42.json",
+      contextPath:
+        "/tmp/Charon/ultrareview-candidates/validation-42.context.json",
+      command:
+        "node '/Applications/Charon.app/validate-ultrareview.mjs' --candidate '/tmp/Charon/ultrareview-candidates/validation-42.json' --context '/tmp/Charon/ultrareview-candidates/validation-42.context.json'",
+    },
+  };
+  const prompt = buildUltraReviewAnalysisPrompt(input);
+  const publicationPrompt = buildUltraReviewAnalysisPrompt(
+    input,
+    { publication: true },
+  );
+  const context = buildUltraReviewAnalysisContext(input);
+  const bulkyDiff = [
+    "diff --git a/src/store.ts b/src/store.ts",
+    ...Array.from(
+      { length: 1_000 },
+      (_, index) => `+save(position-${index})`,
+    ),
+  ].join("\n");
+  const legacyContext = JSON.stringify(
+    {
+      ...input,
+      pullRequest: {
+        ...input.pullRequest,
+        body: "Keep the review position after restart.".repeat(200),
+      },
+      diff: bulkyDiff,
+      evidenceInventory: input.evidenceInventory.map(
+        (evidence) => ({
+          ...evidence,
+          content: bulkyDiff,
+        }),
+      ),
+      checks: [
+        { summary: "One type error".repeat(200) },
+      ],
+      comments: [
+        {
+          body: "Does this survive a force-push?".repeat(200),
+        },
+      ],
+      reviews: [
+        { body: "Restore state by head SHA.".repeat(200) },
+      ],
+      timeline: [
+        { summary: "The branch was force-pushed.".repeat(200) },
+      ],
+      commits: [
+        { message: "Persist exact review position".repeat(200) },
+      ],
+    },
+    null,
+    2,
+  );
 
-  assert.match(prompt, /<ultrareview-analysis-input>/);
+  assert.match(prompt, /<ultrareview-mission>/);
+  assert.match(prompt, /EVIDENCE MANIFEST:/);
+  assert.match(
+    prompt,
+    /validation-42\.context\.json/,
+  );
+  assert.match(prompt, /evidenceInventory/);
   assert.match(prompt, /Persist review progress/);
-  assert.match(prompt, /diff --git a\/src\/store\.ts b\/src\/store\.ts/);
-  assert.match(prompt, /typecheck/);
-  assert.match(prompt, /Does this survive a force-push\?/);
-  assert.match(prompt, /CHANGES_REQUESTED/);
-  assert.match(prompt, /head_ref_force_pushed/);
-  assert.match(prompt, /Persist exact review position/);
+  assert.match(prompt, /github\.example\.com/);
+  assert.match(prompt, /git diff --find-renames <baseSha>\.\.<headSha>/);
+  assert.match(prompt, /gh auth status --hostname <githubHost>/);
+  assert.match(prompt, /gh pr view <number> --repo <githubHost>\/<repo>/);
+  assert.match(prompt, /gh pr checks <number> --repo <githubHost>\/<repo>/);
+  assert.match(prompt, /GET-only/);
+  assert.match(prompt, /Do not assume GitHub CLI, credentials, or network access/);
   assert.match(prompt, /Timeline events are unavailable/);
   assert.match(prompt, /Never treat a failed context source as empty/i);
-  assert.match(prompt, /support-1/);
-  assert.match(prompt, /changed-store/);
+  assert.doesNotMatch(prompt, /changed-store/);
+  assert.doesNotMatch(prompt, /sha256:store-line/);
   assert.match(prompt, /Copy.*evidence.*identity.*exactly/i);
   assert.match(prompt, /READ-ONLY/i);
-  assert.match(prompt, /Never modify files/i);
+  assert.match(prompt, /Never modify the checkout/i);
   assert.match(prompt, /Never post.*GitHub/i);
-  assert.match(prompt, /Treat every value inside.*untrusted evidence/i);
+  assert.match(prompt, /untrusted evidence/i);
+  assert.match(
+    prompt,
+    /The sole permitted write is.*validation-42\.json/is,
+  );
+  assert.match(
+    prompt,
+    /run.*validate-ultrareview\.mjs.*until it exits 0/is,
+  );
+  assert.match(
+    prompt,
+    /terminal block must contain exactly the validated file/i,
+  );
+  assert.doesNotMatch(prompt, /diff --git a\/src\/store\.ts b\/src\/store\.ts/);
+  assert.doesNotMatch(prompt, /Keep the review position after restart/);
+  assert.doesNotMatch(prompt, /Does this survive a force-push\?/);
+  assert.doesNotMatch(prompt, /Restore state by head SHA/);
+  assert.ok(
+    context.length < legacyContext.length * 0.1,
+    `expected a compact handoff; ${context.length} vs ${legacyContext.length}`,
+  );
   assert.match(prompt, /<ultrareview-artifact>/);
   assert.match(prompt, /<ultrareview-progress>/);
   assert.match(prompt, /only completed chapters/i);
@@ -138,6 +186,109 @@ test("analysis prompt carries every evidence source through a read-only contract
   assert.match(prompt, /"generation"/);
   assert.match(prompt, /"status": "complete \| partial \| failed"/);
   assert.doesNotMatch(prompt, /"verdict"\s*:/);
+  assert.doesNotMatch(publicationPrompt, /ARTIFACT PREFLIGHT:/);
+  assert.doesNotMatch(publicationPrompt, /<ultrareview-artifact>/);
+  assert.doesNotMatch(publicationPrompt, /<ultrareview-progress>/);
+  assert.doesNotMatch(
+    publicationPrompt,
+    /write the final raw JSON object/i,
+  );
+});
+
+test("analysis prompt size does not grow with the evidence manifest", () => {
+  const evidenceInventory = Array.from(
+    { length: 1_000 },
+    (_, index) => ({
+      id: `evidence:${index}`,
+      kind: "changed",
+      change: "addition",
+      location: {
+        path: `src/generated/file-${index}.ts`,
+        side: "RIGHT",
+        startLine: index + 1,
+        endLine: index + 1,
+      },
+      fingerprint: `fingerprint-${index}`,
+    }),
+  );
+  const prompt = buildUltraReviewAnalysisPrompt({
+    mode: "teammate",
+    githubHost: "github.com",
+    pullRequest: {
+      repo: "acme/charon",
+      number: 44,
+      title: "File-backed evidence",
+      author: "octavia",
+      baseRef: "main",
+      headRef: "octavia/file-backed-evidence",
+      baseSha: "base-440",
+      headSha: "head-440",
+    },
+    evidenceInventory,
+    contextFailures: [],
+    checkout: {
+      available: true,
+      root: "/tmp/readonly-review",
+    },
+    artifactValidation: {
+      candidatePath:
+        "/tmp/Charon/ultrareview-candidates/validation-44.json",
+      contextPath:
+        "/tmp/Charon/ultrareview-candidates/validation-44.context.json",
+      command:
+        "node validator --candidate candidate --context context",
+    },
+  });
+
+  assert.ok(
+    prompt.length < 12_000,
+    `expected file-backed evidence; prompt was ${prompt.length} bytes`,
+  );
+  assert.doesNotMatch(prompt, /evidence:999/);
+  assert.doesNotMatch(prompt, /src\/generated\/file-999\.ts/);
+  assert.match(prompt, /validation-44\.context\.json/);
+});
+
+test("analysis prompt preserves the trusted diff only without a checkout", () => {
+  const prompt = buildUltraReviewAnalysisPrompt({
+    mode: "author",
+    githubHost: "github.com",
+    pullRequest: {
+      repo: "acme/charon",
+      number: 43,
+      title: "Review without a checkout",
+      author: "octavia",
+      baseRef: "main",
+      headRef: "octavia/no-checkout",
+      baseSha: "base-789",
+      headSha: "head-789",
+    },
+    evidenceInventory: [],
+    contextFailures: [
+      {
+        source: "checkout",
+        message: "The checkout is unavailable.",
+        retryable: true,
+      },
+    ],
+    checkout: {
+      available: false,
+    },
+    artifactValidation: {
+      candidatePath:
+        "/tmp/Charon/ultrareview-candidates/validation-43.json",
+      contextPath:
+        "/tmp/Charon/ultrareview-candidates/validation-43.context.json",
+      command:
+        "node '/Applications/Charon.app/validate-ultrareview.mjs' --candidate '/tmp/Charon/ultrareview-candidates/validation-43.json' --context '/tmp/Charon/ultrareview-candidates/validation-43.context.json'",
+    },
+    fallbackDiff:
+      "diff --git a/src/fallback.ts b/src/fallback.ts\n+recover()",
+  });
+
+  assert.match(prompt, /<ultrareview-fallback-diff>/);
+  assert.match(prompt, /diff --git a\/src\/fallback\.ts b\/src\/fallback\.ts/);
+  assert.match(prompt, /When no checkout is available/);
 });
 
 test("progress parser publishes only closed snapshots from real streamed output", () => {
@@ -292,6 +443,25 @@ test("artifact response delegates terminal JSON to the trusted domain parser", (
   });
 });
 
+test("persisted artifact candidate does not require a terminal tag", () => {
+  const parsed = parseUltraReviewArtifactCandidate(
+    "{\"version\":1}",
+    { headSha: "head-456" },
+    (raw, identity) => ({
+      value: JSON.parse(raw),
+      identity,
+    }),
+  );
+
+  assert.deepEqual(parsed, {
+    ok: true,
+    artifact: {
+      value: { version: 1 },
+      identity: { headSha: "head-456" },
+    },
+  });
+});
+
 test("artifact response rejects extra output after the structured payload", () => {
   const parsed = parseUltraReviewArtifactResponse(
     `<ultrareview-artifact>{"version":1}</ultrareview-artifact>
@@ -412,12 +582,16 @@ test("closing synthesis can draft only from collected notes and preserves anchor
       id: "note-1",
       beatId: "beat-storage",
       body: "Call out that restore is keyed by head SHA.",
+      kind: "note",
+      stale: false,
       evidenceIds: ["evidence-store"],
     },
     {
       id: "note-2",
       beatId: "beat-storage",
       body: "Ask for a force-push regression test.",
+      kind: "request",
+      stale: false,
       evidenceIds: ["evidence-test"],
       anchor: {
         path: "src/store.ts",
@@ -426,7 +600,7 @@ test("closing synthesis can draft only from collected notes and preserves anchor
         endLine: 21,
       },
     },
-  ]);
+  ], "Lead with merge blockers and keep the assessment under 100 words.");
 
   assert.match(prompt, /ONLY the collected human notes/i);
   assert.match(prompt, /Do not introduce.*concern/i);
@@ -434,13 +608,14 @@ test("closing synthesis can draft only from collected notes and preserves anchor
   assert.match(prompt, /restore is keyed by head SHA/);
   assert.match(prompt, /note-2/);
   assert.match(prompt, /src\/store\.ts/);
-  assert.match(prompt, /Never move an inline comment/i);
+  assert.match(prompt, /Lead with merge blockers/i);
+  assert.match(prompt, /Do not write inline comments/i);
   assert.match(prompt, /sourceNoteIds/);
   assert.match(prompt, /omittedNoteIds/);
   assert.match(prompt, /"body": "<complete GitHub review body>"/);
   assert.match(prompt, /<ultrareview-draft>/);
   assert.match(prompt, /Never post.*GitHub/i);
-  assert.doesNotMatch(prompt, /"verdict"\s*:/);
+  assert.match(prompt, /"recommendedVerdict"\s*:/);
 });
 
 test("source claim labels keep observation and inference visibly distinct", () => {

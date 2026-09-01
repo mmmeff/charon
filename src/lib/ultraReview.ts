@@ -4,11 +4,11 @@ import {
 import type {
  DiffViewerViewState,
  Severity,
+ UltraReviewAnalysisEvidence,
  UltraReviewAnswer,
  UltraReviewArtifact,
  UltraReviewArtifactIdentity,
  UltraReviewBeat,
- UltraReviewBeatState,
  UltraReviewChapter,
  UltraReviewConcern,
  UltraReviewConcernDisposition,
@@ -110,12 +110,6 @@ const SEVERITY_VALUES = [
  "major",
  "minor",
  "nit",
-] as const;
-
-const BEAT_STATE_VALUES = [
- "pending",
- "reviewed",
- "stale",
 ] as const;
 
 const CONCERN_DISPOSITION_VALUES = [
@@ -420,32 +414,48 @@ export function stableUltraReviewEvidenceId(
 function parseEvidence(
  value: unknown,
  path: string,
+ trustedEvidenceById: ReadonlyMap<
+  string,
+  UltraReviewAnalysisEvidence
+ >,
 ): UltraReviewEvidence {
  const raw = objectValue(value, path);
- const kind = enumValue(
-  raw.kind,
-  `${path}.kind`,
-  EVIDENCE_KIND_VALUES,
- ) as UltraReviewEvidenceKind;
- const change = enumValue(
-  raw.change,
-  `${path}.change`,
-  EVIDENCE_CHANGE_VALUES,
- ) as UltraReviewEvidenceChange;
- const location = parseLocation(
-  raw.location,
-  `${path}.location`,
+ const id = stringValue(raw.id, `${path}.id`);
+ // Known ids select machine-owned diff identity. The model still owns
+ // source claims and supporting context.
+ const trusted = trustedEvidenceById.get(id);
+ const kind = trusted?.kind ?? (
+  enumValue(
+   raw.kind,
+   `${path}.kind`,
+   EVIDENCE_KIND_VALUES,
+  ) as UltraReviewEvidenceKind
  );
- const fingerprint = stringValue(
-  raw.fingerprint,
-  `${path}.fingerprint`,
+ const change = trusted?.change ?? (
+  enumValue(
+   raw.change,
+   `${path}.change`,
+   EVIDENCE_CHANGE_VALUES,
+  ) as UltraReviewEvidenceChange
+ );
+ const location = trusted
+  ? { ...trusted.location }
+  : parseLocation(
+    raw.location,
+    `${path}.location`,
+   );
+ const fingerprint = trusted?.fingerprint ?? (
+  stringValue(
+   raw.fingerprint,
+   `${path}.fingerprint`,
+  )
  );
  const supportingReason = optionalStringValue(
   raw.supportingReason,
   `${path}.supportingReason`,
  );
  const evidence: UltraReviewEvidence = {
-  id: stringValue(raw.id, `${path}.id`),
+  id,
   kind,
   change,
   location,
@@ -995,10 +1005,21 @@ function parseNoteAnchor(
  }
  return {
   kind,
-  evidenceId: stringValue(
-   anchor.evidenceId,
-   `${path}.evidenceId`,
-  ),
+  evidenceIds: (() => {
+   const ids = anchor.evidenceIds === undefined
+    ? [stringValue(
+      anchor.evidenceId,
+      `${path}.evidenceId`,
+     )]
+    : stringArrayValue(
+      anchor.evidenceIds,
+      `${path}.evidenceIds`,
+     );
+   if (ids.length === 0) {
+    invalid(`${path}.evidenceIds`, "at least one evidence id");
+   }
+   return [...new Set(ids)];
+  })(),
   path: stringValue(anchor.path, `${path}.path`),
   side: enumValue(
    anchor.side,
@@ -1022,6 +1043,25 @@ function parseNote(
  return {
   id: stringValue(note.id, `${path}.id`),
   body: stringValue(note.body, `${path}.body`),
+  kind: note.kind === undefined
+   ? "note"
+   : enumValue(
+     note.kind,
+     `${path}.kind`,
+     [
+      "note",
+      "nitpick",
+      "request",
+      "suggestion",
+      "praise",
+     ] as const,
+    ),
+  submitAsComment: note.submitAsComment === undefined
+   ? false
+   : booleanValue(
+     note.submitAsComment,
+     `${path}.submitAsComment`,
+    ),
   anchor: parseNoteAnchor(
    note.anchor,
    `${path}.anchor`,
@@ -1206,6 +1246,20 @@ function parseDraft(
  return {
   id: stringValue(draft.id, `${path}.id`),
   body: stringValue(draft.body, `${path}.body`),
+  recommendedVerdict: draft.recommendedVerdict === undefined
+   ? "COMMENT"
+   : enumValue(
+     draft.recommendedVerdict,
+     `${path}.recommendedVerdict`,
+     ["COMMENT", "APPROVE", "REQUEST_CHANGES"] as const,
+    ),
+  sourceNotesFingerprint:
+   draft.sourceNotesFingerprint === undefined
+    ? "legacy"
+    : stringValue(
+      draft.sourceNotesFingerprint,
+      `${path}.sourceNotesFingerprint`,
+     ),
   sections: arrayValue(
    draft.sections,
    `${path}.sections`,
@@ -1247,15 +1301,9 @@ function parseProgress(
 ): UltraReviewProgress {
  const progress = objectValue(value, path);
  return {
-  reviewedBeats: integerValue(
-   progress.reviewedBeats,
-   `${path}.reviewedBeats`,
-   { minimum: 0 },
-  ),
-  totalBeats: integerValue(
-   progress.totalBeats,
-   `${path}.totalBeats`,
-   { minimum: 0 },
+  documentReviewed: booleanValue(
+   progress.documentReviewed,
+   `${path}.documentReviewed`,
   ),
   acknowledgedMechanicalChanges: integerValue(
    progress.acknowledgedMechanicalChanges,
@@ -1368,6 +1416,9 @@ function parseDiffViewState(
   state.expandedContext,
   `${path}.expandedContext`,
  );
+ const viewed = state.viewed === undefined
+  ? undefined
+  : objectValue(state.viewed, `${path}.viewed`);
  return {
   collapsed: Object.fromEntries(
    Object.entries(collapsed).map(([key, entry]) => [
@@ -1398,6 +1449,16 @@ function parseDiffViewState(
     ];
    }),
   ),
+  ...(viewed === undefined
+   ? {}
+   : {
+     viewed: Object.fromEntries(
+      Object.entries(viewed).map(([key, entry]) => [
+       key,
+       stringValue(entry, `${path}.viewed.${key}`),
+      ]),
+     ),
+    }),
  };
 }
 
@@ -1409,12 +1470,16 @@ function parseDiffViewStates(
 > {
  const states = objectValue(value, path);
  return {
-  ...(states.review === undefined
+  ...(states.beats === undefined
    ? {}
    : {
-     review: parseDiffViewState(
-      states.review,
-      `${path}.review`,
+     beats: Object.fromEntries(
+      Object.entries(
+       objectValue(states.beats, `${path}.beats`),
+      ).map(([beatId, state]) => [
+       beatId,
+       parseDiffViewState(state, `${path}.beats.${beatId}`),
+      ]),
      ),
     }),
   ...(states.raw === undefined
@@ -1489,18 +1554,18 @@ function parseSession(
  }
  return {
   mode,
-  beatStates: parseStringEnumRecord(
-   session.beatStates,
-   `${path}.beatStates`,
-   BEAT_STATE_VALUES,
-  ) as Record<string, UltraReviewBeatState>,
+  ...(session.reviewCompletedAt === undefined
+   ? {}
+   : {
+      reviewCompletedAt: integerValue(
+       session.reviewCompletedAt,
+       `${path}.reviewCompletedAt`,
+       { minimum: 0 },
+      ),
+     }),
   acknowledgedMechanicalChangeIds: stringArrayValue(
    session.acknowledgedMechanicalChangeIds,
    `${path}.acknowledgedMechanicalChangeIds`,
-  ),
-  creditedEvidenceIds: stringArrayValue(
-   session.creditedEvidenceIds,
-   `${path}.creditedEvidenceIds`,
   ),
   concernDispositions: parseStringEnumRecord(
    session.concernDispositions,
@@ -1559,8 +1624,16 @@ function parseSession(
  };
 }
 
-function parseAnalysis(value: unknown): ParsedAnalysis {
+function parseAnalysis(
+ value: unknown,
+ trustedEvidence: readonly UltraReviewAnalysisEvidence[] = [],
+): ParsedAnalysis {
  const analysis = objectValue(value, "analysis");
+ const trustedEvidenceById = new Map(
+  trustedEvidence.map(
+   (evidence) => [evidence.id, evidence],
+  ),
+ );
  if (
   analysis.version !==
   ULTRA_REVIEW_ARTIFACT_VERSION
@@ -1593,6 +1666,7 @@ function parseAnalysis(value: unknown): ParsedAnalysis {
     parseEvidence(
      evidence,
      `analysis.evidence[${index}]`,
+     trustedEvidenceById,
     ),
   ),
   coverage: arrayValue(
@@ -1743,15 +1817,12 @@ function validateAnalysisReferences(
   "analysis.generation.failures",
  );
 
- const provenanceMayBePending =
-  analysis.systems.length === 0 &&
-  (
-   analysis.generation.status === "idle" ||
-   analysis.generation.status === "running"
-  );
+ const provenanceMayBeIncomplete =
+  analysis.systems.length === 0
+  && analysis.generation.status !== "complete";
  if (
   analysis.sourceClaimIds.length === 0 &&
-  !provenanceMayBePending
+  !provenanceMayBeIncomplete
  ) {
   invalid(
    "analysis.sourceClaimIds",
@@ -2113,16 +2184,9 @@ function createSession(
  mode: UltraReviewSession["mode"],
  systems: UltraReviewSystem[],
 ): UltraReviewSession {
- const beatStates = Object.fromEntries(
-  beats(systems).map(
-   (beat) => [beat.id, "pending"] as const,
-  ),
- );
  return {
   mode,
-  beatStates,
   acknowledgedMechanicalChangeIds: [],
-  creditedEvidenceIds: [],
   concernDispositions: {},
   notes: [],
   answers: [],
@@ -2215,6 +2279,7 @@ function artifactFromAnalysis(
 export function parseUltraReviewAnalysisJson(
  raw: string,
  identity: UltraReviewArtifactIdentity,
+ trustedEvidence: readonly UltraReviewAnalysisEvidence[] = [],
 ): UltraReviewArtifact {
  let value: unknown;
  try {
@@ -2225,7 +2290,7 @@ export function parseUltraReviewAnalysisJson(
   );
  }
  return artifactFromAnalysis(
-  parseAnalysis(value),
+  parseAnalysis(value, trustedEvidence),
   identity,
  );
 }
@@ -2270,26 +2335,6 @@ function validateSessionReferences(
  );
  const path = `artifact.sessions.${mode}`;
 
- for (const beatId of beatIds) {
-  if (session.beatStates[beatId] === undefined) {
-   throw new UltraReviewValidationError(
-    `${path}.beatStates is missing ${beatId}`,
-   );
-  }
- }
- for (
-  const [beatId, state] of
-  Object.entries(session.beatStates)
- ) {
-  if (
-   state !== "stale" &&
-   !beatIds.has(beatId)
-  ) {
-   throw new UltraReviewValidationError(
-    `${path}.beatStates references unknown ${beatId}`,
-   );
-  }
- }
  for (
   let index = 0;
   index < session.acknowledgedMechanicalChangeIds.length;
@@ -2300,18 +2345,6 @@ function validateSessionReferences(
    session.acknowledgedMechanicalChangeIds[index],
    `${path}.acknowledgedMechanicalChangeIds[${index}]`,
   );
- }
- for (
-  let index = 0;
-  index < session.creditedEvidenceIds.length;
-  index += 1
- ) {
-  const id = session.creditedEvidenceIds[index];
-  if (!evidenceIds.has(id) && !removedEvidenceIds.has(id)) {
-   throw new UltraReviewValidationError(
-    `${path}.creditedEvidenceIds[${index}] references unknown ${id}`,
-   );
-  }
  }
  for (
   const concernId of
@@ -2340,11 +2373,17 @@ function validateSessionReferences(
     `${path}.notes[${index}].anchor.beatId`,
    );
   } else {
-   requireReference(
-    evidenceIds,
-    note.anchor.evidenceId,
-    `${path}.notes[${index}].anchor.evidenceId`,
-   );
+   for (
+    let evidenceIndex = 0;
+    evidenceIndex < note.anchor.evidenceIds.length;
+    evidenceIndex += 1
+   ) {
+    requireReference(
+     evidenceIds,
+     note.anchor.evidenceIds[evidenceIndex],
+     `${path}.notes[${index}].anchor.evidenceIds[${evidenceIndex}]`,
+    );
+   }
   }
  }
  for (
@@ -2682,15 +2721,7 @@ export function calculateUltraReviewProgress(
  mode: UltraReviewSession["mode"],
 ): UltraReviewProgress {
  const session = artifact.sessions[mode];
- const allBeats = beats(artifact.galaxy.systems);
- const reviewedBeatIds = new Set(
-  allBeats
-   .filter(
-    (beat) =>
-     session.beatStates[beat.id] === "reviewed",
-   )
-   .map((beat) => beat.id),
- );
+ const documentReviewed = session.reviewCompletedAt !== undefined;
  const acknowledgedMechanicalChangeIds = new Set(
   session.acknowledgedMechanicalChangeIds.filter(
    (id) =>
@@ -2698,9 +2729,6 @@ export function calculateUltraReviewProgress(
      (mechanical) => mechanical.id === id,
     ),
   ),
- );
- const creditedEvidenceIds = new Set(
-  session.creditedEvidenceIds,
  );
  const coverage = new Map(
   artifact.coverage.map(
@@ -2712,11 +2740,10 @@ export function calculateUltraReviewProgress(
  );
  const coveredChangedEvidence = changedEvidence.filter(
   (evidence) => {
-   if (creditedEvidenceIds.has(evidence.id)) return true;
    const entry = coverage.get(evidence.id);
    if (!entry) return false;
    if (entry.assignment.kind === "beat") {
-    return reviewedBeatIds.has(entry.assignment.beatId);
+    return documentReviewed;
    }
    if (entry.assignment.kind === "mechanical") {
     return acknowledgedMechanicalChangeIds.has(
@@ -2728,8 +2755,7 @@ export function calculateUltraReviewProgress(
  ).length;
  const audit = auditUltraReviewCoverage(artifact);
  const progress = {
-  reviewedBeats: reviewedBeatIds.size,
-  totalBeats: allBeats.length,
+  documentReviewed,
   acknowledgedMechanicalChanges:
    acknowledgedMechanicalChangeIds.size,
   totalMechanicalChanges:
@@ -2743,7 +2769,7 @@ export function calculateUltraReviewProgress(
   ...progress,
   fullyReviewed:
    audit.complete &&
-   progress.reviewedBeats === progress.totalBeats &&
+   progress.documentReviewed &&
    progress.acknowledgedMechanicalChanges ===
     progress.totalMechanicalChanges &&
    progress.coveredChangedEvidence ===
@@ -2958,8 +2984,8 @@ export function calculateUltraReviewDelta(
     if (note.anchor.kind === "beat") {
      return invalidatedBeats.has(note.anchor.beatId);
     }
-    return affectedBeforeEvidenceIds.has(
-     note.anchor.evidenceId,
+    return note.anchor.evidenceIds.some((evidenceId) =>
+     affectedBeforeEvidenceIds.has(evidenceId)
     );
    })
    .map((note) => note.id),
@@ -3041,11 +3067,6 @@ export function continueUltraReviewArtifact(
  const currentBeatById = new Map(
   currentBeats.map((beat) => [beat.id, beat]),
  );
- const previousBeatById = new Map(
-  beats(before.galaxy.systems).map(
-   (beat) => [beat.id, beat],
-  ),
- );
  const currentMechanicalById = new Map(
   artifact.mechanicalChanges.map(
    (mechanical) => [mechanical.id, mechanical],
@@ -3065,31 +3086,7 @@ export function continueUltraReviewArtifact(
  ) {
   const previousSession = before.sessions[mode];
   const session = artifact.sessions[mode];
-  for (const beat of currentBeats) {
-   const previousBeat = previousBeatById.get(beat.id);
-   if (
-    invalidatedBeatIds.has(beat.id) ||
-    (
-     previousBeat !== undefined &&
-     !sameStringSet(
-      previousBeat.evidenceIds.map(
-       translatedEvidenceId,
-      ),
-      beat.evidenceIds,
-     )
-    )
-   ) {
-    session.beatStates[beat.id] = "stale";
-   } else if (previousSession.beatStates[beat.id]) {
-    session.beatStates[beat.id] =
-     previousSession.beatStates[beat.id];
-   }
-  }
-  for (const beatId of invalidatedBeatIds) {
-   if (!currentBeatById.has(beatId)) {
-    session.beatStates[beatId] = "stale";
-   }
-  }
+  delete session.reviewCompletedAt;
   session.acknowledgedMechanicalChangeIds =
    previousSession.acknowledgedMechanicalChangeIds
     .filter((id) => {
@@ -3112,13 +3109,6 @@ export function continueUltraReviewArtifact(
       )
      );
     });
-  session.creditedEvidenceIds = uniqueStrings(
-   previousSession.creditedEvidenceIds
-    .map(translatedEvidenceId)
-    .filter(
-     (id) => unchangedEvidenceIds.has(id),
-    ),
-  );
   session.concernDispositions = Object.fromEntries(
    Object.entries(
     previousSession.concernDispositions,
@@ -3137,61 +3127,67 @@ export function continueUltraReviewArtifact(
        staleNoteIds.has(note.id),
      };
     }
-    const evidenceId = translatedEvidenceId(
-     note.anchor.evidenceId,
+    const anchor = note.anchor;
+    const evidenceIds = anchor.evidenceIds.map(
+     translatedEvidenceId,
     );
-    const previousEvidence = previousEvidenceById.get(
-     note.anchor.evidenceId,
+    const reanchored = evidenceIds.some(
+     (id, index) => id !== anchor.evidenceIds[index],
     );
-    const evidence = currentEvidenceById.get(evidenceId);
+    if (!reanchored) {
+     return {
+      ...note,
+      stale: note.stale || staleNoteIds.has(note.id),
+     };
+    }
+    const pairs = anchor.evidenceIds.map(
+     (previousId, index) => ({
+      previous: previousEvidenceById.get(previousId),
+      current: currentEvidenceById.get(evidenceIds[index]),
+     }),
+    );
+    const offsets = pairs.map(({ previous, current }) =>
+     previous?.location.startLine === null
+     || previous?.location.startLine === undefined
+     || current?.location.startLine === null
+     || current?.location.startLine === undefined
+      ? null
+      : current.location.startLine - previous.location.startLine
+    );
+    const offset = offsets[0];
     if (
-     evidenceId === note.anchor.evidenceId ||
-     !previousEvidence ||
-     !evidence ||
-     previousEvidence.location.startLine === null ||
-     previousEvidence.location.endLine === null ||
-     evidence.location.startLine === null ||
-     evidence.location.endLine === null ||
-     previousEvidence.location.side !== note.anchor.side ||
-     previousEvidence.location.path !== note.anchor.path ||
-     note.anchor.startLine <
-      previousEvidence.location.startLine ||
-     note.anchor.endLine >
-      previousEvidence.location.endLine ||
-     (
-      previousEvidence.location.endLine -
-       previousEvidence.location.startLine
-     ) !== (
-      evidence.location.endLine -
-       evidence.location.startLine
+     offset === null
+     || !pairs.every(({ previous, current }, index) =>
+      previous !== undefined
+      && current !== undefined
+      && previous.location.startLine !== null
+      && previous.location.endLine !== null
+      && current.location.startLine !== null
+      && current.location.endLine !== null
+      && previous.location.path === anchor.path
+      && previous.location.side === anchor.side
+      && current.location.path === anchor.path
+      && current.location.side === anchor.side
+      && previous.location.endLine - previous.location.startLine
+       === current.location.endLine - current.location.startLine
+      && offsets[index] === offset
      )
     ) {
      return {
       ...note,
-      stale:
-       note.stale ||
-       staleNoteIds.has(note.id) ||
-       evidenceId !== note.anchor.evidenceId,
+      stale: true,
      };
     }
-    const startOffset =
-     note.anchor.startLine -
-     previousEvidence.location.startLine;
-    const endOffset =
-     note.anchor.endLine -
-     previousEvidence.location.startLine;
     return {
      ...note,
      stale: note.stale,
      anchor: {
       kind: "line" as const,
-      evidenceId,
-      path: evidence.location.path,
-      side: evidence.location.side,
-      startLine:
-       evidence.location.startLine + startOffset,
-      endLine:
-       evidence.location.startLine + endOffset,
+      evidenceIds,
+      path: anchor.path,
+      side: anchor.side,
+      startLine: anchor.startLine + offset,
+      endLine: anchor.endLine + offset,
       headSha: artifact.identity.headSha,
      },
     };

@@ -6,12 +6,14 @@ import {
   addUltraReviewBeatNote,
   addUltraReviewLineNote,
   buildUltraReviewSubmissionSnapshot,
+  completeUltraReviewDocument,
   dismissUltraReviewConcern,
-  markUltraReviewBeatReviewed,
   parseUltraReviewDraftResponse,
   promoteUltraReviewConcern,
   recordUltraReviewSubmissionSnapshot,
+  ultraReviewNotesFingerprint,
   ultraReviewModeForPullRequest,
+  updateUltraReviewNote,
   updateUltraReviewResume,
   verifyUltraReviewConcern,
 } from "../../src/lib/ultrareview-session.ts";
@@ -19,11 +21,7 @@ import {
 function makeSession() {
   return {
     mode: "teammate",
-    beatStates: {
-      "beat-api": "pending",
-    },
     acknowledgedMechanicalChangeIds: [],
-    creditedEvidenceIds: [],
     concernDispositions: {},
     notes: [],
     draft: null,
@@ -150,15 +148,14 @@ function makeArtifact() {
   };
 }
 
-test("reviewing a beat is immutable and leaves concerns unresolved", () => {
+test("completing the review document is immutable", () => {
   const session = makeSession();
-  const next = markUltraReviewBeatReviewed(session, "beat-api");
+  const next = completeUltraReviewDocument(session, 1_723_000);
 
   assert.notEqual(next, session);
-  assert.notEqual(next.beatStates, session.beatStates);
-  assert.equal(next.beatStates["beat-api"], "reviewed");
+  assert.equal(next.reviewCompletedAt, 1_723_000);
   assert.deepEqual(next.concernDispositions, {});
-  assert.equal(session.beatStates["beat-api"], "pending");
+  assert.equal(session.reviewCompletedAt, undefined);
 });
 
 test("resume updates retain a private copy of expanded evidence", () => {
@@ -201,7 +198,7 @@ test("beat and line notes use trusted artifact anchors", () => {
     artifact,
     {
       id: "note-line",
-      evidenceId: "evidence-api",
+      evidenceIds: ["evidence-api"],
       body: "Reject this before the storage call.",
       startLine: 21,
       endLine: 23,
@@ -215,7 +212,7 @@ test("beat and line notes use trusted artifact anchors", () => {
   });
   assert.deepEqual(lineSession.notes[1].anchor, {
     kind: "line",
-    evidenceId: "evidence-api",
+    evidenceIds: ["evidence-api"],
     path: "src/api.ts",
     side: "RIGHT",
     startLine: 21,
@@ -230,7 +227,7 @@ test("beat and line notes use trusted artifact anchors", () => {
         artifact,
         {
           id: "bad-line",
-          evidenceId: "evidence-api",
+          evidenceIds: ["evidence-api"],
           body: "Outside the trusted range.",
           startLine: 19,
           endLine: 23,
@@ -238,6 +235,59 @@ test("beat and line notes use trusted artifact anchors", () => {
         },
       ),
     /trusted evidence range/i,
+  );
+});
+
+test("line notes span adjacent evidence and retain reviewer metadata", () => {
+  const artifact = makeArtifact();
+  artifact.evidence[0].location.endLine = 21;
+  artifact.evidence.push({
+    ...artifact.evidence[0],
+    id: "evidence-api-next",
+    location: {
+      ...artifact.evidence[0].location,
+      startLine: 22,
+      endLine: 24,
+    },
+  });
+  const added = addUltraReviewLineNote(
+    makeSession(),
+    artifact,
+    {
+      id: "note-range",
+      evidenceIds: ["evidence-api", "evidence-api-next"],
+      body: "The guard and storage call must move together.",
+      kind: "request",
+      startLine: 20,
+      endLine: 24,
+      createdAt: 105,
+    },
+  );
+  const draft = {
+    id: "draft-before-edit",
+    body: "Existing assessment.",
+  };
+  const withDraft = { ...added, draft };
+  const selected = updateUltraReviewNote(
+    withDraft,
+    "note-range",
+    {
+      body: added.notes[0].body,
+      kind: "request",
+      submitAsComment: true,
+    },
+  );
+
+  assert.deepEqual(selected.notes[0].anchor.evidenceIds, [
+    "evidence-api",
+    "evidence-api-next",
+  ]);
+  assert.equal(selected.notes[0].kind, "request");
+  assert.equal(selected.notes[0].submitAsComment, true);
+  assert.equal(selected.draft, draft);
+  assert.equal(
+    ultraReviewNotesFingerprint(selected.notes),
+    ultraReviewNotesFingerprint(added.notes),
   );
 });
 
@@ -276,6 +326,8 @@ test("concern actions stay local until promotion creates a human note", () => {
     {
       id: "concern:concern-invalid-id",
       body: "Invalid IDs can reach storage.",
+      kind: "note",
+      submitAsComment: false,
       anchor: {
         kind: "beat",
         beatId: "beat-api",
@@ -321,7 +373,7 @@ test("closing response becomes a source-linked editable draft", () => {
     artifact,
     {
       id: "note-line",
-      evidenceId: "evidence-api",
+      evidenceIds: ["evidence-api"],
       body: "Reject this before the storage call.",
       startLine: 21,
       endLine: 23,
@@ -336,6 +388,7 @@ test("closing response becomes a source-linked editable draft", () => {
     "<ultrareview-draft>",
     JSON.stringify({
       body,
+      recommendedVerdict: "REQUEST_CHANGES",
       sections: [
         {
           body: "Please add a regression test.",
@@ -343,16 +396,6 @@ test("closing response becomes a source-linked editable draft", () => {
         },
         {
           body: "Reject invalid IDs before storage.",
-          sourceNoteIds: ["note-line"],
-        },
-      ],
-      inlineComments: [
-        {
-          body: "Reject invalid IDs before storage.",
-          path: "src/api.ts",
-          side: "RIGHT",
-          startLine: 21,
-          endLine: 23,
           sourceNoteIds: ["note-line"],
         },
       ],
@@ -370,37 +413,25 @@ test("closing response becomes a source-linked editable draft", () => {
   });
 
   assert.equal(draft.id, "draft-1");
+  assert.equal(draft.recommendedVerdict, "REQUEST_CHANGES");
+  assert.match(draft.sourceNotesFingerprint, /^notes:/);
   assert.deepEqual(draft.sections[0].provenance, {
     noteIds: ["note-beat"],
     beatIds: ["beat-api"],
     evidenceIds: [],
     concernIds: [],
   });
-  assert.deepEqual(draft.inlineComments[0], {
-    id: "draft-1:inline:0",
-    path: "src/api.ts",
-    side: "RIGHT",
-    line: 23,
-    startLine: 21,
-    body: "Reject invalid IDs before storage.",
-    included: true,
-    provenance: {
-      noteIds: ["note-line"],
-      beatIds: [],
-      evidenceIds: ["evidence-api"],
-      concernIds: [],
-    },
-  });
+  assert.deepEqual(draft.inlineComments, []);
 });
 
-test("closing parser rejects detached prose, unknown notes, and moved anchors", () => {
+test("closing parser rejects detached prose, unknown notes, and invalid verdicts", () => {
   const artifact = makeArtifact();
   const session = addUltraReviewLineNote(
     makeSession(),
     artifact,
     {
       id: "note-line",
-      evidenceId: "evidence-api",
+      evidenceIds: ["evidence-api"],
       body: "Reject this before the storage call.",
       startLine: 21,
       endLine: 23,
@@ -410,19 +441,10 @@ test("closing parser rejects detached prose, unknown notes, and moved anchors", 
   const response = (overrides) =>
     `<ultrareview-draft>${JSON.stringify({
       body: "Reject invalid IDs before storage.",
+      recommendedVerdict: "REQUEST_CHANGES",
       sections: [
         {
           body: "Reject invalid IDs before storage.",
-          sourceNoteIds: ["note-line"],
-        },
-      ],
-      inlineComments: [
-        {
-          body: "Reject invalid IDs before storage.",
-          path: "src/api.ts",
-          side: "RIGHT",
-          startLine: 21,
-          endLine: 23,
           sourceNoteIds: ["note-line"],
         },
       ],
@@ -490,16 +512,7 @@ test("closing parser rejects detached prose, unknown notes, and moved anchors", 
     () =>
       parseUltraReviewDraftResponse(
         response({
-          inlineComments: [
-            {
-              body: "Moved comment.",
-              path: "src/other.ts",
-              side: "RIGHT",
-              startLine: 21,
-              endLine: 23,
-              sourceNoteIds: ["note-line"],
-            },
-          ],
+          recommendedVerdict: "MERGE_IT",
         }),
         {
           draftId: "draft-2",
@@ -507,14 +520,13 @@ test("closing parser rejects detached prose, unknown notes, and moved anchors", 
           concerns: artifact.concerns,
         },
       ),
-    /changed.*anchor/i,
+    /recommendedVerdict/i,
   );
 });
 
 test("submission snapshot is detached and deeply frozen", () => {
   const progress = {
-    reviewedBeats: 1,
-    totalBeats: 1,
+    documentReviewed: true,
     acknowledgedMechanicalChanges: 1,
     totalMechanicalChanges: 1,
     coveredChangedEvidence: 1,
@@ -526,6 +538,8 @@ test("submission snapshot is detached and deeply frozen", () => {
   const draft = {
     id: "draft-1",
     body: "Ship it.",
+    recommendedVerdict: "APPROVE",
+    sourceNotesFingerprint: "notes:test",
     sections: [],
     inlineComments: [
       {
@@ -572,11 +586,11 @@ test("submission snapshot is detached and deeply frozen", () => {
   });
 
   draft.inlineComments[0].body = "Later edit.";
-  progress.reviewedBeats = 0;
+  progress.documentReviewed = false;
 
   assert.equal(snapshot.inlineComments.length, 1);
   assert.equal(snapshot.inlineComments[0].body, "One inline comment.");
-  assert.equal(snapshot.progress.reviewedBeats, 1);
+  assert.equal(snapshot.progress.documentReviewed, true);
   assert.deepEqual(snapshot.noteIds, ["note-line"]);
   assert.equal(Object.isFrozen(snapshot), true);
   assert.equal(Object.isFrozen(snapshot.inlineComments[0].provenance), true);
@@ -629,8 +643,7 @@ test("submission snapshot recording is idempotent for persistence retry", () => 
     inlineComments: [],
     noteIds: [],
     progress: {
-      reviewedBeats: 1,
-      totalBeats: 1,
+      documentReviewed: true,
       acknowledgedMechanicalChanges: 0,
       totalMechanicalChanges: 0,
       coveredChangedEvidence: 1,

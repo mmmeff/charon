@@ -471,6 +471,14 @@ export interface DiffScrollTarget {
   nonce: number;
 }
 
+export type UiNavigationView = "pr" | "ultrareview";
+
+export type UiNavigationLocation = {
+  tab: string;
+  pr: number | null;
+  view: UiNavigationView;
+};
+
 interface UiState {
   focusedPr: Record<string, number | null>;
   setFocusedPr(tab: string, prNumber: number): void;
@@ -508,14 +516,18 @@ interface UiState {
   requestedNewDraft: { nonce: number } | null;
   requestNewDraft(): void;
   clearNewDraftRequest(): void;
-  /** browser-style location history: (tab, focused PR) pairs */
-  navHistory: { tab: string; pr: number | null }[];
+  /** Browser-style history across tabs, focused PRs, and detail views. */
+  navHistory: UiNavigationLocation[];
   navIndex: number;
   /** true while back/forward is being applied — suppresses history pushes */
   navApplying: boolean;
-  navPush(tab: string, pr: number | null): void;
+  navPush(
+    tab: string,
+    pr: number | null,
+    view?: UiNavigationView,
+  ): void;
   /** step through history; returns the location to apply, or null at an edge */
-  navGo(delta: 1 | -1): { tab: string; pr: number | null } | null;
+  navGo(delta: 1 | -1): UiNavigationLocation | null;
   navApplied(): void;
 }
 
@@ -589,12 +601,22 @@ export const useUiStore = create<UiState>((set, get) => ({
   navHistory: [],
   navIndex: -1,
   navApplying: false,
-  navPush(tab, pr) {
+  navPush(tab, pr, view = "pr") {
     set((s) => {
       if (s.navApplying) return s;
       const cur = s.navHistory[s.navIndex];
-      if (cur && cur.tab === tab && cur.pr === pr) return s;
-      const navHistory = [...s.navHistory.slice(0, s.navIndex + 1), { tab, pr }].slice(-100);
+      if (
+        cur
+        && cur.tab === tab
+        && cur.pr === pr
+        && cur.view === view
+      ) {
+        return s;
+      }
+      const navHistory = [
+        ...s.navHistory.slice(0, s.navIndex + 1),
+        { tab, pr, view },
+      ].slice(-100);
       return { navHistory, navIndex: navHistory.length - 1 };
     });
   },

@@ -7,6 +7,7 @@ import {
   parseUltraReviewAnalysisJson,
 } from "../../src/lib/ultraReview";
 import type {
+  FileDiff,
   PrSummary,
   UltraReviewArtifact,
   UltraReviewArtifactIdentity,
@@ -23,7 +24,9 @@ export type UltraReviewPreviewVariant =
   | "loading"
   | "progressive"
   | "invalid"
-  | "author";
+  | "failed"
+  | "author"
+  | "large";
 
 const sourceClaim = (
   id: string,
@@ -125,7 +128,7 @@ function analyzedArtifact(
         purpose:
           "Move filesystem reachability into the lease boundary.",
         before:
-          "A stale localClonePath survived until validation.",
+          "A stale clone location survived until validation.",
         after:
           "The worktree lease fails at the first unsafe boundary.",
         order: 0,
@@ -141,7 +144,7 @@ function analyzedArtifact(
             claim:
               "The clone path is probed before the worktree is leased.",
             objective:
-              "Verify that every missing-root path stops before mutation.",
+              "This early guard prevents worktree mutation when the configured clone disappears.",
             question:
               "Can a moved clone still pass through a cached lease?",
             order: 0,
@@ -176,7 +179,7 @@ function analyzedArtifact(
         before:
           "A rejected commit was difficult to recover.",
         after:
-          "The run points to a local pr-copilot/rejected branch.",
+          "The run points to a predictable local recovery branch.",
         order: 1,
         risk: "medium" as const,
         confidence: 85,
@@ -190,7 +193,7 @@ function analyzedArtifact(
             claim:
               "Validation failure creates a deterministic rescue ref.",
             objective:
-              "Inspect the branch naming and prove no remote push occurs.",
+              "The recovery reference preserves rejected work locally without widening push authority.",
             question: null,
             order: 0,
             risk: "medium" as const,
@@ -287,19 +290,36 @@ function analyzedArtifact(
           systemId: null,
           error: null,
         },
-        {
-          id: "stage:tests",
-          label: "Traced relevant tests",
-          status: variant === "partial"
-            ? "failed" as const
-            : variant === "progressive"
-              ? "running" as const
-            : "complete" as const,
-          systemId: systems[0].id,
-          error: variant === "partial"
-            ? "Checkout evidence unavailable"
-            : null,
-        },
+        ...(variant === "progressive"
+          ? [
+              {
+                id: "chapter:probe",
+                label: "Chapter: Probe before leasing",
+                status: "complete" as const,
+                systemId: systems[0].id,
+                error: null,
+              },
+              {
+                id: "chapter:rescue",
+                label: "Chapter: Route rejection to a rescue branch",
+                status: "running" as const,
+                systemId: systems[0].id,
+                error: null,
+              },
+            ]
+          : [
+              {
+                id: "stage:tests",
+                label: "Traced relevant tests",
+                status: variant === "partial"
+                  ? "failed" as const
+                  : "complete" as const,
+                systemId: systems[0].id,
+                error: variant === "partial"
+                  ? "Checkout evidence unavailable"
+                  : null,
+              },
+            ]),
       ],
       failures: variant === "partial"
         ? [generationFailure]
@@ -312,10 +332,180 @@ function analyzedArtifact(
   );
 }
 
+const LARGE_REVIEW_COPIES = 12;
+const LARGE_DIFF_REPEAT = 8;
+
+function prefixedPath(path: string, index: number): string {
+  return `packages/review-${String(index + 1).padStart(2, "0")}/${path}`;
+}
+
+export function ultraReviewPreviewFiles(
+  variant: UltraReviewPreviewVariant,
+): FileDiff[] {
+  const files = parseUnifiedDiff(diffText);
+  if (variant !== "large") return files;
+  return Array.from(
+    { length: LARGE_REVIEW_COPIES },
+    (_, index) => files.map((file) => ({
+      ...file,
+      oldPath: prefixedPath(file.oldPath, index),
+      newPath: prefixedPath(file.newPath, index),
+      lines: Array.from(
+        { length: LARGE_DIFF_REPEAT },
+        () => file.lines,
+      ).flat(),
+    })),
+  ).flat();
+}
+
+function largeAnalyzedArtifact(
+  pr: PrSummary,
+): UltraReviewArtifact {
+  const artifact = analyzedArtifact(pr, "ready");
+  const templateSystem = artifact.galaxy.systems[0];
+  const templateChapters = templateSystem.chapters;
+  const templateEvidence = artifact.evidence;
+  const templateCoverage = artifact.coverage;
+  const chapters: typeof templateChapters = [];
+  const evidence: UltraReviewArtifact["evidence"] = [];
+  const coverage: UltraReviewArtifact["coverage"] = [];
+
+  for (let index = 0; index < LARGE_REVIEW_COPIES; index++) {
+    const evidenceIds = new Map(
+      templateEvidence.map((reference) => [
+        reference.id,
+        `${reference.id}:copy:${index}`,
+      ]),
+    );
+    const beatIds = new Map(
+      templateChapters.flatMap((chapter) =>
+        chapter.beats.map((beat) => [
+          beat.id,
+          `${beat.id}:copy:${index}`,
+        ])
+      ),
+    );
+    evidence.push(...templateEvidence.map((reference) => ({
+      ...reference,
+      id: evidenceIds.get(reference.id)!,
+      location: {
+        ...reference.location,
+        path: prefixedPath(reference.location.path, index),
+        oldPath: reference.location.oldPath
+          ? prefixedPath(reference.location.oldPath, index)
+          : reference.location.oldPath,
+      },
+    })));
+    coverage.push(...templateCoverage.map((entry) => ({
+      ...entry,
+      evidenceId: evidenceIds.get(entry.evidenceId)!,
+      assignment: entry.assignment.kind === "beat"
+        ? {
+            ...entry.assignment,
+            beatId: beatIds.get(entry.assignment.beatId)!,
+          }
+        : entry.assignment,
+    })));
+    chapters.push(...templateChapters.map((chapter, chapterIndex) => ({
+      ...chapter,
+      id: `${chapter.id}:copy:${index}`,
+      title: `${chapter.title} · module ${index + 1}`,
+      order: index * templateChapters.length + chapterIndex,
+      dependencyChapterIds: [],
+      beats: chapter.beats.map((beat) => ({
+        ...beat,
+        id: beatIds.get(beat.id)!,
+        evidenceIds: beat.evidenceIds.map(
+          (evidenceId) => evidenceIds.get(evidenceId)!,
+        ),
+      })),
+    })));
+  }
+
+  artifact.galaxy = {
+    ...artifact.galaxy,
+    systems: [{
+      ...templateSystem,
+      chapters,
+      scope: {
+        changedLines: evidence.length,
+        files: ultraReviewPreviewFiles("large").length,
+      },
+    }],
+  };
+  artifact.evidence = evidence;
+  artifact.coverage = coverage;
+  artifact.sourceClaims = artifact.sourceClaims.map((claim) => ({
+    ...claim,
+    evidenceIds: evidence
+      .filter((reference) =>
+        reference.sourceClaimIds.includes(claim.id)
+      )
+      .map((reference) => reference.id),
+  }));
+  artifact.concerns = [];
+
+  const firstChapter = chapters[0];
+  const firstBeat = firstChapter.beats[0];
+  for (const mode of ["teammate", "author"] as const) {
+    artifact.sessions[mode] = {
+      ...artifact.sessions[mode],
+      resume: {
+        ...artifact.sessions[mode].resume,
+        systemId: templateSystem.id,
+        chapterId: firstChapter.id,
+        beatId: firstBeat.id,
+        scrollTop: 0,
+      },
+    };
+  }
+  return artifact;
+}
+
 export function ultraReviewPreviewArtifact(
   pr: PrSummary,
   variant: UltraReviewPreviewVariant,
 ): UltraReviewArtifact {
+  if (variant === "large") {
+    return largeAnalyzedArtifact(pr);
+  }
+  if (variant === "failed") {
+    const artifact = createUltraReviewArtifact(
+      identityFor(pr),
+    );
+    artifact.generation = {
+      status: "failed",
+      stages: [
+        {
+          id: "indexing-files",
+          label: "Index pull request evidence",
+          status: "complete",
+          systemId: null,
+          error: null,
+        },
+        {
+          id: "building-story",
+          label: "Build causal chapters",
+          status: "failed",
+          systemId: null,
+          error: null,
+        },
+      ],
+      failures: [
+        {
+          id: "failure:analysis",
+          stageId: "building-story",
+          scope: "artifact",
+          systemId: null,
+          chapterId: null,
+          message: "Analysis stopped when Charon restarted.",
+          retryable: true,
+          evidenceIds: [],
+        },
+      ],
+    };
+    return artifact;
+  }
   if (variant === "loading" || variant === "invalid") {
     const artifact = createUltraReviewArtifact(
       identityFor(pr),
@@ -349,8 +539,6 @@ export function ultraReviewPreviewArtifact(
   if (variant === "resumed" || variant === "author") {
     const mode: UltraReviewMode =
       variant === "author" ? "author" : "teammate";
-    artifact.sessions[mode].beatStates["beat:probe"] =
-      "reviewed";
     artifact.sessions[mode].resume = {
       systemId: "system:lease",
       chapterId: "chapter:probe",

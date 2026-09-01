@@ -1,20 +1,28 @@
 import {
  AcpConnection,
+ type AcpMcpServer,
  AcpRpcError,
  isMethodNotFound,
  labeledModels,
  modelConfigOption,
  prepareCodexBridgeCatalog,
  probeHarness,
- reasoningConfigOption,
+ separateReasoningConfigOption,
  sessionModels,
  summarizeAcpError,
  type AcpContentBlock,
  type AcpSessionUpdate,
 } from "./acp";
 import { isHiddenAgentRun, isVisibleAgentRun } from "./agent-runs";
-import { codexBridgeArgs } from "./codexModels";
-import { activeHarness } from "./defaults";
+import {
+ codexBridgeArgs,
+ modelIdEncodesReasoning,
+} from "./codexModels";
+import {
+ activeHarness,
+ resolveFlowFastMode,
+ resolveFlowReasoning,
+} from "./defaults";
 import { native } from "./tauri";
 import { notify } from "./notify";
 import { uid } from "./template";
@@ -72,6 +80,8 @@ export interface StartAgentOptions {
  model: string;
  binary: string;
  cwd?: string;
+ /** Run-scoped tools supplied to the selected harness through ACP. */
+ mcpServers?: AcpMcpServer[];
  /** "ask" runs read-only (questions/feedback); default is full access. */
  mode?: "ask" | "plan" | "write";
  /** Override the lifecycle notification category for this run (e.g. CI triage
@@ -398,16 +408,14 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
    const command = harness?.command || opts.binary;
    const args = harness?.args ?? ["acp"];
    const cfg = useGlobalConfig.getState().config;
-   const reasoning =
-    cfg?.reasoningOverrides?.[opts.kind] || cfg?.reasoningEffort || "";
-   const fastMode =
-    cfg &&
-    Object.prototype.hasOwnProperty.call(
-     cfg.fastModeOverrides ?? {},
-     opts.kind,
-    )
-     ? cfg.fastModeOverrides[opts.kind]
-     : cfg?.fastMode ?? false;
+   // Codex's model id is `model[effort]`; applying the old reasoning axis
+   // after set_model would silently replace the effort the user selected.
+   const reasoning = modelIdEncodesReasoning(opts.model) || !cfg
+    ? ""
+    : resolveFlowReasoning(cfg, opts.kind);
+   const fastMode = cfg
+    ? resolveFlowFastMode(cfg, opts.kind)
+    : false;
    const fast =
     fastMode &&
     !!opts.model &&
@@ -430,7 +438,10 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
          
    await conn.spawn(command, launchArgs, opts.cwd);
    await conn.initialize();
-   const ns = await conn.newSession(sessionCwd);
+   const ns = await conn.newSession(
+    sessionCwd,
+    opts.mcpServers,
+   );
    const sessionId = ns.sessionId;
    active.set(id, {
     conn,
@@ -506,8 +517,12 @@ export async function startAgent(opts: StartAgentOptions): Promise<string> {
     }
    }
    // reasoning effort — a separate config-option axis where the harness
-   // exposes it (codex). Per-flow override > global default.
-   const rc = reasoningConfigOption(ns);
+   // exposes it. Per-flow override > global default. Model-encoded efforts
+   // never reach this path.
+   const rc = separateReasoningConfigOption(
+    ns,
+    opts.model,
+   );
    if (reasoning && rc && rc.options!.some((o) => o.value === reasoning)) {
     await conn.setConfigOption(sessionId, rc.id, reasoning);
    }

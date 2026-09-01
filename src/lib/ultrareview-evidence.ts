@@ -1,10 +1,8 @@
 import type {
   FileDiff,
+  UltraReviewArtifact,
   UltraReviewEvidence,
 } from "../types";
-import {
-  ultraReviewEvidenceIsInDiff,
-} from "./ultrareview-diff-audit.ts";
 
 interface FocusedEvidenceRange {
   path: string;
@@ -13,7 +11,42 @@ interface FocusedEvidenceRange {
   endLine: number;
 }
 
+interface BeatEvidenceAssignment {
+ beatId: string;
+ evidence: UltraReviewEvidence;
+}
+
 const pathOf = (file: FileDiff) => file.newPath || file.oldPath;
+
+function indexAssignmentsByPath(
+ assignments: BeatEvidenceAssignment[],
+): Map<string, BeatEvidenceAssignment[]> {
+ const indexed = new Map<string, BeatEvidenceAssignment[]>();
+ for (const assignment of assignments) {
+  const paths = new Set([
+   assignment.evidence.location.path,
+   assignment.evidence.location.oldPath,
+  ]);
+  for (const path of paths) {
+   if (!path) continue;
+   indexed.set(path, [
+    ...(indexed.get(path) ?? []),
+    assignment,
+   ]);
+  }
+ }
+ return indexed;
+}
+
+function assignmentsForFile(
+ indexed: Map<string, BeatEvidenceAssignment[]>,
+ file: FileDiff,
+): BeatEvidenceAssignment[] {
+ return [...new Set([
+  ...(indexed.get(pathOf(file)) ?? []),
+  ...(indexed.get(file.oldPath) ?? []),
+ ])];
+}
 
 const lineNumber = (
   line: FileDiff["lines"][number],
@@ -101,86 +134,206 @@ export function projectFocusedEvidence(
   return projected;
 }
 
-/** True only when every line in the trusted range exists in the loaded diff. */
-export function focusedRangeIsComplete(
-  files: FileDiff[],
-  range: FocusedEvidenceRange,
+function evidenceIntersectsLines(
+ evidence: UltraReviewEvidence,
+ lines: FileDiff["lines"],
 ): boolean {
-  const file = files.find(
-    (candidate) =>
-      pathOf(candidate) === range.path
-      || candidate.oldPath === range.path,
-  );
-  if (!file || file.isBinary) return false;
-
-  const visibleLines = new Set(
-    file.lines.flatMap((line) => {
-      if (!visibleOnSide(line, range.side)) return [];
-      const number = lineNumber(line, range.side);
-      return number === null ? [] : [number];
-    }),
-  );
-  for (
-    let line = range.startLine;
-    line <= range.endLine;
-    line++
-  ) {
-    if (!visibleLines.has(line)) return false;
-  }
-  return true;
+ const start = evidence.location.startLine;
+ const end = evidence.location.endLine;
+ if (start === null || end === null) return true;
+ return lines.some((line) => {
+  if (!visibleOnSide(line, evidence.location.side)) return false;
+  const number = lineNumber(line, evidence.location.side);
+  return number !== null && number >= start && number <= end;
+ });
 }
 
-export interface UltraReviewBeatInspection {
-  ready: boolean;
-  hasReviewEvidence: boolean;
-  exactChangedEvidence: boolean;
-  outstandingStructuralEvidenceIds: string[];
-  outstandingRemovedEvidenceIds: string[];
+function orderedBeatIds(
+ artifact: UltraReviewArtifact,
+): string[] {
+ return [...artifact.galaxy.systems]
+  .sort((left, right) => left.order - right.order)
+  .flatMap((system) =>
+   [...system.chapters]
+    .sort((left, right) => left.order - right.order)
+    .flatMap((chapter) =>
+     [...chapter.beats]
+      .sort((left, right) => left.order - right.order)
+      .map((beat) => beat.id)
+    )
+  );
 }
 
 /**
- * Derive the honest completion gate for a beat.
+ * Give each physical diff hunk one causal owner.
  *
- * Line evidence must match the exact loaded diff. File-level evidence must
- * match too, then receive an explicit Raw Diff credit. Evidence removed by a
- * later push has no current diff rows, so its delta summary needs a separate
- * acknowledgement.
+ * Coverage remains the source of truth for changed evidence. When generated
+ * beats overlap one hunk, the earliest beat owns the complete hunk and later
+ * beats retain only their narrative context. DiffViewer therefore never
+ * renders the same hunk twice across Review mode.
  */
-export function inspectUltraReviewBeatEvidence(
-  files: FileDiff[],
-  evidence: UltraReviewEvidence[],
-  removedEvidenceIds: string[],
-  creditedEvidenceIds: string[],
-): UltraReviewBeatInspection {
-  const changed = evidence.filter(
-    (reference) => reference.kind === "changed",
+export function projectOwnedBeatHunks(
+ files: FileDiff[],
+ artifact: UltraReviewArtifact,
+ beatId: string,
+): FileDiff[] {
+ const order = new Map(
+  orderedBeatIds(artifact).map((id, index) => [id, index]),
+ );
+ const evidence = new Map(
+  artifact.evidence
+   .filter((item) => item.kind === "changed")
+   .map((item) => [item.id, item]),
+ );
+ const assignments: BeatEvidenceAssignment[] =
+  artifact.coverage.flatMap((entry) => {
+  if (entry.assignment.kind !== "beat") return [];
+  const item = evidence.get(entry.evidenceId);
+  return item
+   ? [{ beatId: entry.assignment.beatId, evidence: item }]
+   : [];
+ });
+ const assignmentsByPath = indexAssignmentsByPath(assignments);
+ const earliestOwner = (
+  candidates: typeof assignments,
+ ): string | null => candidates
+  .map((candidate) => candidate.beatId)
+  .filter((id, index, ids) => ids.indexOf(id) === index)
+  .sort(
+   (left, right) =>
+    (order.get(left) ?? Number.MAX_SAFE_INTEGER)
+    - (order.get(right) ?? Number.MAX_SAFE_INTEGER),
+  )[0] ?? null;
+
+ const projected: FileDiff[] = [];
+ for (const file of files) {
+  const fileAssignments = assignmentsForFile(
+   assignmentsByPath,
+   file,
   );
-  const structural = changed.filter(
-    (reference) =>
-      reference.location.startLine === null
-      && reference.location.endLine === null,
+  if (fileAssignments.length === 0) continue;
+  if (file.isBinary || file.lines.length === 0) {
+   if (earliestOwner(fileAssignments) === beatId) {
+    projected.push(file);
+   }
+   continue;
+  }
+
+  const hunks: FileDiff["lines"][] = [];
+  for (const line of file.lines) {
+   if (line.type === "hunk") {
+    hunks.push([line]);
+   } else {
+    hunks.at(-1)?.push(line);
+   }
+  }
+  const owned = hunks.flatMap((hunk) => {
+   const candidates = fileAssignments.filter(
+    (assignment) =>
+     evidenceIntersectsLines(assignment.evidence, hunk),
+   );
+   return earliestOwner(candidates) === beatId ? hunk : [];
+  });
+  if (owned.length > 0) {
+   projected.push({ ...file, lines: owned });
+  }
+ }
+ return projected;
+}
+
+/** Project every beat in one pass for the long-form review document. */
+export function projectOwnedHunksByBeat(
+ files: FileDiff[],
+ artifact: UltraReviewArtifact,
+): Map<string, FileDiff[]> {
+ const beatIds = orderedBeatIds(artifact);
+ const order = new Map(
+  beatIds.map((id, index) => [id, index]),
+ );
+ const evidence = new Map(
+  artifact.evidence
+   .filter((item) => item.kind === "changed")
+   .map((item) => [item.id, item]),
+ );
+ const assignments: BeatEvidenceAssignment[] =
+  artifact.coverage.flatMap((entry) => {
+  if (entry.assignment.kind !== "beat") return [];
+  const item = evidence.get(entry.evidenceId);
+  return item
+   ? [{ beatId: entry.assignment.beatId, evidence: item }]
+   : [];
+ });
+ const assignmentsByPath = indexAssignmentsByPath(assignments);
+ const ownerFor = (
+  candidates: typeof assignments,
+ ): string | null => {
+  let owner: string | null = null;
+  let ownerOrder = Number.MAX_SAFE_INTEGER;
+  for (const candidate of candidates) {
+   const candidateOrder =
+    order.get(candidate.beatId) ?? Number.MAX_SAFE_INTEGER;
+   if (candidateOrder < ownerOrder) {
+    owner = candidate.beatId;
+    ownerOrder = candidateOrder;
+   }
+  }
+  return owner;
+ };
+ const projected = new Map<
+  string,
+  Map<string, { file: FileDiff; lines: FileDiff["lines"] }>
+ >();
+ const append = (
+  beatId: string,
+  file: FileDiff,
+  lines: FileDiff["lines"],
+ ) => {
+  const filesForBeat = projected.get(beatId) ?? new Map();
+  const fileKey = pathOf(file);
+  const current = filesForBeat.get(fileKey);
+  filesForBeat.set(fileKey, {
+   file,
+   lines: current ? [...current.lines, ...lines] : [...lines],
+  });
+  projected.set(beatId, filesForBeat);
+ };
+
+ for (const file of files) {
+  const fileAssignments = assignmentsForFile(
+   assignmentsByPath,
+   file,
   );
-  const credited = new Set(creditedEvidenceIds);
-  const exactChangedEvidence = changed.every(
-    (reference) =>
-      ultraReviewEvidenceIsInDiff(files, reference),
-  );
-  const outstandingStructuralEvidenceIds = structural
-    .filter((reference) => !credited.has(reference.id))
-    .map((reference) => reference.id);
-  const outstandingRemovedEvidenceIds = removedEvidenceIds
-    .filter((id) => !credited.has(id));
-  const hasReviewEvidence =
-    changed.length > 0 || removedEvidenceIds.length > 0;
-  return {
-    ready:
-      hasReviewEvidence
-      && exactChangedEvidence
-      && outstandingStructuralEvidenceIds.length === 0
-      && outstandingRemovedEvidenceIds.length === 0,
-    hasReviewEvidence,
-    exactChangedEvidence,
-    outstandingStructuralEvidenceIds,
-    outstandingRemovedEvidenceIds,
-  };
+  if (fileAssignments.length === 0) continue;
+  if (file.isBinary || file.lines.length === 0) {
+   const owner = ownerFor(fileAssignments);
+   if (owner) append(owner, file, file.lines);
+   continue;
+  }
+
+  const hunks: FileDiff["lines"][] = [];
+  for (const line of file.lines) {
+   if (line.type === "hunk") {
+    hunks.push([line]);
+   } else {
+    hunks.at(-1)?.push(line);
+   }
+  }
+  for (const hunk of hunks) {
+   const owner = ownerFor(
+    fileAssignments.filter(
+     (assignment) =>
+      evidenceIntersectsLines(assignment.evidence, hunk),
+    ),
+   );
+   if (owner) append(owner, file, hunk);
+  }
+ }
+
+ return new Map(
+  beatIds.map((beatId) => [
+   beatId,
+   [...(projected.get(beatId)?.values() ?? [])]
+    .map(({ file, lines }) => ({ ...file, lines })),
+  ]),
+ );
 }

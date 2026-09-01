@@ -2,13 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  focusedRangeIsComplete,
-  inspectUltraReviewBeatEvidence,
   projectFocusedEvidence,
+  projectOwnedBeatHunks,
+  projectOwnedHunksByBeat,
 } from "../../src/lib/ultrareview-evidence.ts";
-import {
-  enumerateUltraReviewDiffChanges,
-} from "../../src/lib/ultrareview-diff-audit.ts";
 
 const hunk = {
   type: "hunk",
@@ -75,6 +72,122 @@ test("overlapping focal ranges never duplicate rendered lines", () => {
   );
 });
 
+test("one causal beat owns each physical diff hunk", () => {
+  const secondHunk = {
+    type: "hunk",
+    oldNum: null,
+    newNum: null,
+    text: "@@ -30,1 +31,2 @@",
+    oldStart: 30,
+    oldLines: 1,
+    newStart: 31,
+    newLines: 2,
+  };
+  const twoHunks = {
+    ...file,
+    lines: [
+      ...file.lines,
+      secondHunk,
+      { type: "context", oldNum: 30, newNum: 31, text: "const later = 1;" },
+      { type: "add", oldNum: null, newNum: 32, text: "publish(later);" },
+    ],
+  };
+  const artifact = {
+    galaxy: {
+      systems: [{
+        order: 0,
+        chapters: [{
+          order: 0,
+          beats: [
+            { id: "beat:first", order: 0 },
+            { id: "beat:overlap", order: 1 },
+            { id: "beat:later", order: 2 },
+          ],
+        }],
+      }],
+    },
+    evidence: [
+      {
+        id: "evidence:first",
+        kind: "changed",
+        location: {
+          path: "src/review.ts",
+          side: "RIGHT",
+          startLine: 11,
+          endLine: 11,
+        },
+      },
+      {
+        id: "evidence:overlap",
+        kind: "changed",
+        location: {
+          path: "src/review.ts",
+          side: "RIGHT",
+          startLine: 14,
+          endLine: 14,
+        },
+      },
+      {
+        id: "evidence:later",
+        kind: "changed",
+        location: {
+          path: "src/review.ts",
+          side: "RIGHT",
+          startLine: 32,
+          endLine: 32,
+        },
+      },
+    ],
+    coverage: [
+      {
+        evidenceId: "evidence:first",
+        assignment: { kind: "beat", beatId: "beat:first" },
+      },
+      {
+        evidenceId: "evidence:overlap",
+        assignment: { kind: "beat", beatId: "beat:overlap" },
+      },
+      {
+        evidenceId: "evidence:later",
+        assignment: { kind: "beat", beatId: "beat:later" },
+      },
+    ],
+  };
+
+  const first = projectOwnedBeatHunks(
+    [twoHunks],
+    artifact,
+    "beat:first",
+  );
+  const overlap = projectOwnedBeatHunks(
+    [twoHunks],
+    artifact,
+    "beat:overlap",
+  );
+  const later = projectOwnedBeatHunks(
+    [twoHunks],
+    artifact,
+    "beat:later",
+  );
+  const projectedByBeat = projectOwnedHunksByBeat(
+    [twoHunks],
+    artifact,
+  );
+
+  assert.deepEqual(
+    first[0].lines.filter((line) => line.type === "hunk").map((line) => line.text),
+    [hunk.text],
+  );
+  assert.deepEqual(overlap, []);
+  assert.deepEqual(
+    later[0].lines.filter((line) => line.type === "hunk").map((line) => line.text),
+    [secondHunk.text],
+  );
+  assert.deepEqual(projectedByBeat.get("beat:first"), first);
+  assert.deepEqual(projectedByBeat.get("beat:overlap"), overlap);
+  assert.deepEqual(projectedByBeat.get("beat:later"), later);
+});
+
 test("left-side evidence keeps deleted lines and shared context", () => {
   const projected = projectFocusedEvidence(
     [file],
@@ -105,111 +218,5 @@ test("binary evidence remains visible as a complete file marker", () => {
       [{ path: "assets/logo.png", side: "RIGHT", startLine: 0, endLine: 0 }],
     ),
     [binary],
-  );
-});
-
-test("review credit requires every trusted line to exist", () => {
-  assert.equal(
-    focusedRangeIsComplete(
-      [file],
-      {
-        path: "src/review.ts",
-        side: "RIGHT",
-        startLine: 11,
-        endLine: 14,
-      },
-    ),
-    true,
-  );
-  assert.equal(
-    focusedRangeIsComplete(
-      [file],
-      {
-        path: "src/review.ts",
-        side: "RIGHT",
-        startLine: 11,
-        endLine: 16,
-      },
-    ),
-    false,
-  );
-});
-
-test("file-level evidence requires an exact diff marker and explicit credit", () => {
-  const renamed = {
-    oldPath: "src/old.ts",
-    newPath: "src/new.ts",
-    isBinary: false,
-    isNew: false,
-    isDeleted: false,
-    isRename: true,
-    lines: [],
-  };
-  const [change] = enumerateUltraReviewDiffChanges([renamed]);
-  const evidence = {
-    ...change,
-    kind: "changed",
-    sourceClaimIds: [],
-  };
-
-  assert.deepEqual(
-    inspectUltraReviewBeatEvidence(
-      [renamed],
-      [evidence],
-      [],
-      [],
-    ),
-    {
-      ready: false,
-      hasReviewEvidence: true,
-      exactChangedEvidence: true,
-      outstandingStructuralEvidenceIds: [evidence.id],
-      outstandingRemovedEvidenceIds: [],
-    },
-  );
-  assert.equal(
-    inspectUltraReviewBeatEvidence(
-      [renamed],
-      [evidence],
-      [],
-      [evidence.id],
-    ).ready,
-    true,
-  );
-  assert.equal(
-    inspectUltraReviewBeatEvidence(
-      [{ ...renamed, isRename: false }],
-      [evidence],
-      [],
-      [evidence.id],
-    ).ready,
-    false,
-  );
-});
-
-test("removed delta evidence has a separate acknowledgement path", () => {
-  assert.deepEqual(
-    inspectUltraReviewBeatEvidence(
-      [],
-      [],
-      ["evidence:prior"],
-      [],
-    ),
-    {
-      ready: false,
-      hasReviewEvidence: true,
-      exactChangedEvidence: true,
-      outstandingStructuralEvidenceIds: [],
-      outstandingRemovedEvidenceIds: ["evidence:prior"],
-    },
-  );
-  assert.equal(
-    inspectUltraReviewBeatEvidence(
-      [],
-      [],
-      ["evidence:prior"],
-      ["evidence:prior"],
-    ).ready,
-    true,
   );
 });

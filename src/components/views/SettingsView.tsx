@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { refreshModels } from "../../lib/agents";
 import { probeHarness, summarizeProbe } from "../../lib/acp";
+import { modelIdsEncodeReasoning } from "../../lib/codexModels";
 import {
  activeHarness,
  EVENT_CATALOG,
@@ -366,7 +367,9 @@ export function SettingsView() {
       <div className="settings-section" id="s-defmodels">
        <h3>Default models (global)</h3>
        {(() => {
-        const hasReasoning = global.reasoningOptions.length > 0;
+        const hasReasoning =
+         global.reasoningOptions.length > 0 &&
+         !modelIdsEncodeReasoning(global.models);
         const hasFast = global.fastModels.length > 0;
         const defaultAxes = [
          "model",
@@ -384,9 +387,6 @@ export function SettingsView() {
            ))}
           </select>
          ) : null;
-        const globalReasoningLabel = global.reasoningEffort
-         ? global.reasoningLabels[global.reasoningEffort] ?? global.reasoningEffort
-         : "harness default";
         return (
          <>
           <label className="field">
@@ -414,18 +414,30 @@ export function SettingsView() {
            <small>
             Applies to every flow in every repo unless overridden — by a per-flow default
             below or an explicit pick in a launch form.
-            {hasReasoning && " Reasoning is a separate axis on harnesses that expose it (e.g. Codex)."}
+            {hasReasoning && " Reasoning is a separate axis on harnesses that expose it."}
             {hasFast && " Fast uses Codex's priority service tier and increased usage."}
            </small>
           </label>
           <p className="subtle" style={{ maxWidth: "76ch" }}>
-           Every AI-driven flow, with what you can steer at launch. Set a per-flow default to
+           Every AI-driven flow and its default model route. Set a per-flow default to
            route a flow to a different model{hasReasoning ? " or reasoning effort" : ""}
            {hasFast ? " or speed" : ""} without
            touching the launch forms.
           </p>
           {FLOW_MODEL_CATALOG.map((f) => {
            const current = global.modelOverrides?.[f.kind] ?? "";
+           const inheritedModel = f.inheritsFrom
+            ? global.modelOverrides?.[f.inheritsFrom] ||
+             global.defaultModel
+            : global.defaultModel;
+           const inheritedReasoning = f.inheritsFrom
+            ? global.reasoningOverrides?.[f.inheritsFrom]
+             || global.reasoningEffort
+            : global.reasoningEffort;
+           const inheritedReasoningLabel = inheritedReasoning
+            ? global.reasoningLabels[inheritedReasoning]
+             ?? inheritedReasoning
+            : "harness default";
            const options = global.models.filter(
             (m) => !(global.disabledModels ?? []).includes(m) || m === current
            );
@@ -448,7 +460,7 @@ export function SettingsView() {
                }}
               >
                <option value="">
-                model: {global.modelLabels[global.defaultModel] ?? global.defaultModel} (default)
+                model: {global.modelLabels[inheritedModel] ?? inheritedModel} (default)
                </option>
                {options.map((m) => (
                 <option key={m} value={m}>
@@ -464,7 +476,7 @@ export function SettingsView() {
                 else delete next[f.kind];
                 void saveGlobal({ ...global, reasoningOverrides: next });
                },
-               `reasoning: ${globalReasoningLabel} (default)`
+               `reasoning: ${inheritedReasoningLabel} (default)`
               )}
               <FastPicker flowKind={f.kind} models={[current]} />
              </div>
@@ -540,6 +552,20 @@ export function SettingsView() {
         <small>
          Prefilled in the composer whenever Review mode is picked — tweak it per run before launching.
          Template variables (<code>{"{pr-number}"}</code> …) and <code>/skill</code> references work.
+        </small>
+       </label>
+       <label className="field">
+        <span>UltraReview final assessment prompt</span>
+        <PromptInput
+         rows={10}
+         value={config.ultraReviewFinalAssessmentPrompt}
+         onChange={(ultraReviewFinalAssessmentPrompt) =>
+          update({ ultraReviewFinalAssessmentPrompt })
+         }
+        />
+        <small>
+         Guides the closing agent that turns all reviewer notes into the editable assessment and
+         recommended verdict. Charon still requires you to review and submit both.
         </small>
        </label>
        <label className="field">

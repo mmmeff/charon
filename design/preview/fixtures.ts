@@ -156,7 +156,7 @@ export const comments: CommentInfo[] = [
     body: "Does the rescue branch get pruned anywhere, or do these accumulate per failed run?",
     createdAt: new Date(NOW - 1000 * 60 * 90).toISOString(), url: "#" },
   { id: 9002, kind: "review_comment", author: "dsato", authorIsBot: false,
-    body: "This probe runs on every lease. Worth caching per clone path for the poll window.",
+    body: "**This probe runs on every lease.**\n\n- Worth caching per clone path for the poll window.",
     createdAt: new Date(NOW - 1000 * 60 * 55).toISOString(), url: "#",
     path: "src/lib/worktree.ts", line: 84, side: "RIGHT" },
 ];
@@ -360,6 +360,20 @@ export const blobs: Record<string, string> = {
     token: "preview-token",
     login: "mfrey",
     lastRepo: REPO,
+    models: ["auto", "gpt-5.6-sol"],
+    modelLabels: {
+      auto: "Auto",
+      "gpt-5.6-sol": "GPT-5.6-Sol",
+    },
+    defaultModel: "gpt-5.6-sol",
+    reasoningOptions: ["low", "high", "xhigh"],
+    reasoningLabels: {
+      low: "Low",
+      high: "High",
+      xhigh: "Extra high",
+    },
+    reasoningEffort: "high",
+    reasoningOverrides: { review: "xhigh" },
   }),
   [`repos/${KEY}/config.json`]: JSON.stringify({
     ...defaultRepoConfig(),

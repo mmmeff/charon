@@ -12,6 +12,8 @@ import {
  isCodexBridge,
  listedCodexModels,
  mergeModelCatalogs,
+ modelIdEncodesReasoning,
+ modelIdsEncodeReasoning,
 } from "./codexModels";
 
 /**
@@ -86,6 +88,13 @@ export interface AcpConfigOption {
  type?: string;
  currentValue?: string;
  options?: { value: string; name?: string }[];
+}
+
+export interface AcpMcpServer {
+ name: string;
+ command: string;
+ args: string[];
+ env: { name: string; value: string }[];
 }
 export interface NewSessionResult {
  sessionId: string;
@@ -162,7 +171,7 @@ export function labeledModels(
   );
 }
 
-/** The reasoning-effort config option, if the harness exposes one (codex). */
+/** The reasoning-effort config option, if the harness exposes one. */
 export function reasoningConfigOption(
  ns: NewSessionResult,
 ): AcpConfigOption | undefined {
@@ -173,6 +182,16 @@ export function reasoningConfigOption(
    o.type === "select" &&
    o.options?.length,
  );
+}
+
+/** A reasoning axis only when it is independent from the model id. */
+export function separateReasoningConfigOption(
+ ns: NewSessionResult,
+ modelId: string,
+): AcpConfigOption | undefined {
+ return modelIdEncodesReasoning(modelId)
+  ? undefined
+  : reasoningConfigOption(ns);
 }
 
 /**
@@ -603,8 +622,11 @@ export class AcpConnection {
   });
  }
 
- newSession(cwd: string): Promise<NewSessionResult> {
-  return this.request("session/new", { cwd, mcpServers: [] });
+ newSession(
+  cwd: string,
+  mcpServers: AcpMcpServer[] = [],
+ ): Promise<NewSessionResult> {
+  return this.request("session/new", { cwd, mcpServers });
  }
 
  setMode(sessionId: string, modeId: string) {
@@ -659,7 +681,7 @@ export interface HarnessProbe {
  models: AcpModel[];
  /** the harness's default/current model id, if any */
  currentId?: string;
- /** reasoning-effort options, if the harness exposes them (codex) */
+ /** reasoning-effort options, if the harness exposes them separately */
  reasoning?: { options: AcpModel[]; currentId?: string };
  /** model ids that support Codex's Fast service tier */
  fastModels?: string[];
@@ -670,7 +692,7 @@ export interface HarnessProbe {
  * codex-acp 0.16.0 links an older Codex model manager. Its ACP picker can
  * reject the installed CLI's newer catalog and lose model metadata. Persist
  * a compatible copy for the bridge launch; use the same source for Charon's
- * model, reasoning, and Fast controls.
+ * model and Fast controls.
  */
 export async function prepareCodexBridgeCatalog(
  command: string,
@@ -765,7 +787,15 @@ export async function probeHarness(
     await conn.initialize();
     const ns = await conn.newSession(cwd);
     const sessionModelList = sessionModels(ns);
-    const rc = reasoningConfigOption(ns);
+    // Codex model ids already include their effort (`model[effort]`).
+    // Exposing the bridge's legacy option would create two controls for the
+    // same setting, and the second one would overwrite set_model.
+    const modelsEncodeReasoning = modelIdsEncodeReasoning(
+     sessionModelList.models.map((model) => model.modelId),
+    );
+    const rc = modelsEncodeReasoning
+     ? undefined
+     : reasoningConfigOption(ns);
     const reasoning = rc
      ? {
       options: rc.options!.map((o) => ({
@@ -774,7 +804,9 @@ export async function probeHarness(
       })),
       currentId: rc.currentValue,
      }
-     : catalog.reasoning;
+     : modelsEncodeReasoning
+      ? undefined
+      : catalog.reasoning;
     return {
      ok: true,
      models: mergeModelCatalogs(

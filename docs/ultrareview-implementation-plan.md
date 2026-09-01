@@ -6,7 +6,7 @@ Source: [UltraReview product specification](./ultrareview.md).
 
 A review cannot stay coherent when every task opens a new layout.
 
-UltraReview has one introduction and one workbench.
+UltraReview has one introduction and one review document.
 
 Every slice must protect that shape.
 
@@ -34,25 +34,31 @@ The interface has two stages.
 
 The review plan introduces the thesis, ordered chapters, risk, coverage, and failures.
 
-One `Begin review` or `Resume review` action enters the workbench.
+One `Begin review` or `Resume review` action enters the review document.
 
-The workbench keeps one frame for `Review`, `Raw Diff`, and `Closing`.
+The document keeps one frame for `Review`, `Raw Diff`, and `Closing`.
 
-Its top bar owns identity, progress, mode selection, and exit.
+Its top bar owns identity, mode selection, and exit.
 
-Its left rail owns chapter and beat navigation.
+Its left outline jumps to chapters and beats, highlights the current section,
+and follows the reviewer through the document.
 
-Its center canvas owns the active mode.
+Its center canvas renders every beat in one causal, scrolling document.
 
-Its bottom flow bar owns `Previous`, `Mark inspected`, `Next`, and `Finish review`.
+Every beat summary remains mounted. Diff-heavy details are windowed around the
+current reading position so document cost stays bounded on large changes.
 
-Mode changes preserve chapter selection, beat selection, progress, notes, and evidence expansion.
+One `Done reviewing` action ends the document and opens Final Review.
 
-Chapter selection opens a beat inside the workbench.
+The header reports percent scrolled. Scrolling does not complete the review.
+
+Mode changes preserve chapter selection, beat selection, scroll position, notes, and evidence expansion.
+
+Chapter selection scrolls to a beat inside the document.
 
 It does not open a separate chapter page.
 
-Large pull requests add systems to the same rail.
+Large pull requests add systems to the same outline.
 
 They do not add another interface.
 
@@ -74,7 +80,7 @@ They do not add another interface.
 
 `src/lib/ultrareview-submission.ts` builds the exact approval-gated GitHub payload.
 
-`src/components/UltraReviewWorkspace.tsx` joins the plan intro and persistent workbench.
+`src/components/UltraReviewWorkspace.tsx` joins the plan intro and long-form document.
 
 `src/components/ultrareview/` contains small presentation components for those two stages.
 
@@ -124,7 +130,7 @@ Expose one `Begin review` or `Resume review` action.
 
 - A teammate pull request has a prominent on-demand UltraReview action.
 - The intro shows useful progress before the complete plan exists.
-- A validated chapter can enter the workbench while later analysis continues.
+- A validated chapter can enter the document while later analysis continues.
 - The terminal artifact cannot rewrite a chapter already exposed for review.
 - The configured model, reasoning, speed, and skills drive analysis.
 - The primary action enters the first recommended or saved beat.
@@ -139,22 +145,23 @@ UR-01, UR-02, UR-03, UR-05, and UR-19.
 
 ### Build
 
-Create the persistent workbench.
+Create the persistent review frame and long-form document.
 
-Keep the top bar, chapter rail, center canvas, and bottom flow bar stable.
+Keep the top bar, outline, and center canvas stable.
 
-Use the center canvas for `Review`, `Raw Diff`, and `Closing`.
+Render all review beats in the center canvas; use the same canvas for `Raw Diff` and `Closing`.
 
 Remove page-level navigation from chapters, beats, and closing.
 
 ### Completion gates
 
 - The frame does not change when the reviewer switches modes.
-- Every chapter and beat is reachable from one rail.
-- Chapter selection opens a beat instead of a chapter page.
-- `Previous`, `Mark inspected`, `Next`, and `Finish review` stay in one location.
+- Every chapter and beat is reachable from one outline.
+- Chapter selection scrolls to a beat instead of opening a page.
+- Beat sections follow one another without sequence controls.
+- Inspection remains one explicit local action at the end of each beat.
 - `Shift+D` switches Review and Raw Diff.
-- Mode changes preserve progress, notes, and evidence expansion.
+- Mode changes preserve reading position, notes, and evidence expansion.
 - Keyboard and reduced-motion behavior expose the same actions.
 - Narrow preview sizes retain one clear review sequence.
 
@@ -181,9 +188,9 @@ Use the same evidence identity in Review and Raw Diff.
 - Every changed line has one primary coverage state.
 - Mechanical changes show reasons and require acknowledgment.
 - Unmapped evidence blocks the fully reviewed state.
-- A beat cannot become inspected when its focused evidence is unavailable.
+- Document completion is one explicit action and never comes from scrolling.
 - Raw Diff credit requires an explicit action.
-- GitHub Viewed remains visible and separate.
+- Projected diff Viewed state remains local to each beat.
 - Tests cover additions, deletions, renames, binaries, whitespace, overlap, and stale ranges.
 
 ### Stories
@@ -207,7 +214,7 @@ Add cited follow-up questions without changing the story.
 - Every GitHub read uses `FlowContext.gh`.
 - Every `GitHubClient` request uses native `http_request`.
 - Existing inline comments appear on their evidence.
-- Blocking CI and unresolved feedback remain visible in each workbench mode.
+- Blocking CI and unresolved feedback remain visible in each document mode.
 - Test evidence sits beside the behavior that it validates.
 - Supporting evidence links to exact repository locations.
 - Follow-up answers reject unknown evidence citations.
@@ -230,7 +237,7 @@ Use all notes as context for an editable draft.
 
 Show draft provenance inside Charon.
 
-Preview and submit the exact GitHub payload through the native client.
+Edit the review body, inline comments, and verdict together, then submit through the native client.
 
 ### Completion gates
 
@@ -242,7 +249,7 @@ Preview and submit the exact GitHub payload through the native client.
 - The submitted body contains no internal provenance markup.
 - The user can edit the body and each candidate inline comment.
 - The model never preselects a verdict.
-- One explicit control submits the inspected payload.
+- One explicit control submits the edited review.
 - Incomplete submission names the missing work and keeps the session incomplete.
 - A successful submission freezes an immutable local snapshot.
 
@@ -305,13 +312,13 @@ Close with `Ready for review` or `Continue working`.
 
 UR-03, UR-10, UR-18, UR-19, and the author-mode contract.
 
-## Slice 9: Scale the same workbench
+## Slice 9: Scale the same document
 
 ### Build
 
 Group chapters into systems when a pull request needs another hierarchy level.
 
-Render those systems in the existing chapter rail.
+Render those systems in the existing outline.
 
 Give shared evidence one primary beat with backlinks from dependent chapters.
 
@@ -322,7 +329,8 @@ Keep one closing ledger and one human verdict.
 - Systems follow implementation goals instead of directories or commit order.
 - Every changed line keeps one primary review location.
 - Backlinks preserve notes and completion without duplicate coverage.
-- The rail exposes total risk, progress, failures, and unmapped evidence.
+- The outline exposes only the causal hierarchy and jump targets.
+- Failures and unmapped evidence stay in the document and closing ledger.
 - Completed systems remain usable while later analysis continues.
 - Partial failure never hides uncovered evidence.
 - Preview fixtures cover systems, shared evidence, partial failure, and resumed states.
@@ -337,7 +345,7 @@ UR-02, UR-05, UR-06, UR-12, UR-17, and UR-19.
 
 Join every path into the on-demand dogfood release.
 
-Keep Raw Diff as an internal workbench mode.
+Keep Raw Diff as an internal document mode.
 
 Store bounded diagnostic metadata on the device.
 
@@ -362,13 +370,13 @@ UR-01 through UR-20.
 
 1. Slice 1 establishes artifact identity and persistence.
 2. Slice 2 adds analysis and the review plan.
-3. Slice 3 establishes the workbench frame.
+3. Slice 3 establishes the document frame.
 4. Slice 4 joins evidence coverage to that frame.
 5. Slice 5 adds live context and cited investigation.
 6. Slice 6 joins notes, Closing, and explicit submission.
 7. Slice 7 hardens continuation and failure behavior.
 8. Slice 8 adds the author session.
-9. Slice 9 scales the existing rail.
+9. Slice 9 scales the existing outline.
 10. Slice 10 completes dogfood verification.
 
 Slices 3 and 4 can run beside the context work in Slice 5 after the artifact schema is stable.

@@ -199,10 +199,28 @@ export function isCodexBridge(
  );
 }
 
+/** Whether a selectable model id already includes its reasoning effort. */
+export function modelIdEncodesReasoning(
+ modelId: string,
+): boolean {
+ return /\[(?:low|medium|high|xhigh|max|ultra)\]$/.test(modelId);
+}
+
+/** Whether every selectable model id includes its reasoning effort. */
+export function modelIdsEncodeReasoning(
+ modelIds: string[],
+): boolean {
+ const selectable = modelIds.filter((modelId) => modelId !== "auto");
+ return (
+  selectable.length > 0 &&
+  selectable.every(modelIdEncodesReasoning)
+ );
+}
+
 /**
- * Pass a supported reasoning level as an ephemeral Codex config override.
- * The bridge applies this before it opens a session, including for new model
- * ids that its embedded model catalog does not recognize.
+ * Pass supported legacy Codex overrides before the bridge opens a session.
+ * New bridges encode reasoning in the selected model id, so their callers
+ * pass an empty effort.
  */
 export function codexBridgeArgs(
  command: string,

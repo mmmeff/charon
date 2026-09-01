@@ -3,12 +3,17 @@ import type {
   UltraReviewArtifact,
   UltraReviewArtifactIdentity,
   UltraReviewBlobStorage,
+  UltraReviewGenerationStatus,
 } from "../types";
 import { native } from "./tauri";
 import {
   readUltraReviewArtifacts,
   writeUltraReviewArtifacts,
 } from "./ultrareview-storage";
+import {
+  recoverInterruptedUltraReviewArtifact,
+} from "./ultrareview-recovery";
+import { useAgentStore } from "./store";
 import { ultraReviewArtifactKey } from "./ultraReview.ts";
 
 interface UltraReviewStoreState {
@@ -106,4 +111,46 @@ export function findUltraReviewArtifact(
 ): UltraReviewArtifact | null {
   const key = ultraReviewArtifactKey(identity);
   return useUltraReviewStore.getState().artifacts[key] ?? null;
+}
+
+export function useUltraReviewGenerationStatus(
+  identity: UltraReviewArtifactIdentity,
+): UltraReviewGenerationStatus | null {
+  const key = ultraReviewArtifactKey(identity);
+  return useUltraReviewStore(
+    (state) => state.artifacts[key]?.generation.status ?? null,
+  );
+}
+
+export async function reconcileInterruptedUltraReviews(
+  repo: string,
+  storage: UltraReviewBlobStorage = native,
+): Promise<number> {
+  const state = useUltraReviewStore.getState();
+  if (!state.loaded || state.repo !== repo) return 0;
+
+  const agentState = useAgentStore.getState();
+  const runs = agentState.order
+    .map((runId) => agentState.runs[runId])
+    .filter((run) => run !== undefined);
+  let recoveredCount = 0;
+
+  for (const artifact of Object.values(state.artifacts)) {
+    const recovered = recoverInterruptedUltraReviewArtifact(
+      artifact,
+      runs,
+    );
+    if (recovered === artifact) continue;
+    if (useUltraReviewStore.getState().repo !== repo) break;
+
+    await useUltraReviewStore.getState().update(
+      artifact.artifactKey,
+      (current) =>
+        recoverInterruptedUltraReviewArtifact(current, runs),
+      storage,
+    );
+    recoveredCount += 1;
+  }
+
+  return recoveredCount;
 }

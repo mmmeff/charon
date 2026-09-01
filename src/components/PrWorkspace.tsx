@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { findLineByText, parseUnifiedDiff } from "../lib/diff";
 import { usePrData } from "../lib/events";
 import { useRepoStore, useUiStore } from "../lib/store";
+import {
+  useUltraReviewGenerationStatus,
+} from "../lib/ultrareview-store";
 import type { FileDiff, PrSummary } from "../types";
 import { timeAgo, usePastHero, useScrollMemory, useScrolledPrTitle } from "../lib/ui";
 import { AetherField } from "./AetherField";
@@ -16,6 +19,7 @@ import { DiffCommentThread, PrActivityPanel, PrDescription, PrHeroRail, PrLabels
 import { ProposalCard } from "./ProposalCard";
 import { PrHeroSidePanel } from "./PrStackDrawer";
 import { useFlow } from "./flow";
+import { UltraReviewEntry } from "./ultrareview";
 import { UltraReviewWorkspace } from "./UltraReviewWorkspace";
 import { ultraReviewModeForPullRequest } from "../lib/ultrareview-session";
 
@@ -27,12 +31,25 @@ import { ultraReviewModeForPullRequest } from "../lib/ultrareview-session";
  */
 export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" | "babysit" }) {
   const { ctx } = useFlow();
+  const ultraReviewGenerationStatus =
+    useUltraReviewGenerationStatus({
+      repo: ctx.repo,
+      prNumber: pr.number,
+      baseSha: pr.baseSha,
+      headSha: pr.headSha,
+    });
   const checks = usePrData((s) => s.checks[pr.number]) ?? [];
   const comments = usePrData((s) => s.comments[pr.number]) ?? [];
   const proposals = useRepoStore((s) => s.proposals);
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [diffErr, setDiffErr] = useState("");
-  const [ultraOpen, setUltraOpen] = useState(false);
+  const navigationTab = variant === "draft" ? "drafts" : "open";
+  const ultraOpen = useUiStore((state) => {
+    const location = state.navHistory[state.navIndex];
+    return location?.tab === navigationTab
+      && location.pr === pr.number
+      && location.view === "ultrareview";
+  });
   const mainRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   useScrolledPrTitle(mainRef, pr);
@@ -164,8 +181,11 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
         files={files}
         filesError={diffErr}
         onRetryFiles={() => void loadDiff()}
-        viewedKey={`prc-viewed-${ctx.repo}-${pr.number}`}
-        onLeave={() => setUltraOpen(false)}
+        onLeave={() =>
+          useUiStore.getState().navPush(
+            navigationTab,
+            pr.number,
+          )}
       />
     );
   }
@@ -215,6 +235,17 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
             </div>
           </div>
 
+          {/* UltraReview is the primary action before the pull request body. */}
+          <UltraReviewEntry
+            generationStatus={ultraReviewGenerationStatus}
+            onBegin={() =>
+              useUiStore.getState().navPush(
+                navigationTab,
+                pr.number,
+                "ultrareview",
+              )}
+          />
+
           <PrHeroSidePanel
             pr={pr}
             onJump={jumpToStackPr}
@@ -228,35 +259,6 @@ export function PrWorkspace({ pr, variant }: { pr: PrSummary; variant: "draft" |
           </PrHeroSidePanel>
 
           {/* drive agents: ask / change / review + their output */}
-          <section className="ultra-entry-banner" data-mode={ultraMode}>
-            <div>
-              <span className="u-mark">
-                {ultraMode === "author"
-                  ? "AUTHOR READINESS"
-                  : "ULTRAREVIEW"}
-              </span>
-              <h3>
-                {ultraMode === "author"
-                  ? "Prepare this change for another engineer."
-                  : "Read this change in causal order."}
-              </h3>
-              <p>
-                {ultraMode === "author"
-                  ? "Intent, tests, complexity, rollout, cleanup."
-                  : "Chapters, focused evidence, explicit coverage."}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => setUltraOpen(true)}
-            >
-              {ultraMode === "author"
-                ? "Begin author review"
-                : "Enter UltraReview"}
-            </button>
-          </section>
-
           <Section>
             <Composer pr={pr} modes={consoleModes} reviewKind="self" />
             <FindingsStrip pr={pr} />

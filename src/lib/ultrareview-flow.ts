@@ -1,13 +1,9 @@
 import type {
   AgentRun,
-  CheckInfo,
-  CommentInfo,
-  CommitInfo,
   PrSummary,
-  ReviewInfo,
-  TimelineEventInfo,
   UltraReviewAnalysisEvidence,
   UltraReviewAnalysisInput,
+  UltraReviewArtifactValidation,
   UltraReviewAnswer,
   UltraReviewAnswerAction,
   UltraReviewArtifact,
@@ -24,18 +20,42 @@ import type {
 import { startAgent } from "./agents";
 import { parseUnifiedDiff } from "./diff";
 import {
+  DEFAULT_ULTRAREVIEW_FINAL_ASSESSMENT_PROMPT,
+} from "./defaults";
+import {
   auditUltraReviewDiff,
   enumerateUltraReviewDiffChanges,
 } from "./ultrareview-diff-audit";
 import {
   buildUltraReviewAnalysisPrompt,
+  buildUltraReviewPublicationPrompt,
   buildUltraReviewClosingSynthesisPrompt,
   buildUltraReviewFollowUpPrompt,
+  parseUltraReviewArtifactCandidate,
   parseUltraReviewArtifactResponse,
   parseUltraReviewFollowUpAnswer,
   parseUltraReviewProgressResponses,
 } from "./ultrareview-analysis";
-import { parseUltraReviewDraftResponse } from "./ultrareview-session";
+import {
+  acknowledgeUltraReviewPublication,
+  prepareUltraReviewPublication,
+  watchUltraReviewPublications,
+} from "./ultrareview-publication";
+import {
+  appendUltraReviewChapterPublication,
+  assembleUltraReviewPlanPublication,
+  completeUltraReviewPublication,
+  UltraReviewPublicationError,
+  ultraReviewPublicationChapterId,
+  ultraReviewPublicationIssues,
+} from "./ultrareview-publication-artifact";
+import type {
+  UltraReviewPublicationIssue,
+} from "./ultrareview-publication-contract";
+import {
+  parseUltraReviewDraftResponse,
+  ultraReviewNotesFingerprint,
+} from "./ultrareview-session";
 import { recordUltraReviewDiagnostic } from "./ultrareview-diagnostics-store";
 import { applySkills } from "./skills";
 import { useAgentStore } from "./store";
@@ -54,14 +74,10 @@ import {
 } from "./ultraReview";
 import { releaseWorktree, type Worktree } from "./worktree";
 import { uid } from "./template";
+import { native } from "./tauri";
 
 interface UltraReviewContext {
   diff: string;
-  checks: CheckInfo[];
-  comments: CommentInfo[];
-  reviews: ReviewInfo[];
-  timeline: TimelineEventInfo[];
-  commits: CommitInfo[];
   failures: UltraReviewGenerationFailure[];
   contextFailures: UltraReviewContextFailure[];
 }
@@ -96,6 +112,20 @@ function identityFor(
   };
 }
 
+export function resolveUltraReviewGenerationModel(
+  ctx: FlowContext,
+): string {
+  return resolveModel(ctx, undefined, "ultrareview");
+}
+
+function githubHost(githubUrl: string): string {
+  try {
+    return new URL(githubUrl).hostname;
+  } catch {
+    return githubUrl;
+  }
+}
+
 function generationFailure(
   stageId: string,
   message: string,
@@ -112,93 +142,15 @@ function generationFailure(
   };
 }
 
-async function optionalContext<T>(
-  source: UltraReviewContextFailure["source"],
-  load: () => Promise<T>,
-  fallback: T,
-  failures: UltraReviewGenerationFailure[],
-  contextFailures: UltraReviewContextFailure[],
-): Promise<T> {
-  try {
-    return await load();
-  } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : String(error);
-    failures.push(
-      generationFailure(
-        "context",
-        `${source} unavailable: ${message}`,
-      ),
-    );
-    contextFailures.push({
-      source,
-      message,
-      retryable: true,
-    });
-    return fallback;
-  }
-}
-
 async function loadUltraReviewContext(
   ctx: FlowContext,
   pr: PrSummary,
 ): Promise<UltraReviewContext> {
   const diff = await ctx.gh.getPullDiff(ctx.repo, pr.number);
-  const failures: UltraReviewGenerationFailure[] = [];
-  const contextFailures: UltraReviewContextFailure[] = [];
-  const [
-    checks,
-    comments,
-    reviews,
-    timeline,
-    commits,
-  ] = await Promise.all([
-    optionalContext(
-      "checks",
-      () => ctx.gh.listChecks(ctx.repo, pr.headSha),
-      [],
-      failures,
-      contextFailures,
-    ),
-    optionalContext(
-      "comments",
-      () => ctx.gh.listComments(ctx.repo, pr.number),
-      [],
-      failures,
-      contextFailures,
-    ),
-    optionalContext(
-      "reviews",
-      () => ctx.gh.listReviews(ctx.repo, pr.number),
-      [],
-      failures,
-      contextFailures,
-    ),
-    optionalContext(
-      "timeline",
-      () => ctx.gh.listTimeline(ctx.repo, pr.number),
-      [],
-      failures,
-      contextFailures,
-    ),
-    optionalContext(
-      "commits",
-      () => ctx.gh.listPullCommits(ctx.repo, pr.number),
-      [],
-      failures,
-      contextFailures,
-    ),
-  ]);
   return {
     diff,
-    checks,
-    comments,
-    reviews,
-    timeline,
-    commits,
-    failures,
-    contextFailures,
+    failures: [],
+    contextFailures: [],
   };
 }
 
@@ -213,11 +165,6 @@ function trustedEvidenceInventory(
     change: change.change,
     location: change.location,
     fingerprint: change.fingerprint,
-    content: change.text ?? (
-      change.change === "rename"
-        ? "File renamed"
-        : "Binary file changed"
-    ),
   }));
 }
 
@@ -227,61 +174,68 @@ function analysisInput(
   mode: "teammate" | "author",
   context: UltraReviewContext,
   worktree: Worktree | null,
-): UltraReviewAnalysisInput {
+): Omit<UltraReviewAnalysisInput, "artifactValidation"> {
   return {
     mode,
+    githubHost: githubHost(ctx.global.githubUrl),
     pullRequest: {
       repo: ctx.repo,
       number: pr.number,
       title: pr.title,
-      body: pr.body || "",
       author: pr.author,
       baseRef: pr.baseRef,
       headRef: pr.headRef,
       baseSha: pr.baseSha,
       headSha: pr.headSha,
     },
-    diff: context.diff,
     evidenceInventory: trustedEvidenceInventory(context.diff),
-    checks: context.checks.map((check) => ({
-      name: check.name,
-      status: check.status,
-      conclusion: check.conclusion ?? undefined,
-      summary: check.outputSummary,
-    })),
-    comments: context.comments.map((comment) => ({
-      id: comment.id,
-      author: comment.author,
-      body: comment.body,
-      path: comment.path,
-      line: comment.line,
-      side: comment.side,
-    })),
-    reviews: context.reviews.map((review) => ({
-      id: review.id,
-      author: review.author,
-      state: review.state,
-      body: review.body,
-    })),
-    timeline: context.timeline.map((event) => ({
-      id: event.id,
-      type: event.verb,
-      actor: event.actor,
-      summary: [event.text, event.sub]
-        .filter(Boolean)
-        .join(" — "),
-    })),
-    commits: context.commits.map((commit) => ({
-      sha: commit.sha,
-      message: commit.message,
-      author: commit.author,
-    })),
     contextFailures: context.contextFailures,
     checkout: {
       available: worktree !== null,
       root: worktree?.path,
     },
+    fallbackDiff: worktree === null
+      ? context.diff
+      : undefined,
   };
+}
+
+interface PreparedUltraReviewArtifactValidation {
+ prompt: UltraReviewArtifactValidation;
+ candidateRel: string;
+}
+
+function shellQuote(value: string): string {
+ return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+async function prepareUltraReviewArtifactValidation(
+ evidenceInventory: readonly UltraReviewAnalysisEvidence[],
+): Promise<PreparedUltraReviewArtifactValidation> {
+ const validationId = uid("ultra-validation-");
+ const paths = await native.prepareUltraReviewValidation(
+  validationId,
+  JSON.stringify({
+   version: 1,
+   evidenceInventory,
+  }),
+ );
+ const command = [
+  "node",
+  shellQuote(paths.validatorPath),
+  "--candidate",
+  shellQuote(paths.candidatePath),
+  "--context",
+  shellQuote(paths.contextPath),
+ ].join(" ");
+ return {
+  prompt: {
+   candidatePath: paths.candidatePath,
+   contextPath: paths.contextPath,
+   command,
+  },
+  candidateRel: paths.candidateRel,
+ };
 }
 
 function mergeAnalysisResult(
@@ -347,6 +301,16 @@ function exactRecordSurvives<Value extends { id: string }>(
   );
 }
 
+function exactPrefixSurvives<Value>(
+  published: Value[],
+  candidate: Value[],
+): boolean {
+  return candidate.length >= published.length
+    && published.every((value, index) =>
+      sameJson(value, candidate[index])
+    );
+}
+
 /**
  * Published progress is append-only. The final artifact may add later work,
  * but it cannot revise anything a reviewer was already allowed to inspect.
@@ -359,12 +323,10 @@ export function ultraReviewCandidatePreservesPublishedChapters(
   if (published.galaxy.thesis !== candidate.galaxy.thesis) {
     return false;
   }
-  if (
-    !sameJson(
-      published.galaxy.sourceClaimIds,
-      candidate.galaxy.sourceClaimIds,
-    )
-  ) {
+  if (!exactPrefixSurvives(
+    published.galaxy.sourceClaimIds,
+    candidate.galaxy.sourceClaimIds,
+  )) {
     return false;
   }
   const candidateSystems = new Map(
@@ -380,12 +342,18 @@ export function ultraReviewCandidatePreservesPublishedChapters(
     -1,
     ...published.galaxy.systems.map((system) => system.order),
   );
+  const addedGalaxySourceClaimIds = new Set<string>();
   for (const candidateSystem of candidate.galaxy.systems) {
     if (
       !publishedSystemIds.has(candidateSystem.id)
       && candidateSystem.order <= maximumSystemOrder
     ) {
       return false;
+    }
+    if (!publishedSystemIds.has(candidateSystem.id)) {
+      for (const sourceClaimId of candidateSystem.sourceClaimIds) {
+        addedGalaxySourceClaimIds.add(sourceClaimId);
+      }
     }
   }
 
@@ -397,10 +365,14 @@ export function ultraReviewCandidatePreservesPublishedChapters(
     if (!candidateSystem) return false;
     const {
       chapters: publishedChapters,
+      sourceClaimIds: publishedSourceClaimIds,
+      scope: publishedScope,
       ...publishedSystemSummary
     } = publishedSystem;
     const {
       chapters: candidateChapters,
+      sourceClaimIds: candidateSourceClaimIds,
+      scope: candidateScope,
       ...candidateSystemSummary
     } = candidateSystem;
     if (
@@ -420,6 +392,41 @@ export function ultraReviewCandidatePreservesPublishedChapters(
     const publishedChapterIds = new Set(
       publishedChapters.map((chapter) => chapter.id),
     );
+    const addedChapters = candidateChapters.filter(
+      (chapter) => !publishedChapterIds.has(chapter.id),
+    );
+    const addedChapterSourceClaimIds = new Set(
+      addedChapters.flatMap((chapter) => chapter.sourceClaimIds),
+    );
+    if (!exactPrefixSurvives(
+      publishedSourceClaimIds,
+      candidateSourceClaimIds,
+    )) {
+      return false;
+    }
+    for (
+      let index = publishedSourceClaimIds.length;
+      index < candidateSourceClaimIds.length;
+      index += 1
+    ) {
+      const sourceClaimId = candidateSourceClaimIds[index];
+      if (!addedChapterSourceClaimIds.has(sourceClaimId)) {
+        return false;
+      }
+      addedGalaxySourceClaimIds.add(sourceClaimId);
+    }
+    if (
+      addedChapters.length === 0
+      && !sameJson(publishedScope, candidateScope)
+    ) {
+      return false;
+    }
+    if (
+      candidateScope.changedLines < publishedScope.changedLines
+      || candidateScope.files < publishedScope.files
+    ) {
+      return false;
+    }
     const maximumChapterOrder = Math.max(
       -1,
       ...publishedChapters.map((chapter) => chapter.order),
@@ -444,6 +451,18 @@ export function ultraReviewCandidatePreservesPublishedChapters(
       for (const beat of publishedChapter.beats) {
         publishedBeatIds.add(beat.id);
       }
+    }
+  }
+
+  for (
+    let index = published.galaxy.sourceClaimIds.length;
+    index < candidate.galaxy.sourceClaimIds.length;
+    index += 1
+  ) {
+    if (!addedGalaxySourceClaimIds.has(
+      candidate.galaxy.sourceClaimIds[index],
+    )) {
+      return false;
     }
   }
 
@@ -514,9 +533,15 @@ export function ultraReviewProgressArtifactIsSafe(
       evidence,
     ]),
   );
+  const isPlan =
+    artifact.galaxy.systems.length > 0
+    && chapters.length === 0
+    && artifact.coverage.length === 0
+    && artifact.mechanicalChanges.length === 0
+    && artifact.concerns.length === 0;
   if (
-    chapters.length === 0
-    || chapters.some(
+    (!isPlan && chapters.length === 0)
+    || (!isPlan && chapters.some(
       (chapter) =>
         chapter.kind === "unmapped"
         || chapter.beats.length === 0
@@ -526,7 +551,7 @@ export function ultraReviewProgressArtifactIsSafe(
               (id) => evidenceById.get(id)?.kind === "changed",
             ),
         ),
-    )
+    ))
     || artifact.coverage.some(
       (entry) => entry.assignment.kind === "unmapped",
     )
@@ -537,11 +562,18 @@ export function ultraReviewProgressArtifactIsSafe(
     parseUnifiedDiff(diff),
     artifact,
   );
+  if (isPlan) {
+    return (
+      audit.invalidEvidence.length === 0
+      && audit.duplicatePrimaryCoverage.length === 0
+      && audit.supportingCoverageEvidenceIds.length === 0
+      && audit.unknownCoverageEvidenceIds.length === 0
+    );
+  }
   const coverageAudit = auditUltraReviewCoverage(artifact);
   return (
     audit.invalidEvidence.length === 0
     && audit.duplicatePrimaryCoverage.length === 0
-    && audit.unassignedEvidenceIds.length === 0
     && audit.supportingCoverageEvidenceIds.length === 0
     && audit.unknownCoverageEvidenceIds.length === 0
     && coverageAudit.missingEvidenceIds.length === 0
@@ -556,20 +588,46 @@ export function ultraReviewProgressArtifactIsSafe(
   );
 }
 
+export type UltraReviewProgressMergeResult =
+  | {
+      accepted: true;
+      artifact: UltraReviewArtifact;
+    }
+  | {
+      accepted: false;
+      issue: UltraReviewPublicationIssue;
+    };
+
 export function mergeUltraReviewProgressArtifact(
   diff: string,
   current: UltraReviewArtifact,
   progress: UltraReviewArtifact,
   contextFailures: UltraReviewGenerationFailure[],
-): UltraReviewArtifact | null {
-  if (
-    !ultraReviewProgressArtifactIsSafe(diff, progress)
-    || !ultraReviewCandidatePreservesPublishedChapters(
-      current,
-      progress,
-    )
-  ) {
-    return null;
+): UltraReviewProgressMergeResult {
+  if (!ultraReviewProgressArtifactIsSafe(diff, progress)) {
+    return {
+      accepted: false,
+      issue: {
+        code: "PROGRESS_ARTIFACT_UNSAFE",
+        path: "",
+        message: "Charon could not verify this review work against the trusted diff.",
+        repair: "Fix the chapter validation errors before publishing it again.",
+      },
+    };
+  }
+  if (!ultraReviewCandidatePreservesPublishedChapters(
+    current,
+    progress,
+  )) {
+    return {
+      accepted: false,
+      issue: {
+        code: "PUBLISHED_WORK_CHANGED",
+        path: "",
+        message: "This call changed review work that is already visible.",
+        repair: "Publish only the next planned chapter. Do not repeat or rewrite accepted chapters or evidence.",
+      },
+    };
   }
   const merged = mergeAnalysisResult(
     current,
@@ -577,12 +635,15 @@ export function mergeUltraReviewProgressArtifact(
     contextFailures,
   );
   return {
-    ...merged,
-    lifecycle: current.lifecycle,
-    generation: {
-      status: "running",
-      stages: current.generation.stages,
-      failures: contextFailures,
+    accepted: true,
+    artifact: {
+      ...merged,
+      lifecycle: current.lifecycle,
+      generation: {
+        status: "running",
+        stages: progress.generation.stages,
+        failures: contextFailures,
+      },
     },
   };
 }
@@ -1202,10 +1263,7 @@ function addDeltaChapter(
         mode,
         {
           ...session,
-          beatStates: {
-            ...session.beatStates,
-            [beatId]: "pending" as const,
-          },
+          reviewCompletedAt: undefined,
           resume: {
             ...session.resume,
             systemId: firstSystem.id,
@@ -1555,12 +1613,72 @@ export async function startUltraReviewAnalysis(
             input.retryFailureId,
           )
         : null;
+    const analysisBase = analysisInput(
+      ctx,
+      pr,
+      mode,
+      context,
+      worktree,
+    );
+    const artifactValidation =
+      await prepareUltraReviewArtifactValidation(
+        analysisBase.evidenceInventory,
+      );
+    const analysisRequest: UltraReviewAnalysisInput = {
+      ...analysisBase,
+      artifactValidation: artifactValidation.prompt,
+    };
+    const publicationHeadFiles = new Map<
+      string,
+      Promise<string>
+    >();
+    const readPublicationHeadFile = (
+      path: string,
+    ): Promise<string> => {
+      const cached = publicationHeadFiles.get(path);
+      if (cached !== undefined) return cached;
+      const pending = (async () => {
+        if (worktree !== null) {
+          try {
+            const result = await native.runGit(
+              ["show", `${pr.headSha}:${path}`],
+              worktree.path,
+            );
+            if (result.code === 0) return result.stdout;
+          } catch {
+            // Fall through to the native GitHub client.
+          }
+        }
+        return ctx.gh.getFileText(
+          pr.headRepoFullName || ctx.repo,
+          path,
+          pr.headSha,
+        );
+      })();
+      publicationHeadFiles.set(path, pending);
+      return pending;
+    };
+    const publication = retrying
+      ? null
+      : await prepareUltraReviewPublication();
+    const parseArtifact = (
+      raw: string,
+      artifactIdentity: UltraReviewArtifactIdentity,
+    ) =>
+      parseUltraReviewAnalysisJson(
+        raw,
+        artifactIdentity,
+        analysisRequest.evidenceInventory,
+      );
     const basePrompt = [
       buildUltraReviewAnalysisPrompt(
-        analysisInput(ctx, pr, mode, context, worktree),
+        analysisRequest,
+        { publication: publication !== null },
       ),
+      publication
+        ? buildUltraReviewPublicationPrompt()
+        : null,
       retryInstruction,
-      reviewWorkspaceBlock(worktree, pr),
     ].filter((part) => part !== null).join("\n");
     const prompt = applySkills(
       basePrompt,
@@ -1569,16 +1687,78 @@ export async function startUltraReviewAnalysis(
     );
 
     let unsubscribeProgress: (() => void) | null = null;
+    let stopPublication: (() => Promise<void>) | null = null;
     let progressWork: Promise<void> = Promise.resolve();
     let publishedProgress = false;
+    let publicationFinished = false;
     let progressPersistenceFailed = false;
     const stopProgress = async () => {
       unsubscribeProgress?.();
       unsubscribeProgress = null;
+      await stopPublication?.();
+      stopPublication = null;
       await progressWork;
     };
+    const recordProgressPersistenceFailure = async (
+      error: unknown,
+    ) => {
+      progressPersistenceFailed = true;
+      const message = error instanceof Error
+        ? error.message
+        : String(error);
+      try {
+        await markAnalysisFailed(
+          running.artifactKey,
+          `Progress persistence failed: ${message}`,
+        );
+      } catch (failureError) {
+        console.warn(
+          "UltraReview progress failure could not persist",
+          failureError,
+        );
+      }
+      void recordUltraReviewDiagnostic(ctx.repo, {
+        stageId: "analysis.progress",
+        elapsedMs: Date.now() - startedAt,
+        retryCount: 0,
+        outcome: "failure",
+        failureCategory: "generation",
+      });
+    };
+    const persistProgress = (
+      progress: UltraReviewArtifact,
+    ): Promise<UltraReviewProgressMergeResult> => {
+      let outcome: UltraReviewProgressMergeResult | null = null;
+      const task = progressWork.then(async () => {
+        await useUltraReviewStore.getState().update(
+          running.artifactKey,
+          (current) => {
+            outcome = mergeUltraReviewProgressArtifact(
+              context.diff,
+              current,
+              progress,
+              context.failures,
+            );
+            if (!outcome.accepted) return current;
+            publishedProgress = true;
+            return outcome.artifact;
+          },
+        );
+      });
+      progressWork = task.catch(
+        recordProgressPersistenceFailure,
+      );
+      return task.then(() => {
+        if (outcome === null) {
+          throw new Error(
+            "UltraReview progress update did not produce an outcome.",
+          );
+        }
+        return outcome;
+      });
+    };
     const runId = await startAgent({
-      kind: "review",
+      kind: "ultrareview",
       relation: retrying
         ? "retry UltraReview analysis"
         : "build UltraReview",
@@ -1586,19 +1766,34 @@ export async function startUltraReviewAnalysis(
       prNumber: pr.number,
       prTitle: pr.title,
       prompt,
-      model: resolveModel(ctx, undefined, "review"),
+      model: resolveUltraReviewGenerationModel(ctx),
       binary: ctx.global.cursorBinary,
       cwd: worktree?.path,
       mode: "ask",
+      mcpServers: publication
+        ? [publication.mcpServer]
+        : undefined,
       onDone: async (run) => {
         try {
           await stopProgress();
           if (progressPersistenceFailed) return;
-          const parsed = parseUltraReviewArtifactResponse(
-            run.resultText,
-            identity,
-            parseUltraReviewAnalysisJson,
+          if (publicationFinished) return;
+          const candidate = await native.loadBlob(
+            artifactValidation.candidateRel,
           );
+          const parsed =
+            candidate !== null
+            && candidate.trim().length > 0
+              ? parseUltraReviewArtifactCandidate(
+                  candidate,
+                  identity,
+                  parseArtifact,
+                )
+              : parseUltraReviewArtifactResponse(
+                  run.resultText,
+                  identity,
+                  parseArtifact,
+                );
           if (!parsed.ok) {
             await markAnalysisFailed(
               running.artifactKey,
@@ -1719,59 +1914,166 @@ export async function startUltraReviewAnalysis(
       },
     });
     if (!retrying) {
+      if (publication) {
+        stopPublication = watchUltraReviewPublications(
+          publication,
+          async (event) => {
+            try {
+              const current =
+                useUltraReviewStore.getState()
+                  .artifacts[running.artifactKey]
+                ?? running;
+              if (publicationFinished) {
+                throw new UltraReviewPublicationError({
+                  code: "REVIEW_ALREADY_FINISHED",
+                  path: "",
+                  message: "The staged review is already complete.",
+                  repair: "Stop calling publisher tools for this review.",
+                });
+              }
+              if (event.kind === "complete") {
+                const completed = completeUltraReviewPublication(
+                  current,
+                  event.payload,
+                );
+                const audited = applyTrustedDiffAudit(
+                  context.diff,
+                  completed.artifact,
+                );
+                const continued = mergeAnalysisResult(
+                  continuationSource ?? current,
+                  audited,
+                  context.failures,
+                );
+                const generated = continueUltraReviewArtifact(
+                  current,
+                  continued,
+                ).artifact;
+                await useUltraReviewStore.getState().put(generated);
+                publicationFinished = true;
+                publishedProgress = true;
+                await acknowledgeUltraReviewPublication(
+                  publication,
+                  event,
+                  {
+                    accepted: true,
+                    message: "Charon completed the staged review.",
+                    result: completed.receipt,
+                  },
+                );
+                void recordUltraReviewDiagnostic(ctx.repo, {
+                  stageId: "analysis.complete",
+                  elapsedMs: Date.now() - startedAt,
+                  retryCount: 0,
+                  outcome: "success",
+                  failureCategory: null,
+                });
+                return;
+              }
+              if (
+                event.kind === "plan"
+                && current.galaxy.systems.length > 0
+              ) {
+                throw new UltraReviewPublicationError({
+                  code: "PLAN_ALREADY_PUBLISHED",
+                  path: "",
+                  message: "The review plan is already published.",
+                  repair: "Continue with the first unpublished chapter.",
+                });
+              }
+              const result = event.kind === "plan"
+                ? assembleUltraReviewPlanPublication(
+                    identity,
+                    event.payload,
+                    analysisRequest.evidenceInventory,
+                  )
+                : await appendUltraReviewChapterPublication(
+                    current,
+                    event.payload,
+                    analysisRequest.evidenceInventory,
+                    readPublicationHeadFile,
+                  );
+              if (
+                event.kind === "chapter"
+                && !result.artifact.galaxy.systems.some(
+                  (system) => system.chapters.some(
+                    (chapter) =>
+                      chapter.id === ultraReviewPublicationChapterId(
+                        event.chapterKey!,
+                      ),
+                  ),
+                )
+              ) {
+                throw new UltraReviewPublicationError({
+                  code: "CHAPTER_NORMALIZATION_FAILED",
+                  path: "chapterKey",
+                  message: `${event.chapterKey} was not added to the review.`,
+                  repair: "Retry this chapter once with the same semantic content.",
+                });
+              }
+              const persistence = await persistProgress(
+                result.artifact,
+              );
+              await acknowledgeUltraReviewPublication(
+                publication,
+                event,
+                persistence.accepted
+                  ? {
+                      accepted: true,
+                      message: event.kind === "plan"
+                        ? "Charon published the review plan."
+                        : `Charon published ${event.chapterKey}.`,
+                      result: result.receipt,
+                    }
+                  : {
+                      accepted: false,
+                      message: persistence.issue.message,
+                      errors: [persistence.issue],
+                    },
+              );
+              if (persistence.accepted) {
+                void recordUltraReviewDiagnostic(ctx.repo, {
+                  stageId: event.kind === "plan"
+                    ? "analysis.plan"
+                    : "analysis.chapter",
+                  elapsedMs: Date.now() - startedAt,
+                  retryCount: 0,
+                  outcome: "success",
+                  failureCategory: null,
+                });
+              }
+            } catch (error) {
+              console.warn(
+                "UltraReview publication rejected",
+                error,
+              );
+              const errors = ultraReviewPublicationIssues(error);
+              await acknowledgeUltraReviewPublication(
+                publication,
+                event,
+                {
+                  accepted: false,
+                  message: errors[0].message,
+                  errors,
+                },
+              );
+            }
+          },
+        );
+      }
       let handledBlocks = 0;
       let observedText = "";
       const consumeProgress = (text: string) => {
         const parsed = parseUltraReviewProgressResponses(
           text,
           identity,
-          parseUltraReviewAnalysisJson,
+          parseArtifact,
         );
         const unhandled = parsed.slice(handledBlocks);
         handledBlocks = parsed.length;
         for (const result of unhandled) {
           if (!result.ok) continue;
-          progressWork = progressWork
-            .then(async () => {
-              await useUltraReviewStore.getState().update(
-                running.artifactKey,
-                (current) => {
-                  const merged = mergeUltraReviewProgressArtifact(
-                    context.diff,
-                    current,
-                    result.artifact,
-                    context.failures,
-                  );
-                  if (!merged) return current;
-                  publishedProgress = true;
-                  return merged;
-                },
-              );
-            })
-            .catch(async (error) => {
-              progressPersistenceFailed = true;
-              const message = error instanceof Error
-                ? error.message
-                : String(error);
-              try {
-                await markAnalysisFailed(
-                  running.artifactKey,
-                  `Progress persistence failed: ${message}`,
-                );
-              } catch (failureError) {
-                console.warn(
-                  "UltraReview progress failure could not persist",
-                  failureError,
-                );
-              }
-              void recordUltraReviewDiagnostic(ctx.repo, {
-                stageId: "analysis.progress",
-                elapsedMs: Date.now() - startedAt,
-                retryCount: 0,
-                outcome: "failure",
-                failureCategory: "generation",
-              });
-            });
+          void persistProgress(result.artifact).catch(() => {});
         }
       };
       unsubscribeProgress = useAgentStore.subscribe((state) => {
@@ -1829,9 +2131,16 @@ async function followUpEvidence(
     throw new Error(`Cannot investigate unknown beat ${beatId}`);
   }
   const changed = new Map(
-    trustedEvidenceInventory(diff).map(
-      (evidence) => [evidence.id, evidence.content],
-    ),
+    enumerateUltraReviewDiffChanges(
+      parseUnifiedDiff(diff),
+    ).map((change) => [
+      change.id,
+      change.text ?? (
+        change.change === "rename"
+          ? "File renamed"
+          : "Binary file changed"
+      ),
+    ]),
   );
   return Promise.all(
     artifact.evidence
@@ -2130,6 +2439,10 @@ export async function startUltraReviewClosingDraft(
       "UltraReview needs at least one human note before synthesis.",
     );
   }
+  const sourceNotes = session.notes;
+  const sourceNotesFingerprint = ultraReviewNotesFingerprint(
+    sourceNotes,
+  );
   const beatForEvidence = new Map<string, string>();
   for (const system of artifact.galaxy.systems) {
     for (const chapter of system.chapters) {
@@ -2144,17 +2457,19 @@ export async function startUltraReviewClosingDraft(
   }
   const prompt = applySkills(
     buildUltraReviewClosingSynthesisPrompt(
-      session.notes.map((note) => ({
+      sourceNotes.map((note) => ({
         id: note.id,
+        kind: note.kind,
+        stale: note.stale,
         beatId:
           note.anchor.kind === "beat"
             ? note.anchor.beatId
-            : beatForEvidence.get(note.anchor.evidenceId)
+            : beatForEvidence.get(note.anchor.evidenceIds[0])
               ?? "unmapped",
         body: note.body,
         evidenceIds:
           note.anchor.kind === "line"
-            ? [note.anchor.evidenceId]
+            ? note.anchor.evidenceIds
             : [],
         anchor:
           note.anchor.kind === "line"
@@ -2166,6 +2481,8 @@ export async function startUltraReviewClosingDraft(
               }
             : undefined,
       })),
+      input.ctx.config.ultraReviewFinalAssessmentPrompt
+      ?? DEFAULT_ULTRAREVIEW_FINAL_ASSESSMENT_PROMPT,
     ),
     input.ctx.skills,
     input.ctx.config.skills.rewrite,
@@ -2193,22 +2510,31 @@ export async function startUltraReviewClosingDraft(
         run.resultText,
         {
           draftId: uid("ultra-draft-"),
-          notes: current.sessions[input.mode].notes,
+          notes: sourceNotes,
           concerns: current.concerns,
         },
       );
       await useUltraReviewStore.getState().update(
         input.artifactKey,
-        (latest) => ({
-          ...latest,
-          sessions: {
-            ...latest.sessions,
-            [input.mode]: {
-              ...latest.sessions[input.mode],
-              draft,
+        (latest) => {
+          if (
+            ultraReviewNotesFingerprint(
+              latest.sessions[input.mode].notes,
+            ) !== sourceNotesFingerprint
+          ) {
+            return latest;
+          }
+          return {
+            ...latest,
+            sessions: {
+              ...latest.sessions,
+              [input.mode]: {
+                ...latest.sessions[input.mode],
+                draft,
+              },
             },
-          },
-        }),
+          };
+        },
       );
     },
   });

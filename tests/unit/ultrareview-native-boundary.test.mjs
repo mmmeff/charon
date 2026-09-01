@@ -52,20 +52,20 @@ test("UltraReview keeps browser network APIs outside its source", () => {
   }
 });
 
-test("UltraReview GitHub reads reach the Rust HTTP command", () => {
+test("UltraReview acquires the trusted diff through the Rust HTTP command", () => {
   const flow = read("src/lib/ultrareview-flow.ts");
-  for (const method of [
-    "getPullDiff",
+  assert.match(flow, /ctx\.gh\.getPullDiff\(/);
+  for (const eagerRead of [
     "listChecks",
     "listComments",
     "listReviews",
     "listTimeline",
     "listPullCommits",
   ]) {
-    assert.match(
+    assert.doesNotMatch(
       flow,
-      new RegExp(`ctx\\.gh\\.${method}\\(`),
-      `analysis must read ${method} through FlowContext.gh`
+      new RegExp(`ctx\\.gh\\.${eagerRead}\\(`),
+      `analysis must retrieve ${eagerRead} just in time`
     );
   }
 
@@ -108,4 +108,78 @@ test("UltraReview persistence reaches native blob storage", () => {
     /\.invoke_handler\(tauri::generate_handler!\[[\s\S]*\bload_blob,[\s\S]*\bsave_blob,/,
     "the Tauri command registry must expose both blob commands"
   );
+});
+
+test("UltraReview packages its agent-side artifact validator", () => {
+  const validator = read("scripts/validate-ultrareview.mjs");
+  assert.match(validator, /--candidate/);
+  assert.match(validator, /--context/);
+  assert.match(validator, /references unknown/);
+
+  const tauri = read("src/lib/tauri.ts");
+  assert.match(
+    tauri,
+    /invoke\("prepare_ultrareview_validation", \{/,
+  );
+
+  const rust = read("src-tauri/src/lib.rs");
+  assert.match(
+    rust,
+    /include_str!\("\.\.\/\.\.\/scripts\/validate-ultrareview\.mjs"\)/,
+  );
+  assert.match(rust, /fn prepare_ultrareview_validation\(/);
+  assert.match(
+    rust,
+    /\.invoke_handler\(tauri::generate_handler!\[[\s\S]*\bprepare_ultrareview_validation,/,
+    "the Tauri command registry must expose the packaged validator",
+  );
+
+  const flow = read("src/lib/ultrareview-flow.ts");
+  assert.match(
+    flow,
+    /native\.prepareUltraReviewValidation\(/,
+  );
+  assert.match(
+    flow,
+    /native\.loadBlob\(\s*artifactValidation\.candidateRel,/,
+  );
+  assert.match(
+    flow,
+    /parseUltraReviewArtifactCandidate\(/,
+  );
+});
+
+test("UltraReview packages a run-scoped chapter publisher", () => {
+  const publisher = read("scripts/ultrareview-publisher.mjs");
+  assert.match(publisher, /publish_plan/);
+  assert.match(publisher, /publish_chapter/);
+  assert.match(publisher, /waitForAcknowledgment/);
+
+  const acp = read("src/lib/acp.ts");
+  assert.match(acp, /mcpServers: AcpMcpServer\[\]/);
+  assert.match(
+    acp,
+    /this\.request\("session\/new", \{ cwd, mcpServers \}\)/,
+  );
+
+  const rust = read("src-tauri/src/lib.rs");
+  assert.match(
+    rust,
+    /include_str!\("\.\.\/\.\.\/scripts\/ultrareview-publisher\.mjs"\)/,
+  );
+  assert.match(
+    rust,
+    /include_str!\("\.\.\/\.\.\/scripts\/ultrareview-publisher-v2\.json"\)/,
+  );
+  assert.match(publisher, /--contract/);
+  assert.match(rust, /fn prepare_ultrareview_publication\(/);
+  assert.match(
+    rust,
+    /\.invoke_handler\(tauri::generate_handler!\[[\s\S]*\bprepare_ultrareview_publication,/,
+  );
+
+  const flow = read("src/lib/ultrareview-flow.ts");
+  assert.match(flow, /prepareUltraReviewPublication\(\)/);
+  assert.match(flow, /watchUltraReviewPublications\(/);
+  assert.match(flow, /mcpServers: publication/);
 });

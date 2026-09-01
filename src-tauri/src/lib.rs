@@ -475,6 +475,122 @@ fn app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
     Ok(base.to_string_lossy().to_string())
 }
 
+const ULTRAREVIEW_VALIDATOR: &str = include_str!("../../scripts/validate-ultrareview.mjs");
+const ULTRAREVIEW_PUBLISHER: &str = include_str!("../../scripts/ultrareview-publisher.mjs");
+const ULTRAREVIEW_PUBLISHER_CONTRACT: &str =
+    include_str!("../../scripts/ultrareview-publisher-v2.json");
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UltraReviewValidationPaths {
+    candidate_path: String,
+    candidate_rel: String,
+    context_path: String,
+    validator_path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UltraReviewPublicationPaths {
+    publisher_path: String,
+    publisher_contract_path: String,
+    inbox_rel: String,
+    inbox_path: String,
+    acknowledgment_directory_path: String,
+}
+
+fn valid_ultrareview_runtime_id(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+}
+
+#[tauri::command]
+fn prepare_ultrareview_validation(
+    app: tauri::AppHandle,
+    validation_id: String,
+    context: String,
+) -> Result<UltraReviewValidationPaths, String> {
+    if !valid_ultrareview_runtime_id(&validation_id) {
+        return Err("invalid UltraReview validation id".into());
+    }
+
+    let candidate_rel = format!("ultrareview-candidates/{validation_id}.json");
+    let context_rel = format!("ultrareview-candidates/{validation_id}.context.json");
+    let validator_rel = "runtime/validate-ultrareview.mjs";
+    let candidate_path = data_path(&app, &candidate_rel)?;
+    let context_path = data_path(&app, &context_rel)?;
+    let validator_path = data_path(&app, validator_rel)?;
+
+    for path in [&candidate_path, &context_path, &validator_path] {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+    }
+    std::fs::write(&candidate_path, "").map_err(|error| error.to_string())?;
+    std::fs::write(&context_path, context).map_err(|error| error.to_string())?;
+    std::fs::write(&validator_path, ULTRAREVIEW_VALIDATOR).map_err(|error| error.to_string())?;
+
+    Ok(UltraReviewValidationPaths {
+        candidate_path: candidate_path.to_string_lossy().to_string(),
+        candidate_rel,
+        context_path: context_path.to_string_lossy().to_string(),
+        validator_path: validator_path.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+fn prepare_ultrareview_publication(
+    app: tauri::AppHandle,
+    publication_id: String,
+) -> Result<UltraReviewPublicationPaths, String> {
+    if !valid_ultrareview_runtime_id(&publication_id) {
+        return Err("invalid UltraReview publication id".into());
+    }
+
+    let root_rel = format!("ultrareview-publications/{publication_id}");
+    let inbox_rel = format!("{root_rel}/inbox.jsonl");
+    let inbox_path = data_path(&app, &inbox_rel)?;
+    let acknowledgment_directory_path = data_path(&app, &format!("{root_rel}/acks"))?;
+    let publisher_path = data_path(&app, "runtime/ultrareview-publisher.mjs")?;
+    let publisher_contract_path =
+        data_path(&app, "runtime/ultrareview-publisher-v2.json")?;
+
+    for path in [
+        &inbox_path,
+        &acknowledgment_directory_path,
+        &publisher_path,
+        &publisher_contract_path,
+    ] {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+    }
+    std::fs::create_dir_all(&acknowledgment_directory_path)
+        .map_err(|error| error.to_string())?;
+    std::fs::write(&inbox_path, "").map_err(|error| error.to_string())?;
+    std::fs::write(&publisher_path, ULTRAREVIEW_PUBLISHER)
+        .map_err(|error| error.to_string())?;
+    std::fs::write(
+        &publisher_contract_path,
+        ULTRAREVIEW_PUBLISHER_CONTRACT,
+    )
+    .map_err(|error| error.to_string())?;
+
+    Ok(UltraReviewPublicationPaths {
+        publisher_path: publisher_path.to_string_lossy().to_string(),
+        publisher_contract_path: publisher_contract_path
+            .to_string_lossy()
+            .to_string(),
+        inbox_rel,
+        inbox_path: inbox_path.to_string_lossy().to_string(),
+        acknowledgment_directory_path: acknowledgment_directory_path
+            .to_string_lossy()
+            .to_string(),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Skills (~/.cursor)
 // ---------------------------------------------------------------------------
@@ -874,6 +990,8 @@ pub fn run() {
             load_blob,
             save_blob,
             app_data_dir,
+            prepare_ultrareview_validation,
+            prepare_ultrareview_publication,
             list_cursor_skills,
             open_repo_window,
             focus_pr,

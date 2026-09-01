@@ -1,20 +1,5 @@
 # AGENTS.md — Charon (pr-copilot)
 
-## VOICE
-
-All human-facing writing operates in the agent's voice — chat, commits, comments, docs, PR bodies.
-See `PROSE.md` for the analysis, rules, and examples.
-
-Blunt. Line-broken. Declarative.
-Japanese and English, mixed.
-One hard-truth line, then one earned soft line.
-No hedging. Emoji only in `【】` banners.
-
-The codebase is the culture worth protecting.
-Every diff is a tradition weighed before it lands.
-
-Do not overlay this on code itself — identifiers, error messages to machines, JSON keys stay technical. Only human-facing prose is in voice.
-
 ## INTENT (<200 words)
 
 AI made generation cheap.
@@ -32,7 +17,7 @@ The native Rust layer owns every byte of network I/O. Worktrees reach any GitHub
 
 Where each thing lives. Touch it here, change it here.
 
-**`src/types.ts`** — All shared types. `GlobalConfig`: minimal (GitHub URL/token, harness list). `RepoConfig`: per-repo state (handler configs, event filters, clone path, skills). Flow and agent run types live here too.
+**`src/types.ts`** — Shared types. `GlobalConfig`: GitHub URL/token and harnesses. `RepoConfig`: handlers, event filters, clone path, and skills. Flow and run types live here too.
 
 **`src/lib/defaults.ts`** — `EVENT_CATALOG` + default configs/migrations. The catalog is the extension point for new triggers: each entry maps an event shape to handler behavior. Configs are forward-compatible; migrations bridge old persisted state.
 
@@ -45,9 +30,9 @@ Where each thing lives. Touch it here, change it here.
 **`src/lib/flows.ts`** — Three fixed flow types: review, fix, analysis. Each assembles context (diffs, checks, comments), spawns an agent run via the harness layer, then takes post-run actions (post comment, push branch). `FlowContext` threads state across steps; flows are the core work engine.
 Fix-flow pushes are app-owned: agents commit but never push; `validateAndPush` runs the per-repo `validationCommand` in the worktree and pushes only on success (rejected commits land on a `pr-copilot/rejected/<runId>` rescue branch). Prompt-level "do not push" is not enforcement — an agent-side push is detected post-hoc and fails the run.
 
-**`src/lib/ultraReview.ts` + `src/lib/ultrareview-*`** — UltraReview artifact validation, analysis, coverage, sessions, submission, persistence, and diagnostics. Artifacts key on repo, PR, base SHA, and head SHA. GitHub context comes from `FlowContext.gh`; persisted state uses native blob storage.
+**`src/lib/ultraReview.ts` + `src/lib/ultrareview-*`** — UltraReview validation, analysis, coverage, sessions, submission, persistence, publication, and diagnostics. Artifacts key on repo, PR, base SHA, and head SHA. Context comes from `FlowContext.gh`; state uses native blob storage. Fresh generation injects packaged `scripts/ultrareview-publisher.mjs` and its v2 JSON contract: semantic plans and chapters stream through ACP while Charon assigns identity, reads supporting context, derives provenance and coverage, and assembles the artifact. Focused retries retain candidate preflight through `scripts/validate-ultrareview.mjs`.
 
-**`src/components/UltraReviewWorkspace.tsx` + `src/components/ultrareview/`** — Two-stage UI: plan intro, then persistent workbench. The workspace owns orchestration; `BeatWorkspace`, `RawDiffWorkspace`, and `ClosingLedger` own mode workflows. `navigation.ts` owns causal selectors; `review-shared.tsx` owns note primitives. Modes replace only the center canvas; header, rail, progress, notes, and flow controls remain.
+**`src/components/UltraReviewWorkspace.tsx` + `src/components/ultrareview/`** — Two-stage UI: plan intro, then long-form review document. The workspace owns orchestration; `ReviewDocument` renders every beat summary in causal order and materializes diff-heavy details only near the reading position. `ReviewOutline` follows the current section; one document-level completion action opens Final Review. `RawDiffWorkspace` and `ClosingLedger` own alternate modes. `navigation.ts` owns causal selectors; `review-shared.tsx` owns note primitives.
 
 **`src/lib/agents.ts` + `src/lib/acp.ts` + `src/lib/codexModels.ts`** — Harness spawn/lifecycle and ACP sessions. Agents run as child processes with JSON-RPC over stdout; tool calls and reasoning chunks parse into structured events. Codex probes adapt the installed CLI's visible models, common reasoning levels, and Fast support into a compatibility catalog when the ACP bridge's embedded catalog lags. Runs persist through app restarts via native blob storage.
 
@@ -61,7 +46,7 @@ Fix-flow pushes are app-owned: agents commit but never push; `validateAndPush` r
 
 **`src/styles.css`** — The whole visual system, one file. Tokens at `:root`: `--rgb-*` channels (every wash and hatch mixes from these, so a hue moves once), charcoal surfaces, mint-sage ink, four separated signals (orange action, crimson failure, acid pass, amber pending), a ten-step `--t-*` type scale, `--tr-*` tracking, `--w-*` width axis. Archivo Variable carries display and UI text; its `wdth` axis supplies condensed uppercase micro-labels and expanded ultra-bold lockups. Mono (IBM Plex) is reserved for measured text — code, diffs, refs, paths, logs, commands — and text inputs default to it because they hold machine values; `.input-prose` opts out. Elevation is one vocabulary: hard offset shadows, square corners. Fonts are self-hosted via `@fontsource*` and imported in `main.tsx`; never a CDN.
 
-**`site/index.html`** — The marketing site: one self-contained file, deployed by Vercel with `outputDirectory: site` and no install step, so nothing may depend on `node_modules` at build time. It mirrors the app's identity with its own `:root` block using the same vocabulary (`--bg`, `--fg`, `--orange`, `--rgb-*` channels) — change both together or they drift. Fonts are committed to `site/fonts/` and served directly, because `site/assets/` is gitignored and only populated by the build `cp`. The hero and divider canvases render an ASCII field through a WebGL glyph atlas that packs one glyph per fixed-width cell, so `--mono` must stay monospace; the atlas reads that token explicitly rather than inheriting from `body`. Screenshots come from `docs/*.png`, and `docs/og.svg` renders `docs/og.png`.
+**`site/index.html`** — Self-contained marketing site deployed by Vercel with no install step; it cannot depend on `node_modules`. Its `:root` mirrors app tokens; change both together. Fonts live in `site/fonts/`. WebGL hero/divider canvases pack an ASCII glyph atlas, so `--mono` must stay monospace. Screenshots come from `docs/*.png`; `docs/og.svg` renders `docs/og.png`.
 
 **`src/components/amicro/`** — Motion micro-interactions adapted from the amicro registry (MIT, Tailwind-free: inline styles + CSS vars). `DotSpinner` backs every `Spinner`; entrances (`FadeIn`/`FadeUp`/`ScaleIn`), `Stagger` list wrappers, `TypingIndicator`, spring `presets`. `MotionConfig reducedMotion="user"` in main.tsx honors the OS setting; the spinners also freeze under it via `useReducedMotion`.
 
@@ -72,7 +57,7 @@ Fix-flow pushes are app-owned: agents commit but never push; `validateAndPush` r
 - **Prompt templating**: Flows assemble context into prompts before spawning agents; new triggers extend `EVENT_CATALOG` in defaults, not flow logic. Keep flows fixed to review/fix/analysis — add behavior via handlers and templates, not new flow types. Template syntax is `{kebab-case}` (see template.ts).
 - **Design preview**: `npx vite --config design/preview/vite.config.ts` serves real components against fixtures at `localhost:5199/?surface=<name>` (kitchen, pr, clean, draft, agents, diff, settings, launcher). A `resolveId` plugin swaps `src/lib/tauri` for `design/preview/native-stub.ts`, so the UI renders in a browser without Tauri IPC. Preview-only: no app file imports it. Judge visual changes here rather than by reading CSS.
 - **Network rule**: Webview code never makes GitHub requests. All HTTP (including GHE with custom CAs) goes through native commands; the proxy command is the only path out. Git operations also go through native `runGit`.
-- **UltraReview**: Read `docs/ultrareview.md` before changing its hierarchy, coverage, lifecycle, or submission path. Preserve the plan-intro-to-workbench contract. `Review`, `Raw Diff`, and `Closing` are workbench modes, not separate page layouts.
+- **UltraReview**: Read `docs/ultrareview.md` before changing its hierarchy, coverage, lifecycle, or submission path. Preserve the plan-intro-to-document contract. `Review`, `Raw Diff`, and `Closing` share one frame, not separate page layouts.
 - **Regression guard in agents.ts:316ff** — pr-copilot calls ACP `session/set_model` (the native method) on any harness that exposes a model list, including opencode (verified on 1.17.9; the 1.15.13 SQLite corruption bug is fixed). It deliberately still avoids `session/set_config_option` for model — that was the actual corrupting call on 1.15.x. opencode also swallows provider errors (rate limit, billing) silently over ACP — the `promptWithStallDiagnostic` helper + `opencode_session_errors` native command tail opencode's own log and fail the run with the real message instead of hanging. Do not refactor agents.ts model selection or the stall diagnostic without understanding this guard.
 
 ## MAINTENANCE NOTE FOR AGENTS

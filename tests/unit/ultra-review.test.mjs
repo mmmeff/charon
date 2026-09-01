@@ -159,11 +159,7 @@ test("analysis JSON becomes an artifact under the trusted pull request identity"
    thesis: "Persist review progress without trusting stale evidence.",
    teammate: {
     mode: "teammate",
-    beatStates: {
-     "beat:identity": "pending",
-    },
     acknowledgedMechanicalChangeIds: [],
-    creditedEvidenceIds: [],
     concernDispositions: {},
     notes: [],
     answers: [],
@@ -178,6 +174,56 @@ test("analysis JSON becomes an artifact under the trusted pull request identity"
     },
    },
  },
+ );
+});
+
+test("trusted evidence identity survives model transcription errors", () => {
+ const analysis = analysisWithChangedEvidence();
+ const evidence = analysis.evidence[0];
+ const trustedEvidence = [
+  {
+   id: evidence.id,
+   kind: evidence.kind,
+   change: evidence.change,
+   location: { ...evidence.location },
+   fingerprint: evidence.fingerprint,
+  },
+ ];
+ analysis.evidence[0].fingerprint += "a";
+
+ const artifact = parseUltraReviewAnalysisJson(
+  JSON.stringify(analysis),
+  IDENTITY,
+  trustedEvidence,
+ );
+
+ assert.deepEqual(
+  artifact.evidence[0],
+  {
+   ...analysis.evidence[0],
+   fingerprint: trustedEvidence[0].fingerprint,
+   supportingReason: undefined,
+  },
+ );
+});
+
+test("untrusted evidence still requires self-consistent identity", () => {
+ const analysis = analysisWithChangedEvidence();
+ analysis.evidence[0].fingerprint += "a";
+ const expectedId = stableUltraReviewEvidenceId(
+  analysis.evidence[0],
+ );
+
+ assert.throws(
+  () => parseUltraReviewAnalysisJson(
+   JSON.stringify(analysis),
+   IDENTITY,
+  ),
+  {
+   name: "UltraReviewValidationError",
+   message:
+    `analysis.evidence[0].id must equal ${expectedId}`,
+  },
  );
 });
 
@@ -216,22 +262,25 @@ test("persisted artifacts hydrate without losing session state", () => {
   JSON.stringify(analysisWithChangedEvidence()),
   IDENTITY,
  );
- artifact.sessions.teammate.beatStates["beat:identity"] =
-  "reviewed";
+ artifact.sessions.teammate.reviewCompletedAt = 1;
  artifact.sessions.teammate.resume.scrollTop = 480;
  artifact.sessions.teammate.resume.expandedEvidenceIds = [
   "evidence:7fc8b372869214a5",
  ];
  artifact.sessions.teammate.resume.diffViewStates = {
-  review: {
-   collapsed: { "src/lib/worktree.ts": true },
-   expandedContext: {
-    "src/lib/worktree.ts:0": { head: 10, tail: 20 },
+  beats: {
+   "beat:identity": {
+    collapsed: { "src/lib/worktree.ts": true },
+    expandedContext: {
+     "src/lib/worktree.ts:0": { head: 10, tail: 20 },
+    },
+    viewed: { "src/lib/worktree.ts": "2147261087" },
    },
   },
   raw: {
    collapsed: {},
    expandedContext: {},
+   viewed: {},
   },
  };
 
@@ -273,16 +322,13 @@ test("running artifact skeletons hydrate before narrative provenance exists", ()
  );
 });
 
-test("delta removal acknowledgements survive artifact hydration", () => {
+test("removed delta evidence survives artifact hydration", () => {
  const artifact = parseUltraReviewAnalysisJson(
   JSON.stringify(analysisWithChangedEvidence()),
   IDENTITY,
  );
  artifact.galaxy.systems[0].chapters[0].beats[0]
   .removedEvidenceIds = ["evidence:prior-head"];
- artifact.sessions.teammate.creditedEvidenceIds = [
-  "evidence:prior-head",
- ];
 
  const hydrated = parseUltraReviewArtifact(
   JSON.parse(JSON.stringify(artifact)),
@@ -290,10 +336,6 @@ test("delta removal acknowledgements survive artifact hydration", () => {
  assert.deepEqual(
   hydrated.galaxy.systems[0].chapters[0].beats[0]
    .removedEvidenceIds,
-  ["evidence:prior-head"],
- );
- assert.deepEqual(
-  hydrated.sessions.teammate.creditedEvidenceIds,
   ["evidence:prior-head"],
  );
 });
@@ -469,19 +511,17 @@ test("supporting evidence is reported without blocking exact changed coverage", 
  assert.equal(audit.complete, true);
 });
 
-test("progress treats Reviewed as inspected evidence rather than a verdict", () => {
+test("document completion covers its assigned evidence", () => {
  const artifact = parseUltraReviewAnalysisJson(
   JSON.stringify(analysisWithChangedEvidence()),
   IDENTITY,
  );
- artifact.sessions.teammate.beatStates["beat:identity"] =
-  "reviewed";
+ artifact.sessions.teammate.reviewCompletedAt = 1;
 
  assert.deepEqual(
   calculateUltraReviewProgress(artifact, "teammate"),
   {
-   reviewedBeats: 1,
-   totalBeats: 1,
+   documentReviewed: true,
    acknowledgedMechanicalChanges: 0,
    totalMechanicalChanges: 0,
    coveredChangedEvidence: 1,
@@ -681,8 +721,7 @@ test("mechanical acknowledgment covers deletion, binary, rename, and whitespace 
   JSON.stringify(analysis),
   IDENTITY,
  );
- artifact.sessions.teammate.beatStates["beat:identity"] =
-  "reviewed";
+ artifact.sessions.teammate.reviewCompletedAt = 1;
  artifact.sessions.teammate
   .acknowledgedMechanicalChangeIds.push(
    "mechanical:generated",
@@ -691,8 +730,7 @@ test("mechanical acknowledgment covers deletion, binary, rename, and whitespace 
  assert.deepEqual(
   calculateUltraReviewProgress(artifact, "teammate"),
   {
-   reviewedBeats: 1,
-   totalBeats: 1,
+   documentReviewed: true,
    acknowledgedMechanicalChanges: 1,
    totalMechanicalChanges: 1,
    coveredChangedEvidence: 4,
@@ -734,14 +772,12 @@ test("partial generation stays usable while failed regions block completion", ()
   JSON.stringify(analysis),
   IDENTITY,
  );
- artifact.sessions.teammate.beatStates["beat:identity"] =
-  "reviewed";
+ artifact.sessions.teammate.reviewCompletedAt = 1;
 
  assert.deepEqual(
   calculateUltraReviewProgress(artifact, "teammate"),
   {
-   reviewedBeats: 1,
-   totalBeats: 1,
+   documentReviewed: true,
    acknowledgedMechanicalChanges: 0,
    totalMechanicalChanges: 0,
    coveredChangedEvidence: 1,
@@ -763,7 +799,7 @@ test("delta analysis names changed and added evidence before invalidating affect
   body: "Verify the persistence anchor.",
   anchor: {
    kind: "line",
-   evidenceId: "evidence:7fc8b372869214a5",
+   evidenceIds: ["evidence:7fc8b372869214a5"],
    path: "src/lib/store.ts",
    side: "RIGHT",
    startLine: 210,
@@ -838,13 +874,12 @@ test("delta analysis names changed and added evidence before invalidating affect
  );
 });
 
-test("continuation preserves unchanged review work without rewriting its snapshot", () => {
+test("continuation preserves notes and snapshots but reopens document review", () => {
  const previous = parseUltraReviewAnalysisJson(
   JSON.stringify(analysisWithChangedEvidence()),
   IDENTITY,
  );
- previous.sessions.teammate.beatStates["beat:identity"] =
-  "reviewed";
+ previous.sessions.teammate.reviewCompletedAt = 1;
  previous.sessions.teammate.resume = {
   systemId: "system:persistence",
   chapterId: "chapter:artifact",
@@ -859,7 +894,7 @@ test("continuation preserves unchanged review work without rewriting its snapsho
   body: "The anchor remains relevant.",
   anchor: {
    kind: "line",
-   evidenceId: "evidence:7fc8b372869214a5",
+   evidenceIds: ["evidence:7fc8b372869214a5"],
    path: "src/lib/store.ts",
    side: "RIGHT",
    startLine: 210,
@@ -900,9 +935,8 @@ test("continuation preserves unchanged review work without rewriting its snapsho
   {
    unchangedEvidenceIds:
     continuation.delta.unchangedEvidenceIds,
-   beatState:
-    continuation.artifact.sessions.teammate
-     .beatStates["beat:identity"],
+   reviewCompletedAt:
+    continuation.artifact.sessions.teammate.reviewCompletedAt,
    resume:
     continuation.artifact.sessions.teammate.resume,
    note:
@@ -914,7 +948,7 @@ test("continuation preserves unchanged review work without rewriting its snapsho
    unchangedEvidenceIds: [
     "evidence:7fc8b372869214a5",
    ],
-   beatState: "reviewed",
+   reviewCompletedAt: undefined,
    resume: {
     systemId: "system:persistence",
     chapterId: "chapter:artifact",
@@ -929,7 +963,7 @@ test("continuation preserves unchanged review work without rewriting its snapsho
     body: "The anchor remains relevant.",
     anchor: {
      kind: "line",
-     evidenceId: "evidence:7fc8b372869214a5",
+     evidenceIds: ["evidence:7fc8b372869214a5"],
      path: "src/lib/store.ts",
      side: "RIGHT",
      startLine: 210,
@@ -1066,14 +1100,13 @@ test("continuation keeps deleted evidence notes visible and marks them stale", (
   JSON.stringify(analysisWithChangedEvidence()),
   IDENTITY,
  );
- previous.sessions.teammate.beatStates["beat:identity"] =
-  "reviewed";
+ previous.sessions.teammate.reviewCompletedAt = 1;
  previous.sessions.teammate.notes.push({
   id: "note:deleted",
   body: "This range disappeared.",
   anchor: {
    kind: "line",
-   evidenceId: "evidence:7fc8b372869214a5",
+   evidenceIds: ["evidence:7fc8b372869214a5"],
    path: "src/lib/store.ts",
    side: "RIGHT",
    startLine: 210,
@@ -1099,9 +1132,8 @@ test("continuation keeps deleted evidence notes visible and marks them stale", (
   {
    removedEvidenceIds:
     continuation.delta.removedEvidenceIds,
-   beatState:
-    continuation.artifact.sessions.teammate
-     .beatStates["beat:identity"],
+   reviewCompletedAt:
+    continuation.artifact.sessions.teammate.reviewCompletedAt,
    note:
     continuation.artifact.sessions.teammate.notes[0],
   },
@@ -1109,13 +1141,13 @@ test("continuation keeps deleted evidence notes visible and marks them stale", (
    removedEvidenceIds: [
     "evidence:7fc8b372869214a5",
    ],
-   beatState: "stale",
+   reviewCompletedAt: undefined,
    note: {
     id: "note:deleted",
     body: "This range disappeared.",
     anchor: {
      kind: "line",
-     evidenceId: "evidence:7fc8b372869214a5",
+     evidenceIds: ["evidence:7fc8b372869214a5"],
      path: "src/lib/store.ts",
      side: "RIGHT",
      startLine: 210,
@@ -1125,43 +1157,6 @@ test("continuation keeps deleted evidence notes visible and marks them stale", (
     createdAt: 40,
     stale: true,
    },
-  },
- );
-});
-
-test("base changes clear raw-diff credit even when an evidence id survives", () => {
- const previous = parseUltraReviewAnalysisJson(
-  JSON.stringify(analysisWithChangedEvidence()),
-  IDENTITY,
- );
- previous.sessions.teammate.creditedEvidenceIds = [
-  "evidence:7fc8b372869214a5",
- ];
- const next = parseUltraReviewAnalysisJson(
-  JSON.stringify(analysisWithChangedEvidence()),
-  {
-   ...IDENTITY,
-   baseSha: "base-next",
-   headSha: "head-next",
-  },
- );
- const continuation = continueUltraReviewArtifact(
-  previous,
-  next,
- );
-
- assert.deepEqual(
-  {
-   beatState:
-    continuation.artifact.sessions.teammate
-     .beatStates["beat:identity"],
-   creditedEvidenceIds:
-    continuation.artifact.sessions.teammate
-     .creditedEvidenceIds,
-  },
-  {
-   beatState: "stale",
-   creditedEvidenceIds: [],
   },
  );
 });
@@ -1299,14 +1294,10 @@ test("galaxy progress counts shared evidence only at its primary beat", () => {
   JSON.stringify(analysis),
   IDENTITY,
  );
- artifact.sessions.teammate.beatStates["beat:consumer"] =
-  "reviewed";
-
  assert.deepEqual(
   calculateUltraReviewProgress(artifact, "teammate"),
   {
-   reviewedBeats: 1,
-   totalBeats: 2,
+   documentReviewed: false,
    acknowledgedMechanicalChanges: 0,
    totalMechanicalChanges: 0,
    coveredChangedEvidence: 0,
@@ -1400,19 +1391,18 @@ test("narrative theses require source-claim provenance", () => {
  );
 });
 
-test("line movement reanchors unique unchanged evidence without losing completion", () => {
+test("line movement reanchors evidence and reopens document review", () => {
  const previous = parseUltraReviewAnalysisJson(
   JSON.stringify(analysisWithChangedEvidence()),
   IDENTITY,
  );
- previous.sessions.teammate.beatStates["beat:identity"] =
-  "reviewed";
+ previous.sessions.teammate.reviewCompletedAt = 1;
  previous.sessions.teammate.notes.push({
   id: "note:moved",
   body: "The same line moved down.",
   anchor: {
    kind: "line",
-   evidenceId: "evidence:7fc8b372869214a5",
+   evidenceIds: ["evidence:7fc8b372869214a5"],
    path: "src/lib/store.ts",
    side: "RIGHT",
    startLine: 210,
@@ -1449,9 +1439,8 @@ test("line movement reanchors unique unchanged evidence without losing completio
     continuation.delta.reanchoredEvidence,
    invalidatedBeatIds:
     continuation.delta.invalidatedBeatIds,
-   beatState:
-    continuation.artifact.sessions.teammate
-     .beatStates["beat:identity"],
+   reviewCompletedAt:
+    continuation.artifact.sessions.teammate.reviewCompletedAt,
    anchor:
     continuation.artifact.sessions.teammate
      .notes[0].anchor,
@@ -1464,10 +1453,10 @@ test("line movement reanchors unique unchanged evidence without losing completio
     },
    ],
    invalidatedBeatIds: [],
-   beatState: "reviewed",
+   reviewCompletedAt: undefined,
    anchor: {
     kind: "line",
-    evidenceId: "evidence:cb8d1d6fe6470c9d",
+    evidenceIds: ["evidence:cb8d1d6fe6470c9d"],
     path: "src/lib/store.ts",
     side: "RIGHT",
     startLine: 214,
@@ -1493,7 +1482,7 @@ test("line movement preserves a note's selected subrange", () => {
   body: "Only these three lines need scrutiny.",
   anchor: {
    kind: "line",
-   evidenceId: previousEvidenceId,
+   evidenceIds: [previousEvidenceId],
    path: "src/lib/store.ts",
    side: "RIGHT",
    startLine: 211,
@@ -1526,7 +1515,7 @@ test("line movement preserves a note's selected subrange", () => {
   body: "Only these three lines need scrutiny.",
   anchor: {
    kind: "line",
-   evidenceId: movedEvidenceId,
+   evidenceIds: [movedEvidenceId],
    path: "src/lib/store.ts",
    side: "RIGHT",
    startLine: 221,
@@ -1553,7 +1542,7 @@ test("line movement marks a note stale when its subrange cannot translate exactl
   body: "Do not widen this note.",
   anchor: {
    kind: "line",
-   evidenceId: previousEvidenceId,
+   evidenceIds: [previousEvidenceId],
    path: "src/lib/store.ts",
    side: "RIGHT",
    startLine: 211,
@@ -1587,7 +1576,7 @@ test("line movement marks a note stale when its subrange cannot translate exactl
  });
  assert.notDeepEqual(note.anchor, {
   kind: "line",
-  evidenceId: movedEvidenceId,
+  evidenceIds: [movedEvidenceId],
   path: "src/lib/store.ts",
   side: "RIGHT",
   startLine: 220,

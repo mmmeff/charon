@@ -2,7 +2,6 @@ import type {
   UltraReviewArtifact,
   UltraReviewBeat,
   UltraReviewChapter,
-  UltraReviewSession,
   UltraReviewSystem,
 } from "../../types";
 
@@ -25,17 +24,6 @@ export function allBeats(
       [...chapter.beats]
         .sort((left, right) => left.order - right.order)
     );
-}
-
-export function firstBeatForChapter(
-  chapter: UltraReviewChapter,
-  session: UltraReviewSession,
-): UltraReviewBeat | null {
-  const beats = [...chapter.beats]
-    .sort((left, right) => left.order - right.order);
-  return beats.find(
-    (beat) => session.beatStates[beat.id] !== "reviewed",
-  ) ?? beats[0] ?? null;
 }
 
 export function findChapter(

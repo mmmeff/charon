@@ -1,4 +1,13 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { hideWhitespaceChanges, snippetFor } from "../lib/diff";
 import type { SplitRow } from "../lib/diff";
 import { highlightFileLines, langForPath } from "../lib/highlight";
@@ -46,6 +55,66 @@ type SourceSide = "LEFT" | "RIGHT";
 type ExpandedEdge = "head" | "tail" | "both";
 
 const CONTEXT_BATCH_LINES = 10;
+const useBrowserLayoutEffect = typeof window === "undefined"
+  ? useEffect
+  : useLayoutEffect;
+
+interface SavedScrollAnchor {
+  element: HTMLElement;
+  offset: number;
+  scrollContainer: HTMLElement | null;
+}
+
+function scrollContainerFor(
+  element: HTMLElement,
+): HTMLElement | null {
+  let parent = element.parentElement;
+  while (parent) {
+    const overflow = window.getComputedStyle(parent).overflowY;
+    if (
+      ["auto", "overlay", "scroll"].includes(overflow)
+      && parent.scrollHeight > parent.clientHeight
+    ) {
+      return parent;
+    }
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
+function scrollAnchorOffset(
+  element: HTMLElement,
+  scrollContainer: HTMLElement | null,
+): number {
+  return element.getBoundingClientRect().top
+    - (scrollContainer?.getBoundingClientRect().top ?? 0);
+}
+
+function rememberScrollAnchor(
+  element: HTMLElement,
+): SavedScrollAnchor {
+  const scrollContainer = scrollContainerFor(element);
+  const anchor = {
+    element,
+    offset: scrollAnchorOffset(element, scrollContainer),
+    scrollContainer,
+  };
+  return anchor;
+}
+
+function restoreScrollAnchor(anchor: SavedScrollAnchor): void {
+  if (!anchor.element.isConnected) return;
+  const delta = scrollAnchorOffset(
+    anchor.element,
+    anchor.scrollContainer,
+  ) - anchor.offset;
+  if (Math.abs(delta) < 1) return;
+  if (anchor.scrollContainer?.isConnected) {
+    anchor.scrollContainer.scrollTop += delta;
+    return;
+  }
+  window.scrollBy(0, delta);
+}
 
 export interface RemoteViewedState {
   map: Record<string, string>;
@@ -117,8 +186,11 @@ export function DiffViewer({
   selectable = false,
   anchors = [],
   titleBar,
+  reviewUnitStart,
   viewedKey,
   remoteViewed,
+  trackViewed = false,
+  disablePatternAutoCollapse = false,
   loadFileText,
   renderCommentForm,
   initialViewState,
@@ -128,10 +200,16 @@ export function DiffViewer({
   selectable?: boolean;
   anchors?: DiffAnchor[];
   titleBar?: ReactNode;
+  /** First ordinal review unit represented by this projected diff. */
+  reviewUnitStart?: number;
   /** local "viewed" checkboxes; state persists under this key (own drafts) */
   viewedKey?: string;
   /** GitHub-backed viewed state (teammate reviews) — syncs with github.com */
   remoteViewed?: RemoteViewedState;
+  /** Local viewed state controlled through the UltraReview session. */
+  trackViewed?: boolean;
+  /** Ignore global filename collapse patterns on projected review hunks. */
+  disablePatternAutoCollapse?: boolean;
   loadFileText?: (path: string, side: SourceSide) => Promise<string | null>;
   renderCommentForm?: (sel: LineSelection, close: () => void) => ReactNode;
   /** Restores per-beat evidence expansion from the persisted UltraReview session. */
@@ -152,15 +230,12 @@ export function DiffViewer({
 
   const { config: global } = useGlobalConfig();
 
-  useEffect(() => {
-    onViewStateChange?.({ collapsed, expandedContext });
-  }, [collapsed, expandedContext, onViewStateChange]);
-
   // Glob-style filename patterns compiled once per mount/config change into a
   // matcher. `*` matches any characters in the name, `?` one char; rest escaped.
   // Matching runs against the file's basename only — "yarn.lock" collapses it at
   // any depth, "*.test.ts" catches test diffs anywhere.
   const autoCollapse = useMemo(() => {
+    if (disablePatternAutoCollapse) return null;
     const pats = global?.diffAutoCollapsePatterns;
     if (!pats?.length) return null;
     const re = pats.map(
@@ -176,12 +251,13 @@ export function DiffViewer({
         )
     );
     return (path: string) => re.some((r) => r.test(path.split("/").pop() ?? path));
-  }, [global?.diffAutoCollapsePatterns]);
+  }, [disablePatternAutoCollapse, global?.diffAutoCollapsePatterns]);
 
   // ---- per-file "viewed" state (path → content hash, persisted) ----
   // keyed by a hash of the file's diff so a file that changes after being
   // marked comes back as unviewed, GitHub-style
   const [viewed, setViewed] = useState<Record<string, string>>(() => {
+    if (initialViewState?.viewed) return initialViewState.viewed;
     if (!viewedKey) return {};
     try {
       return JSON.parse(localStorage.getItem(viewedKey) ?? "{}");
@@ -189,6 +265,20 @@ export function DiffViewer({
       return {};
     }
   });
+  const scrollAnchorRef = useRef<SavedScrollAnchor | null>(null);
+  useBrowserLayoutEffect(() => {
+    const anchor = scrollAnchorRef.current;
+    if (!anchor) return;
+    scrollAnchorRef.current = null;
+    restoreScrollAnchor(anchor);
+    const frame = window.requestAnimationFrame(() => {
+      restoreScrollAnchor(anchor);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [collapsed, viewed]);
+  useEffect(() => {
+    onViewStateChange?.({ collapsed, expandedContext, viewed });
+  }, [collapsed, expandedContext, onViewStateChange, viewed]);
   const setFileViewed = (path: string, hash: string | null) => {
     setViewed((v) => {
       const next = { ...v };
@@ -198,22 +288,23 @@ export function DiffViewer({
       return next;
     });
   };
-  const viewedEnabled = !!viewedKey || !!remoteViewed;
+  const viewedEnabled = trackViewed || !!viewedKey || !!remoteViewed;
   const viewedMutable = remoteViewed
     ? remoteViewed.toggle !== undefined
-    : !!viewedKey;
+    : trackViewed || !!viewedKey;
   // remote mode: GitHub owns invalidation (DISMISSED on change); local mode:
   // the content hash plays that role
   const isViewedPath = (path: string) =>
     remoteViewed
       ? remoteViewed.map[path] === "VIEWED"
-      : !!viewedKey && viewed[path] === fileHashes.get(path);
+      : (trackViewed || !!viewedKey)
+        && viewed[path] === fileHashes.get(path);
   const toggleViewed = (path: string, hash: string, next: boolean) => {
     if (remoteViewed) {
       if (!remoteViewed.toggle) return;
       remoteViewed.toggle(path, next);
     } else {
-      if (!viewedKey) return;
+      if (!trackViewed && !viewedKey) return;
       setFileViewed(path, next ? hash : null);
     }
     setCollapsed((c) => ({ ...c, [path]: next }));
@@ -237,6 +328,21 @@ export function DiffViewer({
   );
 
   const keyOf = (f: FileDiff) => f.newPath || f.oldPath;
+  const reviewUnitStartByPath = useMemo(() => {
+    const starts = new Map<string, number>();
+    if (reviewUnitStart === undefined) return starts;
+    let nextUnit = reviewUnitStart;
+    rawFiles.forEach((file) => {
+      const path = file.newPath || file.oldPath;
+      const hunkCount = file.lines.reduce(
+        (count, line) => count + (line.type === "hunk" ? 1 : 0),
+        0,
+      );
+      starts.set(path, nextUnit);
+      nextUnit += Math.max(1, hunkCount);
+    });
+    return starts;
+  }, [rawFiles, reviewUnitStart]);
 
   const previousInput = useRef({ rawFiles, hideWs });
   useEffect(() => {
@@ -287,7 +393,9 @@ export function DiffViewer({
 
   // cheap content hash per file (djb2 over diff lines) for viewed-tracking
   const fileHashes = useMemo(() => {
-    if (!viewedKey) return new Map<string, string>();
+    if (!trackViewed && !viewedKey) {
+      return new Map<string, string>();
+    }
     const map = new Map<string, string>();
     for (const f of files) {
       let h = 5381;
@@ -298,7 +406,7 @@ export function DiffViewer({
       map.set(keyOf(f), String(h >>> 0));
     }
     return map;
-  }, [files, viewedKey]);
+  }, [files, trackViewed, viewedKey]);
 
   // ---- file tree + scroll spy ----
   const [treeOpen, setTreeOpenState] = useState(() => localStorage.getItem("prc-diff-tree") === "on");
@@ -604,6 +712,11 @@ export function DiffViewer({
         <div className="diff-list">
       {files.map((file) => {
         const path = keyOf(file);
+        const hunkCount = file.lines.reduce(
+          (count, line) => count + (line.type === "hunk" ? 1 : 0),
+          0,
+        );
+        const fileReviewUnitStart = reviewUnitStartByPath.get(path);
         const hash = fileHashes.get(path) ?? "";
         const isViewed = viewedEnabled && isViewedPath(path);
         // viewed files collapse by default; an explicit expand overrides
@@ -621,7 +734,12 @@ export function DiffViewer({
               else fileEls.current.delete(path);
             }}
           >
-            <div className="diff-file-header">
+            <div
+              className="diff-file-header"
+              data-ultra-progress-unit={
+                hunkCount === 0 ? fileReviewUnitStart : undefined
+              }
+            >
               <button className="link small" onClick={() => setCollapsed({ ...collapsed, [path]: !isCollapsed })}>
                 {isCollapsed ? "▸" : "▾"}
               </button>
@@ -647,7 +765,14 @@ export function DiffViewer({
                       ? "Mark as read. This collapses the file. Re-expanding keeps it read."
                       : "Viewed state is read only."
                   }
-                  onClick={() => toggleViewed(path, hash, !isViewed)}
+                  onClick={(event) => {
+                    const anchor = event.currentTarget
+                      .closest<HTMLElement>(".diff-file-header")
+                      ?? event.currentTarget;
+                    scrollAnchorRef.current =
+                      rememberScrollAnchor(anchor);
+                    toggleViewed(path, hash, !isViewed);
+                  }}
                 >
                   <span aria-hidden>{isViewed ? "✓" : "○"}</span>
                   viewed
@@ -670,6 +795,7 @@ export function DiffViewer({
                   numCellHandlers={numCellHandlers}
                   isHighlighted={isHighlighted}
                   afterRow={afterRow}
+                  hunkUnitStart={fileReviewUnitStart}
                 />
               ) : (
                 <SplitTable
@@ -684,6 +810,7 @@ export function DiffViewer({
                   numCellHandlers={numCellHandlers}
                   isHighlighted={isHighlighted}
                   afterRow={afterRow}
+                  hunkUnitStart={fileReviewUnitStart}
                 />
               ))}
           </div>
@@ -892,6 +1019,7 @@ interface TableProps {
     entries: { side: "LEFT" | "RIGHT"; num: number | null }[],
     colSpan: number
   ) => ReactNode[];
+  hunkUnitStart?: number;
 }
 
 const UnifiedTable = memo(function UnifiedTable({
@@ -905,6 +1033,7 @@ const UnifiedTable = memo(function UnifiedTable({
   numCellHandlers,
   isHighlighted,
   afterRow,
+  hunkUnitStart,
 }: TableProps) {
   const lang = useMemo(() => langForPath(path), [path]);
   const displayItems = useMemo(
@@ -914,6 +1043,21 @@ const UnifiedTable = memo(function UnifiedTable({
   const displayLines = useMemo(() => displayItems.filter((item): item is DiffLine => !isContextControl(item)), [displayItems]);
   const html = useMemo(() => highlightFileLines(displayLines, lang), [displayLines, lang]);
   const pathSlug = useMemo(() => slug(path), [path]);
+  const reviewUnitByItem = useMemo(() => {
+    let nextUnit = hunkUnitStart;
+    return displayItems.map((item) => {
+      if (
+        nextUnit === undefined
+        || isContextControl(item)
+        || item.type !== "hunk"
+      ) {
+        return undefined;
+      }
+      const unit = nextUnit;
+      nextUnit += 1;
+      return unit;
+    });
+  }, [displayItems, hunkUnitStart]);
   return (
     <div className="diff-scroll">
     <table className="diff-table">
@@ -933,7 +1077,11 @@ const UnifiedTable = memo(function UnifiedTable({
           const line = item;
           if (line.type === "hunk") {
             return (
-              <tr key={i} className="hunk">
+              <tr
+                key={i}
+                className="hunk"
+                data-ultra-progress-unit={reviewUnitByItem[i]}
+              >
                 <td colSpan={3}>{line.text}</td>
               </tr>
             );
@@ -984,6 +1132,7 @@ const SplitTable = memo(function SplitTable({
   numCellHandlers,
   isHighlighted,
   afterRow,
+  hunkUnitStart,
 }: TableProps) {
   const displayItems = useMemo(
     () => buildDisplayItems({ file, path, canLoadContext, expandedContext, sourceLines, loadingGaps }),
@@ -994,6 +1143,17 @@ const SplitTable = memo(function SplitTable({
   const lang = useMemo(() => langForPath(path), [path]);
   const html = useMemo(() => highlightFileLines(displayLines, lang), [displayLines, lang]);
   const pathSlug = useMemo(() => slug(path), [path]);
+  const reviewUnitByRow = useMemo(() => {
+    let nextUnit = hunkUnitStart;
+    return rows.map((row) => {
+      if (nextUnit === undefined || row.kind !== "hunk") {
+        return undefined;
+      }
+      const unit = nextUnit;
+      nextUnit += 1;
+      return unit;
+    });
+  }, [hunkUnitStart, rows]);
   return (
     <div className="diff-scroll">
     <table className="diff-table split">
@@ -1019,7 +1179,11 @@ const SplitTable = memo(function SplitTable({
           }
           if (row.kind === "hunk") {
             return (
-              <tr key={i} className="hunk">
+              <tr
+                key={i}
+                className="hunk"
+                data-ultra-progress-unit={reviewUnitByRow[i]}
+              >
                 <td colSpan={4}>{row.text}</td>
               </tr>
             );

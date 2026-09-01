@@ -1,3 +1,9 @@
+import { modelIdsEncodeReasoning } from "../lib/codexModels";
+import {
+  MODEL_OVERRIDE_FALLBACKS,
+  resolveFlowFastMode,
+  resolveFlowReasoning,
+} from "../lib/defaults";
 import { useGlobalConfig } from "../lib/store";
 
 /**
@@ -22,7 +28,14 @@ export function ModelPicker({
   // doesn't silently misreport the current value
   if (value && !models.includes(value)) models.push(value);
   const labels = global?.modelLabels ?? {};
-  const def = (flowKind ? global?.modelOverrides?.[flowKind] : "") || global?.defaultModel || "auto";
+  const fallbackKind = flowKind
+    ? MODEL_OVERRIDE_FALLBACKS[flowKind]
+    : undefined;
+  const def =
+    (flowKind ? global?.modelOverrides?.[flowKind] : "")
+    || (fallbackKind ? global?.modelOverrides?.[fallbackKind] : "")
+    || global?.defaultModel
+    || "auto";
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} title="Model for this run">
       <option value="">model: {labels[def] ?? def} (default)</option>
@@ -37,17 +50,23 @@ export function ModelPicker({
 
 /**
  * Reasoning-effort selection, shown beside the model picker wherever the
- * active harness exposes a reasoning axis (e.g. codex). A persistent dial:
+ * active harness exposes a separate reasoning axis. A persistent dial:
  * with a flowKind it edits that flow's per-flow override (empty = inherit the
- * global default); without one it edits the global default. Renders nothing
- * for harnesses without the axis (cursor bakes it into the model id; opencode
- * has none).
+ * route default); without one it edits the global default. Renders nothing
+ * when reasoning is already baked into the model id, or the harness has no
+ * reasoning axis.
  */
 export function ReasoningPicker({ flowKind }: { flowKind?: string }) {
   const global = useGlobalConfig((s) => s.config);
   const save = useGlobalConfig((s) => s.save);
   const options = global?.reasoningOptions ?? [];
-  if (!global || options.length === 0) return null;
+  if (
+    !global ||
+    options.length === 0 ||
+    modelIdsEncodeReasoning(global.models)
+  ) {
+    return null;
+  }
   const labels = global.reasoningLabels ?? {};
   const globalDefault = global.reasoningEffort;
   const value = flowKind ? (global.reasoningOverrides?.[flowKind] ?? "") : globalDefault;
@@ -64,8 +83,11 @@ export function ReasoningPicker({ flowKind }: { flowKind?: string }) {
   };
 
   // the "inherit" label names what it falls back to
+  const inheritedReasoning = flowKind
+    ? resolveFlowReasoning(global, flowKind)
+    : globalDefault;
   const defaultLabel = flowKind
-    ? `reasoning: ${globalDefault ? labels[globalDefault] ?? globalDefault : "harness default"}`
+    ? `reasoning: ${inheritedReasoning ? labels[inheritedReasoning] ?? inheritedReasoning : "harness default"}`
     : "reasoning: harness default";
 
   return (
@@ -144,7 +166,9 @@ export function FastPicker({
     void save({ ...global, fastModeOverrides: next });
   };
 
-  const inherited = global.fastMode ? "fast" : "standard";
+  const inherited = resolveFlowFastMode(global, flowKind)
+    ? "fast"
+    : "standard";
   return (
     <select
       value={value}

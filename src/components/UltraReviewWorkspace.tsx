@@ -1,4 +1,5 @@
 import {
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -9,14 +10,13 @@ import {
   calculateUltraReviewProgress,
   ultraReviewArtifactKey,
 } from "../lib/ultraReview";
-import {
-  inspectUltraReviewBeatEvidence,
-} from "../lib/ultrareview-evidence";
 import { startUltraReviewAnalysis } from "../lib/ultrareview-flow";
+import { completeUltraReviewDocument } from "../lib/ultrareview-session";
 import { useUltraReviewStore } from "../lib/ultrareview-store";
 import { useAgentStore } from "../lib/store";
 import { usePrData } from "../lib/events";
 import type {
+  AgentRun,
   CheckInfo,
   CommentInfo,
   FileDiff,
@@ -27,12 +27,11 @@ import type {
 } from "../types";
 import {
   ReviewPlanIntro,
-  ReviewStoryRail,
+  ReviewOutline,
   type StoryBeat,
   type StoryChapter,
   type StorySystem,
 } from "./ultrareview";
-import { BeatWorkspace } from "./ultrareview/BeatWorkspace";
 import { ClosingLedger } from "./ultrareview/ClosingLedger";
 import {
   allBeats,
@@ -40,19 +39,213 @@ import {
   findBeat,
   findChapter,
   findSystemForChapter,
-  firstBeatForChapter,
 } from "./ultrareview/navigation";
 import { RawDiffWorkspace } from "./ultrareview/RawDiffWorkspace";
+import {
+  ReviewDocument,
+  reviewProgressPercent,
+} from "./ultrareview/ReviewDocument";
 import { useFlow } from "./flow";
 
 const NO_CHECKS: CheckInfo[] = [];
 const NO_COMMENTS: CommentInfo[] = [];
+const SCROLL_PERSIST_IDLE_MS = 600;
 type UltraReviewSurface =
   | "generation"
   | "intro"
   | "review"
   | "ledger"
   | "raw";
+
+function latestUltraReviewReasoning(
+  run: AgentRun | null,
+): string | undefined {
+  if (run === null) return undefined;
+  for (let index = run.entries.length - 1; index >= 0; index -= 1) {
+    const entry = run.entries[index];
+    if (entry.type === "thought") return entry.text;
+  }
+  return undefined;
+}
+
+function ReviewScrollProgress({
+  scrollRef,
+}: {
+  scrollRef: RefObject<HTMLDivElement>;
+}) {
+  const [percent, setPercent] = useState(0);
+
+  useEffect(() => {
+    const canvas = scrollRef.current;
+    if (
+      !canvas
+      || typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+    let totalUnits = 0;
+    let furthestUnit = 1;
+    let observer: IntersectionObserver | null = null;
+    let endObserver: IntersectionObserver | null = null;
+    let observedMarkers = new WeakSet<Element>();
+    const pendingMarkers = new Set<HTMLElement>();
+    let progressFrame = 0;
+
+    const readTotal = () => {
+      const documentNode = canvas.querySelector<HTMLElement>(
+        "[data-ultra-progress-total]",
+      );
+      const candidate = Number.parseInt(
+        documentNode?.dataset.ultraProgressTotal ?? "",
+        10,
+      );
+      totalUnits = Number.isFinite(candidate)
+        ? Math.max(0, candidate)
+        : 0;
+    };
+
+    const publish = () => {
+      if (totalUnits === 0) return;
+      const next = reviewProgressPercent(
+        furthestUnit,
+        totalUnits,
+      );
+      setPercent((current) => Math.max(current, next));
+    };
+
+    const observeMarker = (marker: Element) => {
+      if (observedMarkers.has(marker)) return;
+      observedMarkers.add(marker);
+      if (marker.matches("[data-ultra-progress-end]")) {
+        endObserver?.observe(marker);
+      } else {
+        observer?.observe(marker);
+      }
+    };
+
+    const observeWithin = (node: Node) => {
+      if (!(node instanceof Element)) return;
+      if (node.matches("[data-ultra-progress-unit]")) {
+        observeMarker(node);
+      }
+      node.querySelectorAll("[data-ultra-progress-unit]")
+        .forEach(observeMarker);
+    };
+
+    const updateProgress = (
+      entries: IntersectionObserverEntry[],
+    ) => {
+      entries.forEach((entry) => {
+        pendingMarkers.add(entry.target as HTMLElement);
+      });
+      if (progressFrame !== 0) return;
+      progressFrame = window.requestAnimationFrame(() => {
+        progressFrame = 0;
+        const readingLine = canvas.getBoundingClientRect().top
+          + Math.min(160, canvas.clientHeight * 0.24);
+        pendingMarkers.forEach((marker) => {
+          if (!marker.isConnected) return;
+          const unit = Number.parseInt(
+            marker.dataset.ultraProgressUnit ?? "",
+            10,
+          );
+          if (
+            Number.isFinite(unit)
+            && marker.getBoundingClientRect().top <= readingLine
+          ) {
+            furthestUnit = Math.max(furthestUnit, unit);
+          }
+        });
+        pendingMarkers.clear();
+        publish();
+      });
+    };
+
+    const updateEndProgress = (
+      entries: IntersectionObserverEntry[],
+    ) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const marker = entry.target as HTMLElement;
+        const unit = Number.parseInt(
+          marker.dataset.ultraProgressUnit ?? "",
+          10,
+        );
+        if (Number.isFinite(unit)) {
+          furthestUnit = Math.max(furthestUnit, unit);
+        }
+      });
+      publish();
+    };
+
+    const observeProgress = () => {
+      observer?.disconnect();
+      endObserver?.disconnect();
+      observedMarkers = new WeakSet<Element>();
+      const readingOffset = Math.min(
+        160,
+        canvas.clientHeight * 0.24,
+      );
+      const remainingHeight = Math.max(
+        0,
+        canvas.clientHeight - readingOffset - 1,
+      );
+      observer = new IntersectionObserver(updateProgress, {
+        root: canvas,
+        rootMargin: `0px 0px -${remainingHeight}px 0px`,
+      });
+      endObserver = new IntersectionObserver(updateEndProgress, {
+        root: canvas,
+      });
+      readTotal();
+      observeWithin(canvas);
+      publish();
+    };
+
+    observeProgress();
+    const mutationObserver = typeof MutationObserver === "undefined"
+      ? null
+      : new MutationObserver((records) => {
+        readTotal();
+        records.forEach((record) => {
+          record.addedNodes.forEach(observeWithin);
+        });
+        publish();
+      });
+    mutationObserver?.observe(canvas, {
+      childList: true,
+      subtree: true,
+    });
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(observeProgress);
+    resizeObserver?.observe(canvas);
+    return () => {
+      window.cancelAnimationFrame(progressFrame);
+      observer?.disconnect();
+      endObserver?.disconnect();
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
+    };
+  }, [scrollRef]);
+
+  return (
+    <div
+      className="ultra-workbench-progress"
+      role="progressbar"
+      aria-label="Review document scrolled"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent}
+    >
+      <strong>{percent}%</strong>
+      <span>scrolled</span>
+      <span className="ultra-workbench-progress-track" aria-hidden>
+        <span style={{ width: `${percent}%` }} />
+      </span>
+    </div>
+  );
+}
 
 interface UltraReviewWorkspaceProps {
   pr: PrSummary;
@@ -61,11 +254,6 @@ interface UltraReviewWorkspaceProps {
   filesError?: string;
   onRetryFiles?: () => void;
   onLeave: () => void;
-  remoteViewed?: {
-    map: Record<string, string>;
-    toggle?: (path: string, viewed: boolean) => void;
-  };
-  viewedKey?: string;
   /** Deterministic preview entry; product callers use the dogfood entry. */
   initialSurface?: UltraReviewSurface;
 }
@@ -82,21 +270,6 @@ function unresolvedConcerns(
   ).length;
 }
 
-function storyState(
-  states: Array<"pending" | "reviewed" | "stale">,
-  failed = false,
-): "pending" | "reviewed" | "stale" | "failed" {
-  if (failed) return "failed";
-  if (states.some((state) => state === "stale")) return "stale";
-  if (
-    states.length > 0
-    && states.every((state) => state === "reviewed")
-  ) {
-    return "reviewed";
-  }
-  return "pending";
-}
-
 function storySystems(
   artifact: UltraReviewArtifact,
   session: UltraReviewSession,
@@ -107,18 +280,12 @@ function storySystems(
       const chapters: StoryChapter[] = [...system.chapters]
         .sort((left, right) => left.order - right.order)
         .map((chapter) => {
-          const chapterFailed =
-            artifact.generation.failures.some(
-              (failure) => failure.chapterId === chapter.id,
-            );
           const beats: StoryBeat[] = [...chapter.beats]
             .sort((left, right) => left.order - right.order)
             .map((beat) => ({
               id: beat.id,
               title: beat.title,
-              objective: beat.objective,
               risk: beat.risk,
-              state: session.beatStates[beat.id] ?? "pending",
               scope: {
                 changedLines: artifact.evidence.filter(
                   (evidence) =>
@@ -141,13 +308,6 @@ function storySystems(
             after: chapter.after,
             dependencyChapterIds: chapter.dependencyChapterIds,
             risk: chapter.risk,
-            state: storyState(
-              chapter.beats.map(
-                (beat) =>
-                  session.beatStates[beat.id] ?? "pending",
-              ),
-              chapterFailed,
-            ),
             scope: {
               changedLines: beats.reduce(
                 (total, beat) =>
@@ -179,17 +339,6 @@ function storySystems(
         title: system.title,
         thesis: system.thesis,
         risk: system.risk,
-        state: storyState(
-          system.chapters.flatMap((chapter) =>
-            chapter.beats.map(
-              (beat) =>
-                session.beatStates[beat.id] ?? "pending",
-            )
-          ),
-          artifact.generation.failures.some(
-            (failure) => failure.systemId === system.id,
-          ),
-        ),
         scope: system.scope,
         confidence: system.confidence,
         unresolvedFeedback: chapters.reduce(
@@ -232,8 +381,6 @@ export function UltraReviewWorkspace({
   filesError = "",
   onRetryFiles,
   onLeave,
-  remoteViewed,
-  viewedKey,
   initialSurface = "generation",
 }: UltraReviewWorkspaceProps) {
   const { ctx } = useFlow();
@@ -255,12 +402,33 @@ export function UltraReviewWorkspace({
   const artifactsLoaded = useUltraReviewStore(
     (state) => state.loaded,
   );
-  const rejectedArtifactKeys = useUltraReviewStore(
-    (state) => state.rejectedArtifactKeys,
-  );
   const [surface, setSurface] =
     useState<UltraReviewSurface>(initialSurface);
   const [runError, setRunError] = useState("");
+  const [analysisRunId, setAnalysisRunId] =
+    useState<string | null>(null);
+  const analysisRun = useAgentStore((state) => {
+    if (analysisRunId) {
+      return state.runs[analysisRunId] ?? null;
+    }
+    const activeRunId = state.order.find((runId) => {
+      const run = state.runs[runId];
+      return run?.repo === ctx.repo
+        && run.prNumber === pr.number
+        && (
+          run.relation === "build UltraReview"
+          || run.relation === "retry UltraReview analysis"
+        )
+        && (
+          run.status === "starting"
+          || run.status === "running"
+        );
+    });
+    return activeRunId
+      ? state.runs[activeRunId] ?? null
+      : null;
+  });
+  const reasoningActivity = latestUltraReviewReasoning(analysisRun);
   const liveChecks = usePrData(
     (state) => state.checks[pr.number] ?? NO_CHECKS,
   );
@@ -272,10 +440,15 @@ export function UltraReviewWorkspace({
   );
   const [pendingEvidenceTarget, setPendingEvidenceTarget] =
     useState<{
+      beatId: string;
       path: string;
       side: "LEFT" | "RIGHT";
       line: number;
     } | null>(null);
+  const [pendingBeatTargetId, setPendingBeatTargetId] =
+    useState<string | null>(null);
+  const [activeDocumentBeatId, setActiveDocumentBeatId] =
+    useState<string | null>(null);
   const [focusedRetry, setFocusedRetry] = useState<{
     failureId: string;
     runId: string | null;
@@ -292,18 +465,45 @@ export function UltraReviewWorkspace({
     || focusedRetryRun?.status === "running"
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const activeDocumentBeatIdRef = useRef<string | null>(null);
   const scrollSaveTimer = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
   const autoStarted = useRef(false);
   const session = artifact?.sessions[mode] ?? null;
+  // Resume writes replace artifact objects. Keep the document stable unless
+  // data that it renders has changed.
+  const reviewDocumentArtifact = useMemo(
+    () => artifact,
+    [
+      artifact?.concerns,
+      artifact?.coverage,
+      artifact?.evidence,
+      artifact?.galaxy,
+    ],
+  );
+  const reviewDocumentSession = useMemo(
+    () => session,
+    [
+      session?.concernDispositions,
+      session?.mode,
+      session?.notes,
+      session?.resume.diffViewStates,
+      session?.reviewCompletedAt,
+    ],
+  );
   const readOnly = pr.merged || pr.state === "closed";
   const systems = useMemo(
     () =>
       artifact && session
         ? storySystems(artifact, session)
         : [],
-    [artifact, session],
+    [
+      artifact?.concerns,
+      artifact?.evidence,
+      artifact?.galaxy.systems,
+      session?.concernDispositions,
+    ],
   );
   const beat = artifact
     ? findBeat(artifact, session?.resume.beatId ?? null)
@@ -321,12 +521,13 @@ export function UltraReviewWorkspace({
     setRunError("");
     setSurface("generation");
     try {
-      await startUltraReviewAnalysis({
+      const runId = await startUltraReviewAnalysis({
         ctx,
         pr,
         mode,
         retry,
       });
+      setAnalysisRunId(runId);
     } catch (error) {
       setRunError(
         error instanceof Error ? error.message : String(error),
@@ -421,21 +622,139 @@ export function UltraReviewWorkspace({
   }, [artifact, files]);
 
   useEffect(() => {
-    if (
-      surface === "review"
-      && scrollRef.current
-      && session
-    ) {
-      scrollRef.current.scrollTop = session.resume.scrollTop;
+    if (surface !== "review" || !scrollRef.current || !session) {
+      return;
     }
-  }, [surface, session?.resume.beatId]);
+    scrollRef.current.scrollTop = session.resume.scrollTop;
+  }, [artifactKey, session?.resume.scrollTop, surface]);
+
+  useEffect(() => {
+    if (!artifact || !session) return;
+    const fallback = findBeat(artifact, session.resume.beatId);
+    if (
+      activeDocumentBeatId === null
+      || !allBeats(artifact).some(
+        (candidate) => candidate.id === activeDocumentBeatId,
+      )
+    ) {
+      setActiveDocumentBeatId(fallback?.id ?? null);
+    }
+  }, [artifact, activeDocumentBeatId, session]);
+
+  useEffect(() => {
+    activeDocumentBeatIdRef.current = activeDocumentBeatId;
+  }, [activeDocumentBeatId]);
+
+  useEffect(() => {
+    const canvas = scrollRef.current;
+    if (
+      surface !== "review"
+      || !canvas
+      || typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+    const sections = canvas.querySelectorAll<HTMLElement>(
+      "[data-ultra-beat-id]",
+    );
+    let observer: IntersectionObserver | null = null;
+    const updateActiveBeat = (
+      entries: IntersectionObserverEntry[],
+    ) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort(
+          (left, right) =>
+            Math.abs(left.boundingClientRect.top)
+            - Math.abs(right.boundingClientRect.top),
+        )[0];
+      const beatId = (
+        visible?.target as HTMLElement | undefined
+      )?.dataset.ultraBeatId;
+      if (!beatId) return;
+      activeDocumentBeatIdRef.current = beatId;
+      setActiveDocumentBeatId((current) =>
+        current === beatId ? current : beatId,
+      );
+    };
+    const observeSections = () => {
+      observer?.disconnect();
+      const readingOffset = Math.min(
+        160,
+        canvas.clientHeight * 0.24,
+      );
+      const remainingHeight = Math.max(
+        0,
+        canvas.clientHeight - readingOffset - 1,
+      );
+      observer = new IntersectionObserver(updateActiveBeat, {
+        root: canvas,
+        rootMargin:
+          `-${readingOffset}px 0px -${remainingHeight}px 0px`,
+      });
+      sections.forEach((section) => observer?.observe(section));
+    };
+    observeSections();
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(observeSections);
+    resizeObserver?.observe(canvas);
+    return () => {
+      observer?.disconnect();
+      resizeObserver?.disconnect();
+    };
+  }, [artifact?.galaxy.systems, surface]);
+
+  useEffect(() => {
+    if (surface !== "review" || pendingBeatTargetId === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const target = [
+        ...scrollRef.current?.querySelectorAll<HTMLElement>(
+          "[data-ultra-beat-id]",
+        ) ?? [],
+      ].find(
+        (candidate) =>
+          candidate.dataset.ultraBeatId === pendingBeatTargetId,
+      );
+      const canvas = scrollRef.current;
+      if (target && canvas) {
+        const distance = Math.abs(
+          target.getBoundingClientRect().top
+          - canvas.getBoundingClientRect().top,
+        );
+        canvas.scrollTo({
+          top:
+            canvas.scrollTop
+            + target.getBoundingClientRect().top
+            - canvas.getBoundingClientRect().top,
+          behavior:
+            distance > canvas.clientHeight * 2
+              ? "auto"
+              : "smooth",
+        });
+      }
+      setPendingBeatTargetId(null);
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [pendingBeatTargetId, surface]);
 
   useEffect(() => {
     if (surface !== "review" || !pendingEvidenceTarget) return;
     const timer = window.setTimeout(() => {
-      const file = [...document.querySelectorAll<HTMLElement>(
-        ".ultra-workbench-canvas .diff-file",
-      )].find(
+      const section = [
+        ...scrollRef.current?.querySelectorAll<HTMLElement>(
+          "[data-ultra-beat-id]",
+        ) ?? [],
+      ].find(
+        (candidate) =>
+          candidate.dataset.ultraBeatId
+          === pendingEvidenceTarget.beatId,
+      );
+      const file = [...section?.querySelectorAll<HTMLElement>(
+        ".diff-file",
+      ) ?? []].find(
         (candidate) =>
           candidate.dataset.path === pendingEvidenceTarget.path,
       );
@@ -449,14 +768,22 @@ export function UltraReviewWorkspace({
               )
             )
         : null;
-      (line ?? file)?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+      const target = line ?? file;
+      const canvas = scrollRef.current;
+      if (target && canvas) {
+        canvas.scrollTo({
+          top:
+            canvas.scrollTop
+            + target.getBoundingClientRect().top
+            - canvas.getBoundingClientRect().top
+            - canvas.clientHeight / 2,
+          behavior: "smooth",
+        });
+      }
       setPendingEvidenceTarget(null);
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [pendingEvidenceTarget, surface, session?.resume.beatId]);
+  }, [pendingEvidenceTarget, surface]);
 
   const persistScroll = () => {
     if (
@@ -466,28 +793,52 @@ export function UltraReviewWorkspace({
     ) {
       return;
     }
-    const scrollTop = Math.max(
-      0,
-      Math.floor(scrollRef.current.scrollTop),
-    );
     if (scrollSaveTimer.current) {
       clearTimeout(scrollSaveTimer.current);
     }
     scrollSaveTimer.current = setTimeout(() => {
-      mutate((current) => ({
-        ...current,
-        sessions: {
-          ...current.sessions,
-          [mode]: {
-            ...current.sessions[mode],
-            resume: {
-              ...current.sessions[mode].resume,
-              scrollTop,
+      const canvas = scrollRef.current;
+      if (!canvas) return;
+      const scrollTop = Math.max(0, Math.floor(canvas.scrollTop));
+      const visibleBeatId = activeDocumentBeatIdRef.current;
+      mutate((current) => {
+        const nextBeat = visibleBeatId
+          ? findBeat(current, visibleBeatId)
+          : null;
+        const nextChapter = nextBeat
+          ? allChapters(current).find((candidate) =>
+              candidate.beats.some(
+                (candidateBeat) => candidateBeat.id === nextBeat.id,
+              )
+            ) ?? null
+          : null;
+        const nextSystem = nextChapter
+          ? findSystemForChapter(current, nextChapter.id)
+          : null;
+        return {
+          ...current,
+          sessions: {
+            ...current.sessions,
+            [mode]: {
+              ...current.sessions[mode],
+              resume: {
+                ...current.sessions[mode].resume,
+                systemId:
+                  nextSystem?.id
+                  ?? current.sessions[mode].resume.systemId,
+                chapterId:
+                  nextChapter?.id
+                  ?? current.sessions[mode].resume.chapterId,
+                beatId:
+                  nextBeat?.id
+                  ?? current.sessions[mode].resume.beatId,
+                scrollTop,
+              },
             },
           },
-        },
-      }));
-    }, 180);
+        };
+      });
+    }, SCROLL_PERSIST_IDLE_MS);
   };
 
   useEffect(() => () => {
@@ -500,28 +851,14 @@ export function UltraReviewWorkspace({
     systemId: string,
     chapterId: string,
   ) => {
-    if (!artifact || !session) return;
+    if (!artifact) return;
     const nextChapter = findChapter(artifact, chapterId);
-    const nextBeat = nextChapter
-      ? firstBeatForChapter(nextChapter, session)
-      : null;
-    mutate((current) => ({
-      ...current,
-      sessions: {
-        ...current.sessions,
-        [mode]: {
-          ...current.sessions[mode],
-          resume: {
-            ...current.sessions[mode].resume,
-            systemId,
-            chapterId,
-            beatId: nextBeat?.id ?? null,
-            scrollTop: 0,
-          },
-        },
-      },
-    }));
-    setSurface("review");
+    const nextBeat = nextChapter?.beats
+      .slice()
+      .sort((left, right) => left.order - right.order)[0];
+    if (nextBeat) {
+      selectBeat(systemId, chapterId, nextBeat.id);
+    }
   };
 
   const selectBeat = (
@@ -545,20 +882,9 @@ export function UltraReviewWorkspace({
         },
       },
     }));
+    setActiveDocumentBeatId(beatId);
+    setPendingBeatTargetId(beatId);
     setSurface("review");
-  };
-
-  const selectSystem = (systemId: string) => {
-    if (!artifact) return;
-    const system = artifact.galaxy.systems.find(
-      (candidate) => candidate.id === systemId,
-    );
-    const firstChapter = system?.chapters
-      .slice()
-      .sort((left, right) => left.order - right.order)[0];
-    if (system && firstChapter) {
-      selectChapter(system.id, firstChapter.id);
-    }
   };
 
   const selectBeatById = (beatId: string) => {
@@ -591,6 +917,7 @@ export function UltraReviewWorkspace({
       && evidence.location.startLine !== null
     ) {
       setPendingEvidenceTarget({
+        beatId: targetBeat.id,
         path: evidence.location.path,
         side: evidence.location.side,
         line: evidence.location.startLine,
@@ -605,57 +932,45 @@ export function UltraReviewWorkspace({
       (candidate) => candidate.id === session.resume.beatId,
     );
     const nextBeat = resumeBeat
-      ?? allBeats(artifact).find(
-        (candidate) =>
-          session.beatStates[candidate.id] !== "reviewed",
-      )
       ?? allBeats(artifact)[0];
     if (nextBeat) {
       selectBeatById(nextBeat.id);
     }
   };
 
-  const orderedBeats = artifact ? allBeats(artifact) : [];
-  const beatIndex = beat
-    ? orderedBeats.findIndex(
-      (candidate) => candidate.id === beat.id,
-    )
-    : -1;
-  const previousBeat =
-    beatIndex > 0 ? orderedBeats[beatIndex - 1] : null;
-  const nextBeat =
-    beatIndex >= 0 && beatIndex < orderedBeats.length - 1
-      ? orderedBeats[beatIndex + 1]
-      : null;
-  const currentChapter = artifact && beat
-    ? allChapters(artifact).find(
-      (candidate) =>
-        candidate.beats.some(
-          (candidateBeat) => candidateBeat.id === beat.id,
-        ),
-    ) ?? null
+  const finishReview = useCallback(() => {
+    if (readOnly) return;
+    const currentSession = useUltraReviewStore.getState()
+      .artifacts[artifactKey]?.sessions[mode];
+    if (!currentSession) return;
+    if (currentSession.reviewCompletedAt === undefined) {
+      mutate((current) => ({
+        ...current,
+        sessions: {
+          ...current.sessions,
+          [mode]: completeUltraReviewDocument(
+            current.sessions[mode],
+            Date.now(),
+          ),
+        },
+      }));
+    }
+    setSurface("ledger");
+  }, [artifactKey, mode, mutate, readOnly]);
+
+  const activeBeat = artifact
+    ? findBeat(
+        artifact,
+        activeDocumentBeatId ?? session?.resume.beatId ?? null,
+      )
     : null;
-  const currentSystem = artifact && currentChapter
-    ? findSystemForChapter(artifact, currentChapter.id)
-    : null;
-  const currentBeatEvidence = artifact && beat
-    ? artifact.evidence.filter(
-      (reference) => beat.evidenceIds.includes(reference.id),
-    )
-    : [];
-  const beatInspection = inspectUltraReviewBeatEvidence(
-    files ?? [],
-    currentBeatEvidence,
-    beat?.removedEvidenceIds ?? [],
-    session?.creditedEvidenceIds ?? [],
+  const progress = useMemo(
+    () =>
+      artifact
+        ? calculateUltraReviewProgress(artifact, mode)
+        : null,
+    [artifact, mode],
   );
-  const beatReviewable = beatInspection.ready;
-  const beatReviewed = beat && session
-    ? session.beatStates[beat.id] === "reviewed"
-    : false;
-  const progress = artifact
-    ? calculateUltraReviewProgress(artifact, mode)
-    : null;
   const blockingChecks = liveChecks.filter(
     (check) =>
       check.status === "completed"
@@ -675,51 +990,6 @@ export function UltraReviewWorkspace({
   const unresolvedThreadCount = liveThreads?.filter(
     (thread) => !thread.isResolved,
   ).length ?? 0;
-  const workbenchRemoteViewed =
-    readOnly && remoteViewed
-      ? { map: remoteViewed.map }
-      : remoteViewed;
-
-  const markCurrentBeatReviewed = () => {
-    if (!beat || !session || readOnly || !beatReviewable) return;
-    mutate((current) => ({
-      ...current,
-      sessions: {
-        ...current.sessions,
-        [mode]: {
-          ...current.sessions[mode],
-          beatStates: {
-            ...current.sessions[mode].beatStates,
-            [beat.id]: "reviewed",
-          },
-        },
-      },
-    }));
-  };
-  const creditCurrentBeatEvidence = (evidenceIds: string[]) => {
-    if (
-      evidenceIds.length === 0
-      || !session
-      || readOnly
-    ) {
-      return;
-    }
-    mutate((current) => ({
-      ...current,
-      sessions: {
-        ...current.sessions,
-        [mode]: {
-          ...current.sessions[mode],
-          creditedEvidenceIds: [
-            ...new Set([
-              ...current.sessions[mode].creditedEvidenceIds,
-              ...evidenceIds,
-            ]),
-          ],
-        },
-      },
-    }));
-  };
 
   if (!artifactsLoaded) {
     return (
@@ -762,17 +1032,12 @@ export function UltraReviewWorkspace({
             error={filesError}
             onRetry={onRetryFiles}
           />
-          {rejectedArtifactKeys.length > 0 && (
-            <div className="ultra-invalid-artifact">
-              {rejectedArtifactKeys.length} persisted artifact
-              {rejectedArtifactKeys.length === 1 ? "" : "s"}
-              {" "}failed validation and stayed quarantined.
-            </div>
-          )}
           <ReviewPlanIntro
             thesis={{
               title: pr.title,
-              summary: "Indexing the change into a causal review path.",
+              summary: runError
+                ? "UltraReview could not build this review plan."
+                : "Indexing the change into a causal review path.",
               risk: "none",
             }}
             systems={[]}
@@ -780,7 +1045,8 @@ export function UltraReviewWorkspace({
               runError
                 ? [{
                     id: "analysis-start",
-                    message: runError,
+                    message:
+                      "UltraReview could not build this review plan.",
                     retryable: true,
                   }]
                 : []
@@ -791,10 +1057,19 @@ export function UltraReviewWorkspace({
                 id: "analysis-start",
                 label: "Start local analysis",
                 status: runError ? "failed" : "running",
-                error: runError || null,
+                error: null,
               }],
             }}
-            beginLabel="Building plan…"
+            reasoningActivity={
+              !runError
+                ? reasoningActivity
+                : undefined
+            }
+            beginLabel={
+              runError
+                ? "Plan unavailable"
+                : "Building plan…"
+            }
             beginDisabled
             onBeginReview={() => undefined}
             onOpenRawDiff={
@@ -819,17 +1094,10 @@ export function UltraReviewWorkspace({
             error={filesError}
             onRetry={onRetryFiles}
           />
-          {rejectedArtifactKeys.length > 0 && (
-            <div className="ultra-invalid-artifact">
-              {rejectedArtifactKeys.length} persisted artifact
-              {rejectedArtifactKeys.length === 1 ? "" : "s"}
-              {" "}failed validation and stayed quarantined.
-            </div>
-          )}
           {readOnly && (
             <div className="ultra-read-only-banner">
               {pr.merged ? "Merged" : "Closed"} implementation story.
-              The plan stays navigable. Review state is frozen.
+              Read only.
             </div>
           )}
           <ReviewPlanIntro
@@ -859,6 +1127,11 @@ export function UltraReviewWorkspace({
                 ? undefined
                 : artifact.generation
             }
+            reasoningActivity={
+              artifact.generation.status === "running"
+                ? reasoningActivity
+                : undefined
+            }
             failures={artifact.generation.failures.map(
               (failure) => ({
                 id: failure.id,
@@ -869,13 +1142,15 @@ export function UltraReviewWorkspace({
               }),
             )}
             beginLabel={
-              artifact.generation.status === "running"
+              artifact.generation.status === "failed"
+                ? "Plan unavailable"
+                : artifact.generation.status === "running"
                 ? beat
                   ? "Review ready chapter"
                   : "Building plan…"
                 : readOnly
                 ? "Open review"
-                : (progress?.reviewedBeats ?? 0) > 0
+                : session.resume.scrollTop > 0
                   ? "Resume review"
                   : "Begin review"
             }
@@ -899,12 +1174,20 @@ export function UltraReviewWorkspace({
             onRetryFailure={
               readOnly
                 ? undefined
-                : (failureId) => void retryFailure(failureId)
+                : (failureId) => {
+                    const failure =
+                      artifact.generation.failures.find(
+                        (candidate) =>
+                          candidate.id === failureId,
+                      );
+                    if (failure?.scope === "artifact") {
+                      void start(true);
+                    } else {
+                      void retryFailure(failureId);
+                    }
+                  }
             }
           />
-          {runError && (
-            <p className="ultra-form-error">{runError}</p>
-          )}
         </div>
       </div>
     );
@@ -1018,31 +1301,23 @@ export function UltraReviewWorkspace({
           </nav>
 
           <div className="ultra-workbench-status">
-            <div className="ultra-workbench-progress">
-              <strong>
-                {progress?.reviewedBeats ?? 0}/
-                {progress?.totalBeats ?? 0}
-              </strong>
-              <span>beats inspected</span>
-              <span
-                className="ultra-workbench-progress-track"
-                aria-hidden
+            {activeMode === "review" && (
+              <ReviewScrollProgress
+                key={artifact.artifactKey}
+                scrollRef={scrollRef}
+              />
+            )}
+            {activeMode === "review" && !readOnly && (
+              <button
+                type="button"
+                className="primary small"
+                onClick={finishReview}
               >
-                <span
-                  style={{
-                    width: `${
-                      progress && progress.totalBeats > 0
-                        ? Math.round(
-                          progress.reviewedBeats
-                          / progress.totalBeats
-                          * 100,
-                        )
-                        : 0
-                    }%`,
-                  }}
-                />
-              </span>
-            </div>
+                {session.reviewCompletedAt === undefined
+                  ? "Done reviewing"
+                  : "Final review"}
+              </button>
+            )}
             <div className="ultra-workbench-signals">
               {blockingChecks.length > 0 && (
                 <span data-tone="danger">
@@ -1088,7 +1363,7 @@ export function UltraReviewWorkspace({
               <span>
                 {allChapters(artifact).length} validated chapter
                 {allChapters(artifact).length === 1 ? "" : "s"}
-                {" "}ready now. Later chapters will join this workbench.
+                {" "}ready now. Later chapters will join this document.
               </span>
             </div>
           )}
@@ -1141,32 +1416,24 @@ export function UltraReviewWorkspace({
               </span>
             </div>
           )}
-          {beat && (beat.removedEvidenceIds?.length ?? 0) > 0 && (
+          {allBeats(artifact).some(
+            (candidate) =>
+              (candidate.removedEvidenceIds?.length ?? 0) > 0,
+          ) && (
             <div className="ultra-global-feedback">
               <strong>Prior diff evidence was removed.</strong>
               <span>
-                {currentChapter?.before
-                  ?? `${beat.removedEvidenceIds?.length ?? 0} prior evidence regions no longer exist in this diff.`}
+                The affected section carries the saved summary and
+                explicit acknowledgement.
               </span>
             </div>
           )}
         </div>
 
         <div className="ultra-workbench-body">
-          <ReviewStoryRail
+          <ReviewOutline
             systems={systems}
-            activeSystemId={
-              currentSystem?.id
-              ?? session.resume.systemId
-              ?? undefined
-            }
-            activeChapterId={
-              currentChapter?.id
-              ?? session.resume.chapterId
-              ?? undefined
-            }
-            activeBeatId={beat?.id ?? undefined}
-            onSelectSystem={selectSystem}
+            activeBeatId={activeBeat?.id ?? undefined}
             onSelectChapter={selectChapter}
             onSelectBeat={selectBeat}
           />
@@ -1187,8 +1454,6 @@ export function UltraReviewWorkspace({
                 files={files}
                 comments={liveComments}
                 pr={pr}
-                remoteViewed={workbenchRemoteViewed}
-                viewedKey={viewedKey}
                 readOnly={readOnly}
                 onMutate={mutate}
               />
@@ -1206,18 +1471,21 @@ export function UltraReviewWorkspace({
                 onNavigateBeat={selectBeatById}
                 onNavigateEvidence={selectEvidenceById}
               />
-            ) : beat && files ? (
-              <BeatWorkspace
+            ) : files ? (
+              <ReviewDocument
                 pr={pr}
-                artifact={artifact}
-                session={session}
-                beat={beat}
+                artifact={reviewDocumentArtifact ?? artifact}
+                session={reviewDocumentSession ?? session}
                 files={files}
                 comments={liveComments}
                 onMutate={mutate}
-                remoteViewed={workbenchRemoteViewed}
-                viewedKey={viewedKey}
                 readOnly={readOnly}
+                forceMaterializedBeatId={
+                  pendingEvidenceTarget?.beatId
+                  ?? pendingBeatTargetId
+                  ?? undefined
+                }
+                onDoneReviewing={finishReview}
               />
             ) : (
               <main className="ultra-workbench-empty">
@@ -1230,164 +1498,6 @@ export function UltraReviewWorkspace({
             )}
           </div>
         </div>
-
-        {beat && (
-          <footer className="ultra-review-flowbar">
-            <button
-              type="button"
-              disabled={!previousBeat}
-              onClick={() => {
-                if (previousBeat) selectBeatById(previousBeat.id);
-              }}
-            >
-              ← Previous
-            </button>
-            <div className="ultra-review-flowbar-position">
-              <span>
-                Beat {beatIndex + 1} of {orderedBeats.length}
-              </span>
-              <strong>{beat.title}</strong>
-            </div>
-            <div className="ultra-review-flowbar-state">
-              <span
-                data-state={
-                  beatReviewed ? "reviewed" : "pending"
-                }
-              >
-                {beatReviewed
-                  ? "Inspected"
-                  : beatInspection
-                    .outstandingRemovedEvidenceIds.length > 0
-                    ? `${beatInspection.outstandingRemovedEvidenceIds.length} removed region${
-                      beatInspection.outstandingRemovedEvidenceIds.length === 1
-                        ? ""
-                        : "s"
-                    } need acknowledgement`
-                    : beatInspection
-                      .outstandingStructuralEvidenceIds.length > 0
-                      ? `${beatInspection.outstandingStructuralEvidenceIds.length} file-level change${
-                        beatInspection.outstandingStructuralEvidenceIds.length === 1
-                          ? ""
-                          : "s"
-                      } need Raw Diff credit`
-                      : !beatInspection.exactChangedEvidence
-                        ? "Trusted evidence is unavailable"
-                  : activeMode === "review"
-                    ? "Inspection required"
-                    : `${activeMode === "raw"
-                      ? "Raw Diff"
-                      : "Closing"} mode`}
-              </span>
-              {activeMode === "review"
-                && beatInspection
-                  .outstandingRemovedEvidenceIds.length > 0
-                && (
-                  <button
-                    type="button"
-                    className="link"
-                    disabled={readOnly}
-                    onClick={() =>
-                      creditCurrentBeatEvidence(
-                        beatInspection
-                          .outstandingRemovedEvidenceIds,
-                      )}
-                  >
-                    Acknowledge removal summary
-                  </button>
-                )}
-              {activeMode === "review"
-                && beatInspection
-                  .outstandingRemovedEvidenceIds.length === 0
-                && !beatReviewable && (
-                <button
-                  type="button"
-                  className="link"
-                  disabled={!files}
-                  onClick={() => setSurface("raw")}
-                >
-                  Inspect in Raw Diff
-                </button>
-              )}
-            </div>
-            <button
-              type="button"
-              className="primary"
-              disabled={
-                !readOnly
-                && !beatReviewed
-                && (
-                  (
-                    activeMode === "review"
-                    && !beatReviewable
-                  )
-                  || (
-                    activeMode === "raw"
-                    && beatInspection
-                      .outstandingStructuralEvidenceIds.length > 0
-                    && !beatInspection.exactChangedEvidence
-                  )
-                )
-              }
-              onClick={() => {
-                if (
-                  activeMode === "raw"
-                  && !readOnly
-                  && beatInspection
-                    .outstandingStructuralEvidenceIds.length > 0
-                ) {
-                  creditCurrentBeatEvidence(
-                    beatInspection
-                      .outstandingStructuralEvidenceIds,
-                  );
-                  return;
-                }
-                if (
-                  activeMode === "raw"
-                  && !readOnly
-                  && beatInspection
-                    .outstandingRemovedEvidenceIds.length > 0
-                ) {
-                  creditCurrentBeatEvidence(
-                    beatInspection
-                      .outstandingRemovedEvidenceIds,
-                  );
-                  return;
-                }
-                if (activeMode !== "review") {
-                  setSurface("review");
-                  return;
-                }
-                if (!readOnly && !beatReviewed) {
-                  markCurrentBeatReviewed();
-                  return;
-                }
-                if (nextBeat) {
-                  selectBeatById(nextBeat.id);
-                } else {
-                  setSurface("ledger");
-                }
-              }}
-            >
-              {activeMode === "raw"
-                && !readOnly
-                && beatInspection
-                  .outstandingStructuralEvidenceIds.length > 0
-                ? "Credit file-level evidence"
-                : activeMode === "raw"
-                  && !readOnly
-                  && beatInspection
-                    .outstandingRemovedEvidenceIds.length > 0
-                  ? "Acknowledge removed evidence"
-                  : activeMode !== "review"
-                ? "Return to review →"
-                : !readOnly && !beatReviewed
-                ? "Mark inspected"
-                : nextBeat
-                  ? "Next beat →"
-                  : "Finish review →"}
-            </button>
-          </footer>
-        )}
 
         {runError && (
           <p className="ultra-form-error ultra-workbench-error">

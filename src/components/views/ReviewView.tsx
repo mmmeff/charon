@@ -7,6 +7,9 @@ import {
 } from "../../lib/pr-version";
 import { stackedPrList, type PrStackRenderItem } from "../../lib/pr-stacks";
 import { useRepoStore, useUiStore } from "../../lib/store";
+import {
+  useUltraReviewGenerationStatus,
+} from "../../lib/ultrareview-store";
 import type { FileDiff, Proposal, PrSummary } from "../../types";
 import { age, usePastHero, useScrollMemory, useScrolledPrTitle, type SortKey } from "../../lib/ui";
 import { AetherField } from "../AetherField";
@@ -23,6 +26,7 @@ import { InlineCommentEditor, ReviewStrip } from "../ProposalCard";
 import { PrHeroSidePanel } from "../PrStackDrawer";
 import { useFlow } from "../flow";
 import { PrStackCard } from "../PrStackList";
+import { UltraReviewEntry } from "../ultrareview";
 import { UltraReviewWorkspace } from "../UltraReviewWorkspace";
 
 interface VersionedReviewValue<Value> {
@@ -56,7 +60,6 @@ export function ReviewView() {
   const [loadedDiff, setLoadedDiff] =
     useState<VersionedReviewValue<ReviewDiffValue> | null>(null);
   const [diffReload, setDiffReload] = useState(0);
-  const [ultraOpen, setUltraOpen] = useState(false);
   const [loadedViewedState, setLoadedViewedState] =
     useState<VersionedReviewValue<ReviewViewedValue> | null>(null);
   const stacked = stackedPrList(queue, prStacks, sort);
@@ -69,6 +72,13 @@ export function ReviewView() {
     loadedViewedState,
     pr
   );
+  const ultraOpen = useUiStore((state) => {
+    const location = state.navHistory[state.navIndex];
+    return pr !== null
+      && location?.tab === "review"
+      && location.pr === pr.number
+      && location.view === "ultrareview";
+  });
 
   useEffect(() => {
     useUiStore.getState().setVisiblePrWorkspace("review", pr?.number ?? null);
@@ -76,7 +86,6 @@ export function ReviewView() {
   }, [pr?.number]);
 
   useEffect(() => {
-    setUltraOpen(false);
     if (!pr) {
       setLoadedDiff(null);
       setLoadedViewedState(null);
@@ -200,15 +209,11 @@ export function ReviewView() {
         filesError={error}
         onRetryFiles={() =>
           setDiffReload((current) => current + 1)}
-        remoteViewed={
-          viewedState
-            ? {
-                map: viewedState.states,
-                toggle: toggleFileViewed,
-              }
-            : undefined
-        }
-        onLeave={() => setUltraOpen(false)}
+        onLeave={() =>
+          useUiStore.getState().navPush(
+            "review",
+            pr.number,
+          )}
       />
     );
   }
@@ -283,7 +288,12 @@ export function ReviewView() {
             error={error}
             viewedState={viewedState}
             toggleFileViewed={toggleFileViewed}
-            onOpenUltraReview={() => setUltraOpen(true)}
+            onOpenUltraReview={() =>
+              useUiStore.getState().navPush(
+                "review",
+                pr.number,
+                "ultrareview",
+              )}
           />
         )}
       </FadeIn>
@@ -310,6 +320,13 @@ function ReviewWorkspace({
   onOpenUltraReview: () => void;
 }) {
   const { ctx, poller } = useFlow();
+  const ultraReviewGenerationStatus =
+    useUltraReviewGenerationStatus({
+      repo: ctx.repo,
+      prNumber: pr.number,
+      baseSha: pr.baseSha,
+      headSha: pr.headSha,
+    });
   const proposals = useRepoStore((s) => s.proposals);
   const upsert = useRepoStore((s) => s.upsertProposal);
   const comments = usePrData((s) => s.comments[pr.number]) ?? [];
@@ -464,6 +481,12 @@ function ReviewWorkspace({
             </div>
           </div>
 
+          {/* UltraReview is the primary action before the pull request body. */}
+          <UltraReviewEntry
+            generationStatus={ultraReviewGenerationStatus}
+            onBegin={onOpenUltraReview}
+          />
+
           {/* description + side panel (stack control room + CI) — teammate PRs
               may have no body, in which case the panel stands alone */}
           <PrHeroSidePanel
@@ -477,24 +500,6 @@ function ReviewWorkspace({
           >
             {pr.body?.trim() && <PrDescription pr={pr} />}
           </PrHeroSidePanel>
-
-          {/* drive the review agent */}
-          <section className="ultra-entry-banner">
-            <div>
-              <span className="u-mark">NEW REVIEW PATH</span>
-              <h3>Understand the change in causal order.</h3>
-              <p>
-                Chapters, focused evidence, explicit coverage, one human verdict.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="primary"
-              onClick={onOpenUltraReview}
-            >
-              Enter UltraReview
-            </button>
-          </section>
 
           <Section>
             <Composer pr={pr} modes={consoleModes} reviewKind="teammate" />

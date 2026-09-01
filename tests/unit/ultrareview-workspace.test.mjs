@@ -19,11 +19,11 @@ const server = await createServer({
 });
 const {
   allBeats,
-  firstBeatForChapter,
 } = await server.ssrLoadModule(
   "/src/components/ultrareview/navigation.ts",
 );
 const {
+  lineNoteEvidenceIds,
   saveNoteComposerBody,
 } = await server.ssrLoadModule(
   "/src/components/ultrareview/review-shared.tsx",
@@ -91,40 +91,6 @@ test("beat order follows systems, then chapters, then local beat order", () => {
   );
 });
 
-test("chapter selection starts at its first incomplete beat", () => {
-  const targetChapter = chapter("chapter:target", 0, [
-    beat("beat:last", 2),
-    beat("beat:first", 0),
-    beat("beat:middle", 1),
-  ]);
-  const session = {
-    beatStates: {
-      "beat:first": "reviewed",
-      "beat:middle": "stale",
-      "beat:last": "pending",
-    },
-  };
-
-  assert.equal(
-    firstBeatForChapter(targetChapter, session).id,
-    "beat:middle",
-  );
-
-  session.beatStates["beat:middle"] = "reviewed";
-  session.beatStates["beat:last"] = "reviewed";
-  assert.equal(
-    firstBeatForChapter(targetChapter, session).id,
-    "beat:first",
-  );
-  assert.equal(
-    firstBeatForChapter(
-      chapter("chapter:empty", 0, []),
-      session,
-    ),
-    null,
-  );
-});
-
 test("rejected note saves preserve the draft and keep the composer open", () => {
   let closeCount = 0;
   let receivedBody = "";
@@ -152,4 +118,42 @@ test("rejected note saves preserve the draft and keep the composer open", () => 
   );
   assert.equal(accepted, "");
   assert.equal(closeCount, 1);
+});
+
+test("a line note can span adjacent changed evidence", () => {
+  const artifact = {
+    evidence: [
+      {
+        id: "evidence:10",
+        kind: "changed",
+        location: {
+          path: "src/review.ts",
+          side: "RIGHT",
+          startLine: 10,
+          endLine: 10,
+        },
+      },
+      {
+        id: "evidence:11",
+        kind: "changed",
+        location: {
+          path: "src/review.ts",
+          side: "RIGHT",
+          startLine: 11,
+          endLine: 11,
+        },
+      },
+    ],
+  };
+
+  assert.deepEqual(
+    lineNoteEvidenceIds(artifact, {
+      path: "src/review.ts",
+      side: "RIGHT",
+      startLine: 10,
+      endLine: 11,
+      snippet: "first\nsecond",
+    }),
+    ["evidence:10", "evidence:11"],
+  );
 });

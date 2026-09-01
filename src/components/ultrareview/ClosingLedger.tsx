@@ -12,6 +12,8 @@ import {
 import {
   buildUltraReviewSubmissionSnapshot,
   recordUltraReviewSubmissionSnapshot,
+  ultraReviewNotesFingerprint,
+  updateUltraReviewNote,
 } from "../../lib/ultrareview-session";
 import { recordUltraReviewDiagnostic } from "../../lib/ultrareview-diagnostics-store";
 import { useUltraReviewStore } from "../../lib/ultrareview-store";
@@ -26,12 +28,122 @@ import type {
   ProposedInlineComment,
   ReviewFinding,
   UltraReviewArtifact,
+  UltraReviewDraftInlineComment,
+  UltraReviewNote,
+  UltraReviewNoteKind,
   UltraReviewSession,
   UltraReviewSubmissionSnapshot,
 } from "../../types";
-import { DiffViewer } from "../DiffViewer";
+import { DiffViewer, type DiffAnchor } from "../DiffViewer";
 import { useFlow } from "../flow";
 import { allBeats, allChapters } from "./navigation";
+import {
+  GitHubCommentBody,
+  ULTRA_REVIEW_NOTE_KIND_OPTIONS,
+} from "./review-shared";
+
+function ClosingNoteEditor({
+  note,
+  readOnly,
+  mode,
+  fixSelected,
+  onFixSelected,
+  onSave,
+  onSubmitAsComment,
+}: {
+  note: UltraReviewNote;
+  readOnly: boolean;
+  mode: UltraReviewSession["mode"];
+  fixSelected: boolean;
+  onFixSelected: (selected: boolean) => void;
+  onSave: (body: string, kind: UltraReviewNoteKind) => void;
+  onSubmitAsComment: (selected: boolean) => void;
+}) {
+  const [body, setBody] = useState(note.body);
+  const [kind, setKind] = useState(note.kind);
+  useEffect(() => {
+    setBody(note.body);
+    setKind(note.kind);
+  }, [note.body, note.kind]);
+  const changed = body.trim() !== note.body
+    || kind !== note.kind;
+  const anchorLabel = note.anchor.kind === "beat"
+    ? "section"
+    : `${note.anchor.path}:${note.anchor.startLine}–${note.anchor.endLine}`;
+  return (
+    <article
+      id={`ultra-ledger-note-${note.id}`}
+      className="ultra-closing-note"
+      data-kind={note.kind}
+      data-stale={note.stale}
+    >
+      <header>
+        <select
+          aria-label={`Note type for ${anchorLabel}`}
+          disabled={readOnly}
+          value={kind}
+          onChange={(event) =>
+            setKind(event.target.value as UltraReviewNoteKind)
+          }
+        >
+          {ULTRA_REVIEW_NOTE_KIND_OPTIONS.map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <span>
+          {note.anchor.kind === "beat" ? "Section note" : anchorLabel}
+          {note.stale ? " · prior head" : ""}
+        </span>
+      </header>
+      <textarea
+        className="input-prose"
+        aria-label={`Note for ${anchorLabel}`}
+        rows={Math.max(3, body.split("\n").length)}
+        readOnly={readOnly}
+        value={body}
+        onChange={(event) => setBody(event.target.value)}
+      />
+      <footer>
+        <div className="row">
+          <button
+            type="button"
+            className="small"
+            disabled={readOnly || !changed || !body.trim()}
+            onClick={() => onSave(body.trim(), kind)}
+          >
+            Save note
+          </button>
+          {mode === "teammate" && note.anchor.kind === "line" && (
+            <label>
+              <input
+                type="checkbox"
+                disabled={readOnly || note.stale}
+                checked={note.submitAsComment && !note.stale}
+                onChange={(event) =>
+                  onSubmitAsComment(event.target.checked)
+                }
+              />
+              Submit as inline comment
+            </label>
+          )}
+          {mode === "author" && (
+            <label>
+              <input
+                type="checkbox"
+                disabled={readOnly || note.stale}
+                checked={fixSelected}
+                onChange={(event) =>
+                  onFixSelected(event.target.checked)
+                }
+              />
+              Fix agent
+            </label>
+          )}
+        </div>
+      </footer>
+    </article>
+  );
+}
 
 export function ClosingLedger({
   pr,
@@ -66,6 +178,8 @@ export function ClosingLedger({
     session.mode,
   );
   const audit = auditUltraReviewCoverage(artifact);
+  const beats = allBeats(artifact);
+  const chapters = allChapters(artifact);
   const [verdict, setVerdict] = useState<
     "COMMENT" | "APPROVE" | "REQUEST_CHANGES" | null
   >(null);
@@ -92,6 +206,8 @@ export function ClosingLedger({
     null,
   );
   const [draftStarting, setDraftStarting] = useState(false);
+  const draftStartInFlight = useRef(false);
+  const autoDraftFingerprint = useRef<string | null>(null);
   const [expandedProvenanceId, setExpandedProvenanceId] =
     useState<string | null>(null);
   const draftRun = useAgentStore(
@@ -106,11 +222,9 @@ export function ClosingLedger({
     || draftRun?.status === "starting"
     || draftRun?.status === "running";
   const missing = [...new Set([
-    ...allBeats(artifact)
-      .filter((beat) =>
-        session.beatStates[beat.id] !== "reviewed"
-      )
-      .map((beat) => beat.id),
+    ...(session.reviewCompletedAt === undefined
+      ? ["review-document"]
+      : []),
     ...artifact.mechanicalChanges
       .filter((change) =>
         !session.acknowledgedMechanicalChangeIds.includes(
@@ -137,10 +251,13 @@ export function ClosingLedger({
     setAcknowledgeIncomplete(false);
   }, [missingKey]);
   const missingItems = missing.map((id) => {
-    const beat = allBeats(artifact).find(
+    if (id === "review-document") {
+      return "Review document is not marked done";
+    }
+    const beat = beats.find(
       (candidate) => candidate.id === id,
     );
-    if (beat) return `Beat not inspected: ${beat.title}`;
+    if (beat) return `Review section unresolved: ${beat.title}`;
     const mechanical = artifact.mechanicalChanges.find(
       (candidate) => candidate.id === id,
     );
@@ -164,7 +281,12 @@ export function ClosingLedger({
     }
     return `Coverage blocker: ${id}`;
   });
+  const notesFingerprint = ultraReviewNotesFingerprint(session.notes);
   const draft = session.draft;
+  const draftIsCurrent = draft !== null && (
+    draft.sourceNotesFingerprint === notesFingerprint
+    || draft.sourceNotesFingerprint === "legacy"
+  );
   const expandedProvenance = draft?.sections.find(
     (section) => section.id === expandedProvenanceId,
   ) ?? null;
@@ -185,7 +307,7 @@ export function ClosingLedger({
   const testEvidenceIds = new Set(
     testEvidence.map((evidence) => evidence.id),
   );
-  const chaptersWithoutVisibleTest = allChapters(artifact).filter(
+  const chaptersWithoutVisibleTest = chapters.filter(
     (chapter) =>
       chapter.kind !== "mechanical"
       && chapter.beats.every(
@@ -214,8 +336,139 @@ export function ClosingLedger({
     }));
   };
 
+  const saveNote = (
+    note: UltraReviewNote,
+    body: string,
+    kind: UltraReviewNoteKind,
+  ) => {
+    onMutate((current) => ({
+      ...current,
+      sessions: {
+        ...current.sessions,
+        [session.mode]: updateUltraReviewNote(
+          current.sessions[session.mode],
+          note.id,
+          {
+            body,
+            kind,
+            submitAsComment: note.submitAsComment,
+          },
+        ),
+      },
+    }));
+  };
+
+  const setNoteSubmission = (
+    note: UltraReviewNote,
+    submitAsComment: boolean,
+  ) => {
+    onMutate((current) => ({
+      ...current,
+      sessions: {
+        ...current.sessions,
+        [session.mode]: updateUltraReviewNote(
+          current.sessions[session.mode],
+          note.id,
+          {
+            body: note.body,
+            kind: note.kind,
+            submitAsComment,
+          },
+        ),
+      },
+    }));
+  };
+
+  const setFixNoteSelected = (
+    noteId: string,
+    selected: boolean,
+  ) => {
+    setSelectedFixNoteIds((current) =>
+      selected
+        ? [...new Set([...current, noteId])]
+        : current.filter((id) => id !== noteId)
+    );
+  };
+
+  const lineNotes = session.notes.filter(
+    (note) => note.anchor.kind === "line",
+  );
+  const lineNoteFiles = projectFocusedEvidence(
+    files,
+    lineNotes.flatMap((note) => {
+      const anchor = note.anchor;
+      return anchor.kind === "line"
+        ? [{
+            path: anchor.path,
+            side: anchor.side,
+            startLine: anchor.startLine,
+            endLine: anchor.endLine,
+          }]
+        : [];
+    }),
+  );
+  const closingNoteAnchors: DiffAnchor[] = lineNotes.map((note) => {
+    const anchor = note.anchor;
+    if (anchor.kind !== "line") {
+      throw new Error("line note lost its line anchor");
+    }
+    return {
+      path: anchor.path,
+      line: anchor.endLine,
+      side: anchor.side,
+      tone: "local" as const,
+      node: (
+        <ClosingNoteEditor
+          note={note}
+          readOnly={readOnly}
+          mode={session.mode}
+          fixSelected={selectedFixNoteIds.includes(note.id)}
+          onFixSelected={(selected) =>
+            setFixNoteSelected(note.id, selected)}
+          onSave={(body, kind) => saveNote(note, body, kind)}
+          onSubmitAsComment={(selected) =>
+            setNoteSubmission(note, selected)}
+        />
+      ),
+    };
+  });
+
+  const selectedInlineComments: UltraReviewDraftInlineComment[] =
+    session.notes.flatMap((note) => {
+      if (
+        note.anchor.kind !== "line"
+        || note.stale
+        || !note.submitAsComment
+      ) {
+        return [];
+      }
+      const anchor = note.anchor;
+      const beatIds = beats
+        .filter((beat) => anchor.evidenceIds.some(
+          (evidenceId) => beat.evidenceIds.includes(evidenceId),
+        ))
+        .map((beat) => beat.id);
+      return [{
+        id: note.id,
+        path: anchor.path,
+        side: anchor.side,
+        line: anchor.endLine,
+        ...(anchor.startLine === anchor.endLine
+          ? {}
+          : { startLine: anchor.startLine }),
+        body: note.body,
+        included: true,
+        provenance: {
+          noteIds: [note.id],
+          beatIds,
+          evidenceIds: anchor.evidenceIds,
+          concernIds: [],
+        },
+      }];
+    });
+
   const proposedComments: ProposedInlineComment[] =
-    draft?.inlineComments.map((comment) => ({
+    selectedInlineComments.map((comment) => ({
       key: comment.id,
       path: comment.path,
       line: comment.line,
@@ -225,7 +478,63 @@ export function ClosingLedger({
       severity: "major",
       confidence: 100,
       included: comment.included,
-    })) ?? [];
+    }));
+
+  const startDraft = () => {
+    if (
+      readOnly
+      || drafting
+      || draftStartInFlight.current
+      || session.notes.length === 0
+    ) {
+      return;
+    }
+    draftStartInFlight.current = true;
+    setDraftStarting(true);
+    setSubmissionError("");
+    void startUltraReviewClosingDraft({
+      ctx,
+      pr,
+      artifactKey: artifact.artifactKey,
+      mode: session.mode,
+    })
+      .then((runId) => {
+        setDraftRunId(runId);
+        setDraftStarting(false);
+        draftStartInFlight.current = false;
+      })
+      .catch((error) => {
+        setDraftStarting(false);
+        draftStartInFlight.current = false;
+        setSubmissionError(
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+  };
+
+  useEffect(() => {
+    if (
+      readOnly
+      || session.notes.length === 0
+      || drafting
+      || draftIsCurrent
+      || autoDraftFingerprint.current === notesFingerprint
+    ) {
+      return;
+    }
+    autoDraftFingerprint.current = notesFingerprint;
+    startDraft();
+  }, [
+    draftIsCurrent,
+    drafting,
+    notesFingerprint,
+    readOnly,
+    session.notes.length,
+  ]);
+
+  useEffect(() => {
+    if (draft) setVerdict(draft.recommendedVerdict);
+  }, [draft?.id]);
 
   const persistSubmissionSnapshot = async (
     snapshot: UltraReviewSubmissionSnapshot,
@@ -249,6 +558,7 @@ export function ClosingLedger({
     if (
       readOnly
       || !draft
+      || !draftIsCurrent
       || !verdict
       || submissionInFlight.current
       || pendingSubmissionReceipt
@@ -283,7 +593,10 @@ export function ClosingLedger({
         submittedAt: Date.now(),
         headSha: artifact.identity.headSha,
         verdict,
-        draft,
+        draft: {
+          ...draft,
+          inlineComments: selectedInlineComments,
+        },
         progress,
       });
       const outcome = await submitUltraReviewWithReceipt({
@@ -426,10 +739,10 @@ export function ClosingLedger({
         const anchor = note.anchor;
         const evidence = anchor.kind === "line"
           ? artifact.evidence.find(
-              (item) => item.id === anchor.evidenceId,
+              (item) => item.id === anchor.evidenceIds[0],
             )
           : artifact.evidence.find((item) =>
-              allBeats(artifact)
+              beats
                 .find(
                   (beat) => beat.id === anchor.beatId,
                 )
@@ -486,21 +799,129 @@ export function ClosingLedger({
     }
   };
 
+  const submissionControls = session.mode === "teammate" ? (
+    <div className="ultra-submit-controls">
+      <div
+        className="ultra-verdict-picker"
+        role="group"
+        aria-label="GitHub review verdict"
+      >
+        {([
+          ["COMMENT", "Comment"],
+          ["APPROVE", "Approve"],
+          ["REQUEST_CHANGES", "Request changes"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            data-selected={verdict === value}
+            aria-pressed={verdict === value}
+            disabled={
+              readOnly
+              || !draftIsCurrent
+              || submitting
+              || pendingSubmissionReceipt !== null
+              || submittedUrl !== ""
+            }
+            onClick={() => setVerdict(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {draft && draftIsCurrent && (
+        <p className="ultra-verdict-recommendation">
+          Assessment recommendation: {draft.recommendedVerdict === "REQUEST_CHANGES"
+            ? "Request changes"
+            : draft.recommendedVerdict === "APPROVE"
+              ? "Approve"
+              : "Comment"}. You can override it.
+        </p>
+      )}
+      {missing.length > 0 && (
+        <label className="ultra-incomplete-ack">
+          <input
+            type="checkbox"
+            checked={acknowledgeIncomplete}
+            disabled={
+              readOnly
+              || submitting
+              || pendingSubmissionReceipt !== null
+              || submittedUrl !== ""
+            }
+            onChange={(event) =>
+              setAcknowledgeIncomplete(event.target.checked)}
+          />
+          Submit with {missing.length} explicit coverage gap
+          {missing.length === 1 ? "" : "s"}.
+          This session remains incomplete.
+        </label>
+      )}
+      {!pendingSubmissionReceipt && !submittedUrl && (
+        <button
+          type="button"
+          className="primary ultra-submit-button"
+          disabled={
+            !draft
+            || !draftIsCurrent
+            || readOnly
+            || !verdict
+            || submitting
+            || (
+              missing.length > 0
+              && !acknowledgeIncomplete
+            )
+          }
+          onClick={() => void submit()}
+        >
+          {submitting ? "Submitting…" : "Submit Review"}
+        </button>
+      )}
+      {pendingSubmissionReceipt && (
+        <section className="ultra-incomplete-ledger" role="alert">
+          <h2>Review posted. Local receipt missing.</h2>
+          <p>
+            GitHub already accepted this review.
+            Retry saves the local receipt only.
+            It will not post the review again.
+          </p>
+          <div className="row">
+            <button
+              type="button"
+              className="primary"
+              disabled={submitting}
+              onClick={() => void retrySubmissionReceipt()}
+            >
+              {submitting ? "Saving receipt…" : "Retry local save"}
+            </button>
+            <a href={pendingSubmissionReceipt.url}>
+              Open posted review ↗
+            </a>
+          </div>
+        </section>
+      )}
+      {submissionError && (
+        <p className="ultra-form-error">{submissionError}</p>
+      )}
+      {submittedUrl && (
+        <p className="ultra-success">
+          Review submitted. Local receipt saved.
+          {" "}
+          <a href={submittedUrl}>Open on GitHub ↗</a>
+        </p>
+      )}
+    </div>
+  ) : null;
+
   return (
     <main className="ultra-ledger">
       <header className="ultra-ledger-hero">
         <div>
-          <span className="u-mark">
-            {session.mode === "author"
-              ? "AUTHOR READINESS"
-              : "CLOSING LEDGER"}
-          </span>
-          <h1>
-            Judgment starts after evidence.
-          </h1>
+          <h1>Final Review</h1>
           <p>
-            {progress.reviewedBeats}/{progress.totalBeats} beats inspected.
-            {" "}
+            {progress.documentReviewed
+              ? "Review document complete. "
+              : "Review document still open. "}
             {progress.coveredChangedEvidence}/
             {progress.totalChangedEvidence} evidence units covered.
           </p>
@@ -546,8 +967,10 @@ export function ClosingLedger({
                       check.conclusion ?? check.status
                     }
                   >
-                    <a href={check.url}>{check.name}</a>
-                    <span>
+                    <a className="ultra-live-name" href={check.url}>
+                      {check.name}
+                    </a>
+                    <span className="ultra-live-status">
                       {check.conclusion ?? check.status}
                     </span>
                   </li>
@@ -561,7 +984,9 @@ export function ClosingLedger({
               <ul>
                 {feedbackClaims.map((claim) => (
                   <li key={claim.id}>
-                    <span>{claim.claim}</span>
+                    <span className="ultra-live-copy">
+                      {claim.claim}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -578,8 +1003,16 @@ export function ClosingLedger({
               <ul>
                 {comments.map((comment) => (
                   <li key={comment.id}>
-                    <a href={comment.url}>@{comment.author}</a>
-                    <span>{comment.body}</span>
+                    <a
+                      className="ultra-live-author"
+                      href={comment.url}
+                    >
+                      @{comment.author}
+                    </a>
+                    <GitHubCommentBody
+                      comment={comment}
+                      className="ultra-live-copy"
+                    />
                   </li>
                 ))}
               </ul>
@@ -679,6 +1112,7 @@ export function ClosingLedger({
                   {focused.length > 0 && (
                     <DiffViewer
                       files={focused}
+                      disablePatternAutoCollapse
                       loadFileText={(path, side) =>
                         ctx.gh.getFileText(
                           side === "RIGHT"
@@ -750,40 +1184,76 @@ export function ClosingLedger({
             No human notes yet. A clean review can still close.
           </p>
         ) : (
-          session.notes.map((note) => (
-            <article key={note.id} id={`ultra-ledger-note-${note.id}`}>
-              {session.mode === "author" && (
-                <label className="ultra-fix-note-select">
-                  <input
-                    type="checkbox"
-                    disabled={readOnly || note.stale}
-                    checked={selectedFixNoteIds.includes(note.id)}
-                    onChange={(event) =>
-                      setSelectedFixNoteIds((current) =>
-                        event.target.checked
-                          ? [...new Set([...current, note.id])]
-                          : current.filter((id) => id !== note.id)
-                      )}
+          <>
+            {lineNotes.length > 0 && lineNoteFiles.length > 0 && (
+              <DiffViewer
+                files={lineNoteFiles}
+                anchors={closingNoteAnchors}
+                disablePatternAutoCollapse
+                loadFileText={(path, side) =>
+                  ctx.gh.getFileText(
+                    side === "RIGHT"
+                      ? pr.headRepoFullName || ctx.repo
+                      : ctx.repo,
+                    path,
+                    side === "RIGHT" ? pr.headSha : pr.baseSha,
+                  )}
+              />
+            )}
+            {lineNotes.length > 0 && lineNoteFiles.length === 0 && (
+              <div className="ultra-closing-note-list">
+                {lineNotes.map((note) => (
+                  <ClosingNoteEditor
+                    key={note.id}
+                    note={note}
+                    readOnly={readOnly}
+                    mode={session.mode}
+                    fixSelected={selectedFixNoteIds.includes(note.id)}
+                    onFixSelected={(selected) =>
+                      setFixNoteSelected(note.id, selected)}
+                    onSave={(body, kind) => saveNote(note, body, kind)}
+                    onSubmitAsComment={(selected) =>
+                      setNoteSubmission(note, selected)}
                   />
-                  Fix agent
-                </label>
-              )}
-              <span>
-                {note.anchor.kind === "beat"
-                  ? note.anchor.beatId
-                  : `${note.anchor.path}:${note.anchor.startLine}`}
-              </span>
-              <p>{note.body}</p>
-            </article>
-          ))
+                ))}
+              </div>
+            )}
+            <div className="ultra-closing-note-list">
+              {session.notes
+                .filter((note) => note.anchor.kind === "beat")
+                .map((note) => (
+                  <div
+                    key={note.id}
+                  >
+                    <ClosingNoteEditor
+                      note={note}
+                      readOnly={readOnly}
+                      mode={session.mode}
+                      fixSelected={selectedFixNoteIds.includes(note.id)}
+                      onFixSelected={(selected) =>
+                        setFixNoteSelected(note.id, selected)}
+                      onSave={(body, kind) => saveNote(note, body, kind)}
+                      onSubmitAsComment={(selected) =>
+                        setNoteSubmission(note, selected)}
+                    />
+                  </div>
+                ))}
+            </div>
+          </>
         )}
       </section>
 
       <section className="ultra-draft-studio">
         <header>
           <div>
-            <span className="u-mark">REVIEW DRAFT</span>
-            <h2>Editable prose. Immutable sources.</h2>
+            {session.mode === "author" ? (
+              <>
+                <span className="u-mark">REVIEW DRAFT</span>
+                <h2>Review draft</h2>
+              </>
+            ) : (
+              <h2>Submit Review</h2>
+            )}
           </div>
           <button
             type="button"
@@ -793,34 +1263,13 @@ export function ClosingLedger({
               || drafting
               || session.notes.length === 0
             }
-            onClick={() => {
-              if (drafting) return;
-              setDraftStarting(true);
-              void startUltraReviewClosingDraft({
-                ctx,
-                pr,
-                artifactKey: artifact.artifactKey,
-                mode: session.mode,
-              })
-                .then((runId) => {
-                  setDraftRunId(runId);
-                  setDraftStarting(false);
-                })
-                .catch((error) => {
-                  setDraftStarting(false);
-                  setSubmissionError(
-                    error instanceof Error
-                      ? error.message
-                      : String(error),
-                  );
-                });
-            }}
+            onClick={startDraft}
           >
             {drafting
-              ? "Synthesizing…"
+              ? "Building assessment…"
               : draft
-                ? "Regenerate from notes"
-                : "Draft from all notes"}
+                ? "Regenerate assessment"
+                : "Build assessment"}
           </button>
         </header>
         {session.notes.length === 0 && !draft && (
@@ -829,6 +1278,8 @@ export function ClosingLedger({
             onClick={() => setDraft({
               id: uid("ultra-draft-"),
               body: "",
+              recommendedVerdict: "APPROVE",
+              sourceNotesFingerprint: notesFingerprint,
               sections: [],
               inlineComments: [],
               incorporatedNoteIds: [],
@@ -843,7 +1294,7 @@ export function ClosingLedger({
         {draftError && (
           <p className="ultra-form-error">{draftError}</p>
         )}
-        {draft && (
+        {draft && draftIsCurrent && (
           <>
             <label>
               <span>GitHub review body</span>
@@ -952,7 +1403,7 @@ export function ClosingLedger({
                                 key={id}
                                 onClick={() => onNavigateBeat(id)}
                               >
-                                {allBeats(artifact).find(
+                                {beats.find(
                                   (candidate) => candidate.id === id,
                                 )?.title ?? id}
                               </button>
@@ -970,7 +1421,7 @@ export function ClosingLedger({
                               const evidence = artifact.evidence.find(
                                 (candidate) => candidate.id === id,
                               );
-                              const targetBeat = allBeats(artifact).find(
+                              const targetBeat = beats.find(
                                 (candidate) =>
                                   candidate.evidenceIds.includes(id),
                               );
@@ -1046,9 +1497,10 @@ export function ClosingLedger({
             ))}
           </>
         )}
+        {submissionControls}
       </section>
 
-      {session.mode === "author" ? (
+      {session.mode === "author" && (
         <section className="ultra-author-close">
           <span className="u-mark">AUTHOR DECISION</span>
           <h2>The branch stays yours.</h2>
@@ -1102,131 +1554,6 @@ export function ClosingLedger({
               {authorOutcome === "ready"
                 ? "Readiness recorded."
                 : "Review remains local and open."}
-            </p>
-          )}
-        </section>
-      ) : (
-        <section className="ultra-submit-studio">
-          <header>
-            <span className="u-mark">EXACT GITHUB PAYLOAD</span>
-            <h2>The model does not choose this.</h2>
-          </header>
-          <div
-            className="ultra-verdict-picker"
-            role="group"
-            aria-label="GitHub review verdict"
-          >
-            {([
-              ["COMMENT", "Comment"],
-              ["APPROVE", "Approve"],
-              ["REQUEST_CHANGES", "Request changes"],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                data-selected={verdict === value}
-                aria-pressed={verdict === value}
-                disabled={
-                  readOnly
-                  || submitting
-                  || pendingSubmissionReceipt !== null
-                  || submittedUrl !== ""
-                }
-                onClick={() => setVerdict(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <pre className="ultra-payload-preview">
-            {JSON.stringify({
-              body: draft?.body ?? "",
-              event: verdict,
-              comments: proposedComments.filter(
-                (comment) => comment.included,
-              ).map((comment) => ({
-                path: comment.path,
-                side: comment.side,
-                line: comment.line,
-                startLine: comment.startLine,
-                body: comment.body,
-              })),
-            }, null, 2)}
-          </pre>
-          {missing.length > 0 && (
-            <label className="ultra-incomplete-ack">
-              <input
-                type="checkbox"
-                checked={acknowledgeIncomplete}
-                disabled={
-                  readOnly
-                  || submitting
-                  || pendingSubmissionReceipt !== null
-                  || submittedUrl !== ""
-                }
-                onChange={(event) =>
-                  setAcknowledgeIncomplete(event.target.checked)}
-              />
-              Submit with {missing.length} explicit coverage gap
-              {missing.length === 1 ? "" : "s"}.
-              This session remains incomplete.
-            </label>
-          )}
-          {!pendingSubmissionReceipt && !submittedUrl && (
-            <button
-              type="button"
-              className="primary ultra-submit-button"
-              disabled={
-                !draft
-                || readOnly
-                || !verdict
-                || submitting
-                || (
-                  missing.length > 0
-                  && !acknowledgeIncomplete
-                )
-              }
-              onClick={() => void submit()}
-            >
-              {submitting ? "Submitting…" : "Submit exact review"}
-            </button>
-          )}
-          {pendingSubmissionReceipt && (
-            <section
-              className="ultra-incomplete-ledger"
-              role="alert"
-            >
-              <h2>Review posted. Local receipt missing.</h2>
-              <p>
-                GitHub already accepted this review.
-                Retry saves the local receipt only.
-                It will not post the review again.
-              </p>
-              <div className="row">
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={submitting}
-                  onClick={() => void retrySubmissionReceipt()}
-                >
-                  {submitting
-                    ? "Saving receipt…"
-                    : "Retry local save"}
-                </button>
-                <a href={pendingSubmissionReceipt.url}>
-                  Open posted review ↗
-                </a>
-              </div>
-            </section>
-          )}
-          {submissionError && (
-            <p className="ultra-form-error">{submissionError}</p>
-          )}
-          {submittedUrl && (
-            <p className="ultra-success">
-              Review submitted. Local receipt saved.
-              {" "}
-              <a href={submittedUrl}>Open on GitHub ↗</a>
             </p>
           )}
         </section>

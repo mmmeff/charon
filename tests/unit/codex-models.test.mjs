@@ -8,6 +8,8 @@ import {
   fastCodexModels,
   listedCodexModels,
   mergeModelCatalogs,
+  modelIdEncodesReasoning,
+  modelIdsEncodeReasoning,
 } from "../../src/lib/codexModels.ts";
 
 test("listedCodexModels keeps visible models and hides internal entries", () => {
@@ -80,7 +82,7 @@ test("commonCodexReasoningLevels keeps only levels every visible model and the b
   ]);
 });
 
-test("codexBridgeArgs adds a supported ephemeral reasoning override", () => {
+test("codexBridgeArgs adds supported legacy overrides", () => {
   assert.deepEqual(
     codexBridgeArgs(
       "npx",
@@ -135,6 +137,39 @@ test("codexBridgeArgs adds a supported ephemeral reasoning override", () => {
     ),
     ["acp"],
   );
+});
+
+test("modelIdEncodesReasoning recognizes Codex model variants", () => {
+  assert.equal(
+    modelIdEncodesReasoning("gpt-5.6-sol[ultra]"),
+    true,
+  );
+  assert.equal(
+    modelIdEncodesReasoning("gpt-5.6-sol"),
+    false,
+  );
+  assert.equal(
+    modelIdEncodesReasoning("anthropic/claude-opus-4-8"),
+    false,
+  );
+});
+
+test("modelIdsEncodeReasoning requires effort on every selectable model", () => {
+  assert.equal(
+    modelIdsEncodeReasoning([
+      "gpt-5.6-sol[high]",
+      "gpt-5.6-terra[max]",
+    ]),
+    true,
+  );
+  assert.equal(
+    modelIdsEncodeReasoning([
+      "gpt-5.6-sol[high]",
+      "gpt-5.6-terra",
+    ]),
+    false,
+  );
+  assert.equal(modelIdsEncodeReasoning(["auto"]), false);
 });
 
 test("codexAcpModelCatalog normalizes current metadata for the old bridge", () => {

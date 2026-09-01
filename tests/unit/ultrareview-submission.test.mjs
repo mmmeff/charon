@@ -38,8 +38,7 @@ const snapshot = {
   inlineComments: [],
   noteIds: ["note-1"],
   progress: {
-    reviewedBeats: 1,
-    totalBeats: 1,
+    documentReviewed: true,
     acknowledgedMechanicalChanges: 0,
     totalMechanicalChanges: 0,
     coveredChangedEvidence: 1,

@@ -27,6 +27,21 @@ export interface SkillFileRaw {
   content: string;
 }
 
+export interface UltraReviewValidationPaths {
+  candidatePath: string;
+  candidateRel: string;
+  contextPath: string;
+  validatorPath: string;
+}
+
+export interface UltraReviewPublicationPaths {
+  publisherPath: string;
+  publisherContractPath: string;
+  inboxRel: string;
+  inboxPath: string;
+  acknowledgmentDirectoryPath: string;
+}
+
 export const native = {
   httpRequest(req: {
     method: string;
@@ -94,6 +109,24 @@ export const native = {
 
   appDataDir(): Promise<string> {
     return invoke("app_data_dir");
+  },
+
+  prepareUltraReviewValidation(
+    validationId: string,
+    context: string,
+  ): Promise<UltraReviewValidationPaths> {
+    return invoke("prepare_ultrareview_validation", {
+      validationId,
+      context,
+    });
+  },
+
+  prepareUltraReviewPublication(
+    publicationId: string,
+  ): Promise<UltraReviewPublicationPaths> {
+    return invoke("prepare_ultrareview_publication", {
+      publicationId,
+    });
   },
 
   listCursorSkills(extraDirs: string[]): Promise<SkillFileRaw[]> {

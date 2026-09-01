@@ -1,0 +1,413 @@
+{
+  "contractVersion": 2,
+  "tools": {
+    "publish_plan": {
+      "description": "Publish the review outline once. Choose short semantic keys and write descriptive plain-English thesis and grounding text without quoting code or diff text. Charon assigns stored ids, order, scope, generation stages, and source-claim references. Call this before publish_chapter.",
+      "payloadLimitBytes": 64000,
+      "inputSchema": {
+        "type": "object",
+        "description": "The bounded UltraReview plan. Array position is the display order.",
+        "properties": {
+          "thesis": {
+            "type": "string",
+            "description": "A plain-English statement of the pull request's larger behavioral goal. Do not quote code, identifiers, string literals, or diff text.",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "grounding": {
+            "type": "array",
+            "description": "Claims grounded in pull request intent, history, CI, feedback, or timeline context. Charon assigns their ids.",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "description": "The observed source of the claim.",
+                  "enum": [
+                    "author_stated",
+                    "commit_history",
+                    "ci_observed",
+                    "existing_feedback",
+                    "timeline_event"
+                  ]
+                },
+                "claim": {
+                  "type": "string",
+                  "description": "One sourced plain-English claim used to ground the plan. Describe intent or behavior without quoting code or diff text.",
+                  "minLength": 1,
+                  "maxLength": 4000
+                }
+              },
+              "required": ["kind", "claim"],
+              "additionalProperties": false
+            }
+          },
+          "systems": {
+            "type": "array",
+            "description": "Implementation systems in causal review order.",
+            "minItems": 1,
+            "maxItems": 32,
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "A unique lowercase handle used by later tool calls, such as agent-contract.",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "A short plain-English implementation system title. Avoid code syntax and identifiers.",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "thesis": {
+                  "type": "string",
+                  "description": "A plain-English explanation of how this system advances the pull request thesis. Avoid code quotations.",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "risk": {
+                  "type": "string",
+                  "description": "The system's implementation risk.",
+                  "enum": ["none", "low", "medium", "high"]
+                },
+                "chapters": {
+                  "type": "array",
+                  "description": "Planned chapters in causal review order.",
+                  "minItems": 1,
+                  "maxItems": 64,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "description": "A globally unique lowercase handle used by publish_chapter.",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "A short plain-English planned chapter title. Avoid code syntax and identifiers.",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": ["key", "title"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": ["key", "title", "thesis", "risk", "chapters"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["thesis", "grounding", "systems"],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "thesis": "Publish complete review chapters as soon as they are ready.",
+            "grounding": [
+              {
+                "kind": "author_stated",
+                "claim": "Reviewers should start before the full analysis completes."
+              }
+            ],
+            "systems": [
+              {
+                "key": "publisher",
+                "title": "Review publisher",
+                "thesis": "Charon assembles bounded semantic chapter calls.",
+                "risk": "medium",
+                "chapters": [
+                  {
+                    "key": "agent-contract",
+                    "title": "Define the agent contract"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "publish_chapter": {
+      "description": "Publish one planned chapter. chapterKey must match the accepted plan. Use descriptive plain English without quoting code or diff text. Put tests in the same beat as the behavior they validate; do not publish test-only beats for covered behavior. Use only manifest ids in changedEvidenceIds. For unchanged context, provide a repository-root-relative head-commit path, inclusive line range, and reason. Charon assigns every other id, fingerprint, source-claim reference, location, order, and coverage entry.",
+      "payloadLimitBytes": 512000,
+      "inputSchema": {
+        "type": "object",
+        "description": "One semantic chapter. Do not send stored artifact records or fields that Charon owns. Include at least one beat or one mechanical change.",
+        "properties": {
+          "chapterKey": {
+            "type": "string",
+            "description": "The key declared in the accepted plan.",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          },
+          "purpose": {
+            "type": "string",
+            "description": "A plain-English explanation of the purpose this chapter serves in the pull request. Do not quote code or diff text.",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "before": {
+            "type": "string",
+            "description": "The relevant behavior or structure before this change, in descriptive plain English without code quotations.",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "after": {
+            "type": "string",
+            "description": "The relevant behavior or structure after this change, in descriptive plain English without code quotations.",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "risk": {
+            "type": "string",
+            "description": "The chapter's implementation risk.",
+            "enum": ["none", "low", "medium", "high"]
+          },
+          "dependencyChapterKeys": {
+            "type": "array",
+            "description": "Keys of earlier accepted chapters required to understand this chapter.",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            }
+          },
+          "beats": {
+            "type": "array",
+            "description": "Coherent implementation claims in review order. Put implementation and its validating tests in one beat; never create a separate test-only beat for behavior owned elsewhere. This may be empty only when mechanicalChanges is non-empty. Each changed hunk belongs to one beat or one mechanical change.",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "description": "A short plain-English review-unit title. Avoid code syntax and identifiers.",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "claim": {
+                  "type": "string",
+                  "description": "One observable implementation claim in descriptive plain English. Do not quote code, identifiers, string literals, or diff text. Charon turns this into a code-observed source claim.",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "why": {
+                  "type": "string",
+                  "description": "A beat-specific plain-English explanation of why this change exists and what purpose it serves in the pull request's larger goal. Do not repeat the pull request thesis, quote code, or give review directions.",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "risk": {
+                  "type": "string",
+                  "description": "The beat's implementation risk.",
+                  "enum": ["none", "low", "medium", "high"]
+                },
+                "changedEvidenceIds": {
+                  "type": "array",
+                  "description": "Exact changed-evidence ids from Charon's trusted manifest. Never invent an id.",
+                  "maxItems": 512,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^evidence:[0-9a-f]{16}$"
+                  }
+                },
+                "context": {
+                  "type": "array",
+                  "description": "Unchanged head-commit source ranges that explain this beat. Charon reads the file and creates supporting evidence.",
+                  "maxItems": 32,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "description": "A repository-root-relative path that exists at the review head. Never use a path relative to a nested package or checkout directory.",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "startLine": {
+                        "type": "integer",
+                        "description": "The first inclusive line, starting at 1.",
+                        "minimum": 1,
+                        "maximum": 10000000
+                      },
+                      "endLine": {
+                        "type": "integer",
+                        "description": "The last inclusive line. It must not precede startLine.",
+                        "minimum": 1,
+                        "maximum": 10000000
+                      },
+                      "reason": {
+                        "type": "string",
+                        "description": "A plain-English description of why this unchanged range is needed to understand the beat. Do not quote its code.",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      }
+                    },
+                    "required": ["path", "startLine", "endLine", "reason"],
+                    "additionalProperties": false
+                  }
+                },
+                "concerns": {
+                  "type": "array",
+                  "description": "Open reviewer questions grounded by this beat. Omit when there are none.",
+                  "maxItems": 16,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "severity": {
+                        "type": "string",
+                        "description": "The potential impact if the question exposes a problem.",
+                        "enum": ["blocker", "major", "minor", "nit"]
+                      },
+                      "question": {
+                        "type": "string",
+                        "description": "A question for the reviewer, not a completed finding or direction.",
+                        "minLength": 1,
+                        "maxLength": 4000
+                      }
+                    },
+                    "required": ["severity", "question"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "title",
+                "claim",
+                "why",
+                "risk",
+                "changedEvidenceIds",
+                "context"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "mechanicalChanges": {
+            "type": "array",
+            "description": "Mechanical changed evidence introduced by this chapter. Omit when there is none.",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "description": "A short mechanical-change title.",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "reason": {
+                  "type": "string",
+                  "description": "Why these hunks are mechanical rather than narrative review work.",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "changedEvidenceIds": {
+                  "type": "array",
+                  "description": "Exact changed-evidence ids from Charon's trusted manifest.",
+                  "minItems": 1,
+                  "maxItems": 512,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^evidence:[0-9a-f]{16}$"
+                  }
+                }
+              },
+              "required": ["title", "reason", "changedEvidenceIds"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["chapterKey", "purpose", "before", "after", "risk", "beats"],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "chapterKey": "agent-contract",
+            "purpose": "Define the agent-facing publication contract.",
+            "before": "Agents serialized complete artifact records.",
+            "after": "Agents publish semantic chapter content.",
+            "risk": "medium",
+            "beats": [
+              {
+                "title": "Materialize supporting context",
+                "claim": "Charon constructs supporting evidence from source ranges.",
+                "why": "This keeps artifact identity out of the agent contract.",
+                "risk": "low",
+                "changedEvidenceIds": ["evidence:0123456789abcdef"],
+                "context": [
+                  {
+                    "path": "src/lib/ultraReview.ts",
+                    "startLine": 391,
+                    "endLine": 419,
+                    "reason": "Defines the evidence identity Charon owns."
+                  }
+                ],
+                "concerns": [
+                  {
+                    "severity": "minor",
+                    "question": "Are context ranges validated against the review head?"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "finish_review": {
+      "description": "Finish after every planned chapter is published or listed in failedChapters. Charon creates normalized generation failures, audits trusted diff coverage, and assembles the terminal artifact.",
+      "payloadLimitBytes": 64000,
+      "inputSchema": {
+        "type": "object",
+        "description": "The bounded completion record. Send an empty failedChapters array when every planned chapter succeeded.",
+        "properties": {
+          "failedChapters": {
+            "type": "array",
+            "description": "Planned chapters that could not be published.",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "chapterKey": {
+                  "type": "string",
+                  "description": "The failed chapter key from the accepted plan.",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "What prevented this chapter from being completed.",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "retryable": {
+                  "type": "boolean",
+                  "description": "Whether another generation attempt could complete the chapter."
+                }
+              },
+              "required": ["chapterKey", "message", "retryable"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["failedChapters"],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "failedChapters": []
+          }
+        ]
+      }
+    }
+  }
+}

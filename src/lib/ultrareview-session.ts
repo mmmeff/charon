@@ -1,17 +1,34 @@
 import type {
+  DiffViewerViewState,
   UltraReviewArtifact,
   UltraReviewConcern,
   UltraReviewConcernDisposition,
   UltraReviewDraft,
-  UltraReviewDraftInlineComment,
   UltraReviewDraftProvenance,
   UltraReviewMode,
   UltraReviewNote,
+  UltraReviewNoteKind,
   UltraReviewProgress,
   UltraReviewResumePosition,
   UltraReviewSession,
   UltraReviewSubmissionSnapshot,
 } from "../types";
+
+function cloneDiffViewState(
+  state: DiffViewerViewState,
+): DiffViewerViewState {
+  return {
+    collapsed: { ...state.collapsed },
+    expandedContext: Object.fromEntries(
+      Object.entries(state.expandedContext).map(
+        ([key, expansion]) => [key, { ...expansion }],
+      ),
+    ),
+    ...(state.viewed === undefined
+      ? {}
+      : { viewed: { ...state.viewed } }),
+  };
+}
 
 export class UltraReviewSessionError extends Error {
   constructor(message: string) {
@@ -24,13 +41,15 @@ export interface UltraReviewBeatNoteInput {
   id: string;
   beatId: string;
   body: string;
+  kind?: UltraReviewNoteKind;
   createdAt: number;
 }
 
 export interface UltraReviewLineNoteInput {
   id: string;
-  evidenceId: string;
+  evidenceIds: string[];
   body: string;
+  kind?: UltraReviewNoteKind;
   startLine: number;
   endLine: number;
   createdAt: number;
@@ -70,19 +89,10 @@ interface ParsedDraftSection {
   sourceNoteIds: string[];
 }
 
-interface ParsedDraftInlineComment {
-  body: string;
-  path: string;
-  side: "LEFT" | "RIGHT";
-  startLine: number;
-  endLine: number;
-  sourceNoteIds: string[];
-}
-
 interface ParsedDraftResponse {
   body: string;
+  recommendedVerdict: UltraReviewDraft["recommendedVerdict"];
   sections: ParsedDraftSection[];
-  inlineComments: ParsedDraftInlineComment[];
   incorporatedNoteIds: string[];
   combinedNoteIds: string[];
   omittedNoteIds: string[];
@@ -90,8 +100,8 @@ interface ParsedDraftResponse {
 
 const DRAFT_KEYS = [
   "body",
+  "recommendedVerdict",
   "sections",
-  "inlineComments",
   "incorporatedNoteIds",
   "combinedNoteIds",
   "omittedNoteIds",
@@ -99,15 +109,6 @@ const DRAFT_KEYS = [
 
 const SECTION_KEYS = [
   "body",
-  "sourceNoteIds",
-] as const;
-
-const INLINE_COMMENT_KEYS = [
-  "body",
-  "path",
-  "side",
-  "startLine",
-  "endLine",
   "sourceNoteIds",
 ] as const;
 
@@ -219,6 +220,7 @@ function appendNote(
   }
   return {
     ...session,
+    draft: null,
     notes: [
       ...session.notes,
       note,
@@ -244,35 +246,45 @@ function noteBase(
   input: {
     id: string;
     body: string;
+    kind?: UltraReviewNoteKind;
     createdAt: number;
   },
 ): Pick<
   UltraReviewNote,
-  "id" | "body" | "createdAt" | "stale"
+  "id" | "body" | "kind" | "submitAsComment" | "createdAt" | "stale"
 > {
+  const kind = input.kind ?? "note";
+  if (
+    kind !== "note"
+    && kind !== "nitpick"
+    && kind !== "request"
+    && kind !== "suggestion"
+    && kind !== "praise"
+  ) {
+    throw new UltraReviewSessionError(
+      `note.kind has unsupported value ${String(kind)}`,
+    );
+  }
   return {
     id: nonEmptyString(input.id, "note.id"),
     body: nonEmptyString(input.body, "note.body"),
+    kind,
+    submitAsComment: false,
     createdAt: timestamp(input.createdAt, "note.createdAt"),
     stale: false,
   };
 }
 
-export function markUltraReviewBeatReviewed(
+export function completeUltraReviewDocument(
   session: UltraReviewSession,
-  beatId: string,
+  completedAt: number,
 ): UltraReviewSession {
-  if (session.beatStates[beatId] === undefined) {
-    throw new UltraReviewSessionError(
-      `cannot review unknown beat ${beatId}`,
-    );
-  }
   return {
     ...session,
-    beatStates: {
-      ...session.beatStates,
-      [beatId]: "reviewed",
-    },
+    reviewCompletedAt: timestamp(
+      completedAt,
+      "reviewCompletedAt",
+    ),
   };
 }
 
@@ -295,26 +307,27 @@ export function updateUltraReviewResume(
       ...(resume.diffViewStates === undefined
         ? {}
         : {
-            diffViewStates: Object.fromEntries(
-              Object.entries(resume.diffViewStates).map(
-                ([mode, state]) => [
-                  mode,
-                  state === undefined
-                    ? undefined
-                    : {
-                        collapsed: { ...state.collapsed },
-                        expandedContext: Object.fromEntries(
-                          Object.entries(
-                            state.expandedContext,
-                          ).map(([key, expansion]) => [
-                            key,
-                            { ...expansion },
-                          ]),
-                        ),
-                      },
-                ],
-              ),
-            ),
+            diffViewStates: {
+              ...(resume.diffViewStates.raw === undefined
+                ? {}
+                : {
+                    raw: cloneDiffViewState(
+                      resume.diffViewStates.raw,
+                    ),
+                  }),
+              ...(resume.diffViewStates.beats === undefined
+                ? {}
+                : {
+                    beats: Object.fromEntries(
+                      Object.entries(
+                        resume.diffViewStates.beats,
+                      ).map(([beatId, state]) => [
+                        beatId,
+                        cloneDiffViewState(state),
+                      ]),
+                    ),
+                  }),
+            },
           }),
     },
   };
@@ -347,14 +360,23 @@ export function addUltraReviewLineNote(
   artifact: UltraReviewArtifact,
   input: UltraReviewLineNoteInput,
 ): UltraReviewSession {
-  const evidence = artifact.evidence.find(
-    (item) => item.id === input.evidenceId,
-  );
-  if (!evidence) {
+  const evidenceIds = unique(input.evidenceIds);
+  if (evidenceIds.length === 0) {
     throw new UltraReviewSessionError(
-      `cannot anchor a note to unknown evidence ${input.evidenceId}`,
+      "a line note needs at least one evidence id",
     );
   }
+  const evidence = evidenceIds.map((evidenceId) => {
+    const item = artifact.evidence.find(
+      (candidate) => candidate.id === evidenceId,
+    );
+    if (!item) {
+      throw new UltraReviewSessionError(
+        `cannot anchor a note to unknown evidence ${evidenceId}`,
+      );
+    }
+    return item;
+  });
   const startLine = lineNumber(
     input.startLine,
     "note.anchor.startLine",
@@ -363,17 +385,42 @@ export function addUltraReviewLineNote(
     input.endLine,
     "note.anchor.endLine",
   );
-  const trustedStart = evidence.location.startLine;
-  const trustedEnd = evidence.location.endLine;
+  const ordered = [...evidence].sort((left, right) =>
+    (left.location.startLine ?? 0) -
+    (right.location.startLine ?? 0)
+  );
+  const first = ordered[0];
+  const trustedStart = first.location.startLine;
+  const trustedEnd = ordered[ordered.length - 1].location.endLine;
+  let nextLine = startLine;
+  const coherent = ordered.every((item) => {
+    const location = item.location;
+    if (
+      item.kind !== "changed"
+      || location.path !== first.location.path
+      || location.side !== first.location.side
+      || location.startLine === null
+      || location.endLine === null
+      || location.endLine < startLine
+      || location.startLine > endLine
+      || location.startLine > nextLine
+    ) {
+      return false;
+    }
+    nextLine = Math.max(nextLine, location.endLine + 1);
+    return true;
+  });
   if (
     trustedStart === null
     || trustedEnd === null
     || startLine > endLine
     || startLine < trustedStart
     || endLine > trustedEnd
+    || !coherent
+    || nextLine <= endLine
   ) {
     throw new UltraReviewSessionError(
-      `note lines must stay inside the trusted evidence range `
+      `note lines must stay inside one contiguous trusted evidence range `
       + `${String(trustedStart)}-${String(trustedEnd)}`,
     );
   }
@@ -383,9 +430,9 @@ export function addUltraReviewLineNote(
       ...noteBase(input),
       anchor: {
         kind: "line",
-        evidenceId: evidence.id,
-        path: evidence.location.path,
-        side: evidence.location.side,
+        evidenceIds: ordered.map((item) => item.id),
+        path: first.location.path,
+        side: first.location.side,
         startLine,
         endLine,
         headSha: artifact.identity.headSha,
@@ -394,24 +441,90 @@ export function addUltraReviewLineNote(
   );
 }
 
+export function updateUltraReviewNote(
+  session: UltraReviewSession,
+  noteId: string,
+  update: {
+    body: string;
+    kind: UltraReviewNoteKind;
+    submitAsComment: boolean;
+  },
+): UltraReviewSession {
+  const id = nonEmptyString(noteId, "noteId");
+  const index = session.notes.findIndex((note) => note.id === id);
+  if (index < 0) {
+    throw new UltraReviewSessionError(`unknown note ${id}`);
+  }
+  const current = session.notes[index];
+  const base = noteBase({
+    id: current.id,
+    body: update.body,
+    kind: update.kind,
+    createdAt: current.createdAt,
+  });
+  const note: UltraReviewNote = {
+    ...current,
+    body: base.body,
+    kind: base.kind,
+    submitAsComment:
+      current.anchor.kind === "line"
+      && update.submitAsComment,
+  };
+  const assessmentChanged = current.body !== note.body
+    || current.kind !== note.kind;
+  return {
+    ...session,
+    draft: assessmentChanged ? null : session.draft,
+    notes: session.notes.map((candidate, candidateIndex) =>
+      candidateIndex === index ? note : candidate
+    ),
+  };
+}
+
+export function ultraReviewNotesFingerprint(
+  notes: readonly UltraReviewNote[],
+): string {
+  const serialized = JSON.stringify(
+    [...notes]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((note) => ({
+        id: note.id,
+        body: note.body,
+        kind: note.kind,
+        anchor: note.anchor,
+        stale: note.stale,
+      })),
+  );
+  let hash = 2_166_136_261;
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `notes:${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
 function setConcernDisposition(
   session: UltraReviewSession,
   concernId: string,
   disposition: UltraReviewConcernDisposition,
 ): UltraReviewSession {
   const promotedNoteId = `concern:${concernId}`;
+  const notes = disposition === "promoted"
+    ? session.notes
+    : session.notes.filter(
+        (note) => note.id !== promotedNoteId,
+      );
   return {
     ...session,
+    draft:
+      notes.length === session.notes.length
+        ? session.draft
+        : null,
     concernDispositions: {
       ...session.concernDispositions,
       [concernId]: disposition,
     },
-    notes:
-      disposition === "promoted"
-        ? session.notes
-        : session.notes.filter(
-            (note) => note.id !== promotedNoteId,
-          ),
+    notes,
   };
 }
 
@@ -442,11 +555,6 @@ export function promoteUltraReviewConcern(
   concern: UltraReviewConcern,
   input: UltraReviewConcernPromotionInput,
 ): UltraReviewSession {
-  if (session.beatStates[concern.beatId] === undefined) {
-    throw new UltraReviewSessionError(
-      `cannot promote concern for unknown beat ${concern.beatId}`,
-    );
-  }
   const noteId = `concern:${concern.id}`;
   const withDisposition = setConcernDisposition(
     session,
@@ -548,51 +656,6 @@ function parseSection(
   };
 }
 
-function parseInlineComment(
-  value: unknown,
-  index: number,
-): ParsedDraftInlineComment {
-  const path = `draft.inlineComments[${index}]`;
-  const comment = jsonObject(value, path);
-  exactKeys(comment, INLINE_COMMENT_KEYS, path);
-  const side = comment.side;
-  if (side !== "LEFT" && side !== "RIGHT") {
-    throw new UltraReviewSessionError(
-      `${path}.side must be LEFT or RIGHT`,
-    );
-  }
-  const startLine = lineNumber(
-    comment.startLine,
-    `${path}.startLine`,
-  );
-  const endLine = lineNumber(
-    comment.endLine,
-    `${path}.endLine`,
-  );
-  if (startLine > endLine) {
-    throw new UltraReviewSessionError(
-      `${path}.startLine must not follow endLine`,
-    );
-  }
-  const sourceNoteIds = stringArray(
-    comment.sourceNoteIds,
-    `${path}.sourceNoteIds`,
-  );
-  if (sourceNoteIds.length === 0) {
-    throw new UltraReviewSessionError(
-      `${path} introduces prose without note provenance`,
-    );
-  }
-  return {
-    body: nonEmptyString(comment.body, `${path}.body`),
-    path: nonEmptyString(comment.path, `${path}.path`),
-    side,
-    startLine,
-    endLine,
-    sourceNoteIds,
-  };
-}
-
 function parsedDraftResponse(
   value: unknown,
 ): ParsedDraftResponse {
@@ -601,11 +664,6 @@ function parsedDraftResponse(
   if (!Array.isArray(draft.sections)) {
     throw new UltraReviewSessionError(
       "draft.sections must be an array",
-    );
-  }
-  if (!Array.isArray(draft.inlineComments)) {
-    throw new UltraReviewSessionError(
-      "draft.inlineComments must be an array",
     );
   }
   const sections = draft.sections.map(parseSection);
@@ -617,9 +675,20 @@ function parsedDraftResponse(
   }
   return {
     body,
+    recommendedVerdict: (() => {
+      const verdict = draft.recommendedVerdict;
+      if (
+        verdict !== "COMMENT"
+        && verdict !== "APPROVE"
+        && verdict !== "REQUEST_CHANGES"
+      ) {
+        throw new UltraReviewSessionError(
+          "draft.recommendedVerdict must be COMMENT, APPROVE, or REQUEST_CHANGES",
+        );
+      }
+      return verdict;
+    })(),
     sections,
-    inlineComments:
-      draft.inlineComments.map(parseInlineComment),
     incorporatedNoteIds: stringArray(
       draft.incorporatedNoteIds,
       "draft.incorporatedNoteIds",
@@ -667,7 +736,7 @@ function noteProvenance(
     evidenceIds: unique([
       ...notes.flatMap((note) =>
         note.anchor.kind === "line"
-          ? [note.anchor.evidenceId]
+          ? note.anchor.evidenceIds
           : []),
       ...concerns.flatMap(
         (concern) => concern.evidenceIds,
@@ -738,38 +807,6 @@ function assertNoteLedger(
   }
 }
 
-function assertTrustedInlineAnchor(
-  comment: ParsedDraftInlineComment,
-  notesById: ReadonlyMap<string, UltraReviewNote>,
-  index: number,
-): void {
-  const anchors = comment.sourceNoteIds.flatMap(
-    (noteId) => {
-      const note = notesById.get(noteId)!;
-      return note.anchor.kind === "line"
-        ? [note.anchor]
-        : [];
-    },
-  );
-  if (anchors.length === 0) {
-    throw new UltraReviewSessionError(
-      `draft.inlineComments[${index}] has no trusted line note anchor`,
-    );
-  }
-  const changed = anchors.some(
-    (anchor) =>
-      anchor.path !== comment.path
-      || anchor.side !== comment.side
-      || anchor.startLine !== comment.startLine
-      || anchor.endLine !== comment.endLine,
-  );
-  if (changed) {
-    throw new UltraReviewSessionError(
-      `draft.inlineComments[${index}] changed a trusted note anchor`,
-    );
-  }
-}
-
 export function parseUltraReviewDraftResponse(
   text: string,
   context: UltraReviewDraftResponseContext,
@@ -805,22 +842,6 @@ export function parseUltraReviewDraftResponse(
       citedNoteIds.add(id);
     }
   }
-  for (
-    let index = 0;
-    index < draft.inlineComments.length;
-    index += 1
-  ) {
-    const comment = draft.inlineComments[index];
-    assertKnownNoteIds(
-      comment.sourceNoteIds,
-      notesById,
-      `draft.inlineComments[${index}].sourceNoteIds`,
-    );
-    assertTrustedInlineAnchor(comment, notesById, index);
-    for (const id of comment.sourceNoteIds) {
-      citedNoteIds.add(id);
-    }
-  }
   for (const [name, ids] of [
     ["incorporatedNoteIds", draft.incorporatedNoteIds],
     ["combinedNoteIds", draft.combinedNoteIds],
@@ -833,6 +854,10 @@ export function parseUltraReviewDraftResponse(
   return {
     id: draftId,
     body: draft.body,
+    recommendedVerdict: draft.recommendedVerdict,
+    sourceNotesFingerprint: ultraReviewNotesFingerprint(
+      context.notes,
+    ),
     sections: draft.sections.map(
       (section, index) => ({
         id: `${draftId}:section:${index}`,
@@ -844,24 +869,7 @@ export function parseUltraReviewDraftResponse(
         ),
       }),
     ),
-    inlineComments: draft.inlineComments.map(
-      (comment, index): UltraReviewDraftInlineComment => ({
-        id: `${draftId}:inline:${index}`,
-        path: comment.path,
-        side: comment.side,
-        line: comment.endLine,
-        ...(comment.startLine === comment.endLine
-          ? {}
-          : { startLine: comment.startLine }),
-        body: comment.body,
-        included: true,
-        provenance: noteProvenance(
-          comment.sourceNoteIds,
-          notesById,
-          concernsById,
-        ),
-      }),
-    ),
+    inlineComments: [],
     incorporatedNoteIds: [
       ...draft.incorporatedNoteIds,
     ],
